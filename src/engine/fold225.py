@@ -84,17 +84,28 @@ W = Vertex4D(0, 0, 0, 1)
 DIRECTIONS = [X, X + Y, Y, Y + Z, Z, Z + W, W, W - X]
 # PRECOMPUTED_2D_DIRECTIONS = [d.get_2d_components() for d in DIRECTIONS]
 
+# PLOT_COLORS = {
+#     "m": "purple",
+#     "v": "blue",
+#     "b": "black",
+#     "a": "#42e7dc",
+#     "i": "grey", #invisible (for debugging)
+#     "ax": "blue", # auxiliary
+#     "r": "red", #ridge
+#     "h": "grey" #hinge
+# }
 PLOT_COLORS = {
-    "m": "purple",
-    "v": "blue",
-    "b": "black",
-    "a": "#42e7dc",
-    "i": "grey", #invisible (for debugging)
-    "ax": "blue", # auxiliary
-    "r": "red", #ridge
-    "h": "grey" #hinge
+    'rm': 'red',  #ridge mountain
+    'rv': 'blue', #ridge valley
+    'av': 'blue', #axial valley
+    'hm': 'red',  #hinge mountain
+    'hv': 'blue', #hinge valley
+    'h': 'grey', #unknown/flat hinge
+    'v': 'blue', 
+    'm': 'red',
+    'b': 'black',
+    "aux": "#42e7dc",
 }
-
 
 class Fold225:
     """
@@ -1182,6 +1193,14 @@ def plot_multiple(folds: list[Fold225], debug=False):
         if xs and ys:
             bounds.append((min(xs), max(xs), min(ys), max(ys)))
 
+        for edge in fold.edges:
+            v1, v2 = fold.vertices[edge[0]], fold.vertices[edge[1]]
+            if v1.angle_to(v2) is None:
+                print("Warning: non 22.5 edge found.")
+                v1_float = v1.to_cartesian()
+                v2_float = v2.to_cartesian()
+                ax.plot([v1_float[0], v2_float[0]], [v1_float[1], v2_float[1]], "yellow", linewidth=3, alpha=1)
+
         ax.set_aspect("equal")
         # Hide axes and bounding box
         ax.set_title(f"Fold {i}", fontsize=20)
@@ -1200,7 +1219,33 @@ def plot_multiple(folds: list[Fold225], debug=False):
                     ha="center",
                     va="bottom",
                 )
-
+            # at the center of each polygon, list the constituent edges
+            # for j, face in enumerate(fold.faces):
+            #     face_vertices = set()
+            #     for e_idx in face:
+            #         v1, v2 = fold.edges[e_idx]
+            #         face_vertices.add(v1)
+            #         face_vertices.add(v2)
+            #     face_vertex_coords = [fold.vertices[v].to_cartesian() for v in face_vertices]
+            #     if not face_vertex_coords:
+            #         continue
+            #     centroid_x = sum(v[0] for v in face_vertex_coords) / len(face_vertex_coords)
+            #     centroid_y = sum(v[1] for v in face_vertex_coords) / len(face_vertex_coords)
+            #     ax.text(
+            #         centroid_x,
+            #         centroid_y,
+            #         f"F{j}\nE:{face}",
+            #         fontsize=6,
+            #         color="purple",
+            #         ha="center",
+            #         va="center",
+            #         bbox=dict(
+            #             boxstyle="round,pad=0.2",
+            #             facecolor="white",
+            #             edgecolor="none",
+            #             alpha=0.7,
+            #         ),
+            #     )
             # Plot edges with indices
             for e_idx, (v1_idx, v2_idx) in enumerate(fold.edges):
                 v1 = fold.vertices[v1_idx].to_cartesian()
@@ -1485,8 +1530,9 @@ def cp_to_fold(cp: Cp225) -> Fold225:
 
         new_vertices[v_idx] = pos
     fold = Fold225(
+        # vertices=cp.vertices,
         vertices=new_vertices,
-        edges=[(v1, v2) for v1, v2, m in cp.edges],
+        edges=[(v1, v2) for v1, v2, _ in cp.edges],
         faces=faces,
         instances=instances,
     )
@@ -1607,7 +1653,7 @@ def fold_to_cp(fold: Fold225, inst_graph: nx.Graph = None) -> Cp225:
                         # Erase the boundary entirely
                         del edge_tracker[edge_key]
                     else:
-                        edge_tracker[edge_key] = "a" if edge_data["is_aux"] else "m"
+                        edge_tracker[edge_key] = "aux" if edge_data["is_aux"] else "m"
                 else:
                     # Safety fallback for invalid manifolds
                     edge_tracker[edge_key] = "v"

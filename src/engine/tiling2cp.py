@@ -4,12 +4,12 @@ Trimmed for speed and database integration.
 Reads the serialized exact 4D states, calculates the straight skeleton using a quantized float bandaid, and routes the creases on an exact 22.5 grid.
 """
 
-from src.engine.math225_core import Vertex4D, Fraction
-from src.engine.cp225 import Cp225, intersection
-from py_straight_skeleton import compute_skeleton
-
 import math
 import networkx as nx
+
+from src.engine.math225_core import Vertex4D, Fraction
+from src.engine.cp225 import Cp225, intersection, vertex_kawasaki, freeze, unfreeze, point_on_line
+from py_straight_skeleton import compute_skeleton
 
 # =============================================================================
 # CONFIGURATION & TUNING
@@ -133,13 +133,13 @@ def build_crease_pattern(G, pos_solved_exact, faces, N=4):
         x1, y1 = v1_ex.to_cartesian()
         x2, y2 = v2_ex.to_cartesian()
         return (math.isclose(x1, 0, abs_tol=1e-5) and math.isclose(x2, 0, abs_tol=1e-5)) or \
-               (math.isclose(x1, N, abs_tol=1e-5) and math.isclose(x2, N, abs_tol=1e-5)) or \
+               (math.isclose(x1, 1, abs_tol=1e-5) and math.isclose(x2, 1, abs_tol=1e-5)) or \
                (math.isclose(y1, 0, abs_tol=1e-5) and math.isclose(y2, 0, abs_tol=1e-5)) or \
-               (math.isclose(y1, N, abs_tol=1e-5) and math.isclose(y2, N, abs_tol=1e-5))
+               (math.isclose(y1, 1, abs_tol=1e-5) and math.isclose(y2, 1, abs_tol=1e-5))
                
     cp_edges = []
     for u, v in G.edges():
-        l_type = 'b' if is_border(pos_solved_exact[u], pos_solved_exact[v]) else 'v'
+        l_type = 'b' if is_border(pos_solved_exact[u], pos_solved_exact[v]) else 'av'
         cp_edges.append((n2i[u], n2i[v], l_type))
         
     cp = Cp225(vertices, cp_edges)
@@ -199,11 +199,15 @@ def build_crease_pattern(G, pos_solved_exact, faces, N=4):
                             
                     if N_e is not None:
                         exact_positions[node] = N_e
-                        cp.vertices.append(N_e)
-                        node_to_idx[node] = len(cp.vertices) - 1
+                        #  Deduplicate coincident exact vertices
+                        if N_e in cp.vertices:
+                            node_to_idx[node] = cp.vertices.index(N_e)
+                        else:
+                            cp.vertices.append(N_e)
+                            node_to_idx[node] = len(cp.vertices) - 1
                         unresolved.remove(node)
                         progress = True
-                        break 
+                        break
                         
             if not progress:
                 print("Warning: Skeleton topology contains unresolvable internal vertices. (Likely Float Degeneracy)")
@@ -234,12 +238,108 @@ def build_crease_pattern(G, pos_solved_exact, faces, N=4):
                         
                         exists = any(((u == idx1 and v == idx2) or (u == idx2 and v == idx1)) for u, v, _ in cp.edges)
                         if not exists:
-                            l_type = "v" if (idx1 in reflex_cp_indices or idx2 in reflex_cp_indices) else "m"
+                            l_type = "rv" if (idx1 in reflex_cp_indices or idx2 in reflex_cp_indices) else "rm"
                             cp.edges.append((idx1, idx2, l_type))
                             
     return cp
+def add_hinges(cp):
+    """
+    Post-processes the Cp225 to enforce flat foldability by adding/removing hinges.
 
+    For each skeleton vertex with an odd number of creases, it checks Kawasaki foldability. 
+    If invalid, it tests all valid raycast directions (or hinge removals) on a fast clone,
+    evaluating the number of operations and secondary Kawasaki violations. It applies 
+    the transformation that minimizes the hinge count and overall errors.
+    """
+    def get_odd_errors(current_cp):
+        """Helper to fetch only odd-degree vertices violating Kawasaki, 
+        filtering out those with 'b' (border) or 'av' (axial valley) neighbors."""
+        current_cp.get_vertex_neighbors()
+        errors = current_cp.kawasaki_errors()
+        
+        return [
+            v for v in errors 
+            if len(current_cp.vertex_neighbors[v]) % 2 != 0 
+        ]
 
+    # Iteratively fix the crease pattern until no odd-degree Kawasaki errors remain
+    while True:
+        odd_errors = get_odd_errors(cp)
+        if not odd_errors:
+            break
+        # print(f"Found {len(odd_errors)} odd-degree Kawasaki errors. Attempting to resolve...")
+            
+        target_v = odd_errors[0]
+        nbrs = cp.vertex_neighbors[target_v]
+        existing_angles = [angle for _, angle, _ in nbrs]
+        
+        # Cost metric: (Remaining Odd Kawasaki Errors, Operations/Hinges Added)
+        best_cost = (float('inf'), float('inf'))
+        best_cp = None
+        
+        # -----------------------------------------------------
+        # Strategy A: Try ADDING a hinge
+        # -----------------------------------------------------
+        for a in {0, 2, 4, 6, 8, 10, 12, 14}:
+            if a not in existing_angles:
+                # If adding this angle locally satisfies Kawasaki
+                if vertex_kawasaki(existing_angles + [a]):
+                    
+                    # ULTRA-FAST CLONE: Shallow copy the lists (tuples/Vertex4D are immutable)
+                    temp_cp = Cp225(cp.vertices[:], cp.edges[:])
+                    res, ops = temp_cp.ray_cast(target_v, a, 0)
+                    
+                    if res is not None:
+                        # Fast pythonic conversion of 'm' to 'h'
+                        temp_cp.edges = [(u, v, 'h' if lt == 'm' else lt) for u, v, lt in temp_cp.edges]
+                        
+                        # Evaluate global consequences
+                        cost = (len(get_odd_errors(temp_cp)), ops)
+                        if cost < best_cost:
+                            best_cost = cost
+                            best_cp = temp_cp
+                            
+        # -----------------------------------------------------
+        # Strategy B: Try REMOVING an existing hinge
+        # -----------------------------------------------------
+        for nbr_v, angle, l_type in nbrs:
+            if l_type == 'h':
+                test_angles = existing_angles.copy()
+                test_angles.remove(angle)
+                
+                # If removing this hinge locally satisfies Kawasaki
+                if vertex_kawasaki(test_angles):
+                    # Locate the edge index in the global list
+                    edge_idx = next((i for i, (u, v, _) in enumerate(cp.edges) if {u, v} == {target_v, nbr_v}), None)
+                            
+                    if edge_idx is not None:
+                        # ULTRA-FAST CLONE
+                        temp_cp = Cp225(cp.vertices[:], cp.edges[:])
+                        res, ops = temp_cp.remove_crease(edge_idx)
+                        
+                        if res is not None:
+                            cost = (len(get_odd_errors(temp_cp)), ops)
+                            if cost < best_cost:
+                                best_cost = cost
+                                best_cp = temp_cp
+                                
+        # -----------------------------------------------------
+        # Commit the best transformation
+        # -----------------------------------------------------
+        if best_cp is not None:
+            # Overwrite the original object's state directly
+            cp.vertices = best_cp.vertices
+            cp.edges = best_cp.edges
+            cp.faces = best_cp.faces
+            # Nuke the cache so it properly rebuilds on the next loop
+            if hasattr(cp, '_neighbors_cache'):
+                del cp._neighbors_cache
+                del cp._cache_key
+        else:
+            print(f"Warning: Could not resolve Kawasaki error for vertex {target_v} without infinite looping or bounds.")
+            break
+            
+    return cp
 # =============================================================================
 # 4. DEBUG & VISUALIZATION
 # =============================================================================
@@ -248,38 +348,114 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import random
     from src.engine.topology2tiling import solve_tiling, export_frozen_blob, extract_topology
-    
+
+    from src.engine.fold225 import cp_to_fold, plot_multi_state_grid, plot_multiple
+    from src.engine.tree import extract_eigenvalues
+
+    import cProfile
+    import pstats
+    COLORS = {
+        'rm': 'red',  #ridge mountain
+        'rv': 'blue', #ridge valley
+        'av': 'blue', #axial valley
+        'hm': 'red',  #hinge mountain
+        'hv': 'blue', #hinge valley
+        'h': 'grey', #unknown/flat hinge
+        'v': 'blue', 
+        'm': 'red',
+        'b': 'black'
+    }
     # 1. Plotter
-    def draw_cp_ax(ax, cp, title="Crease Pattern"):
-        plot_colors = {'m': 'red', 'v': 'blue', 'b': 'black'}
-        ax.set_title(title, fontsize=14)    
+    def draw_cp_ax(ax, cp, title="Crease Pattern", debug = False):
+        ax.set_title(title, fontsize=14)
+        
+        # Ensure neighbors are computed to access neighbor counts
+        cp.get_vertex_neighbors()
+        
+        # Draw edges
         for t, x1, y1, x2, y2 in cp.render():
-            ax.plot([x1, x2], [y1, y2], color=plot_colors.get(t, 'grey'), lw=2, zorder=2, alpha=0.7)
+            ax.plot([x1, x2], [y1, y2], color=COLORS.get(t, 'grey'), 
+                    lw=(1 if t in {'h','hv','hm'} else 2), zorder=2, alpha=0.7)
+        
+        # Draw vertices and crease count labels
+        if debug:
+            for i, v in enumerate(cp.vertices):
+                x, y = v.to_cartesian()
+                ax.scatter(x, y, color='black', s=10, zorder=3, alpha=0.3)
+                
+                # Get count from the neighbor list populated by get_vertex_neighbors()
+                crease_count = len(cp.vertex_neighbors[i])
+                
+                # Add text label with a slight offset so it doesn't overlap the point
+                ax.text(x + 0.02, y + 0.02, str(crease_count), 
+                        fontsize=8, color='blue', zorder=4)
+                
+                # look for non-kawasaki vertices (even or odd) and flag
+            for i, nbrs in enumerate(cp.vertex_neighbors):
+                angles = [angle for _, angle, _ in nbrs]
+                if angles and not vertex_kawasaki(angles):
+                    x, y = cp.vertices[i].to_cartesian()
+                    ax.scatter(x, y, color='magenta', s=50, zorder=4, alpha=0.8, marker='X')
+            
         ax.set_aspect('equal')
         ax.axis('off')
 
     # 2. Pipeline Integration Test
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+
+    profiler = cProfile.Profile()
+    profiler.enable()
+    fig, axes = plt.subplots(2, 4, figsize=(16, 4))
     axes_flat = axes.flatten()
-    
-    for i, db_id in enumerate(random.sample(range(1, 9000), 4)):
-        try:
-            # Simulate Module 1 (Tiling -> Blob)
-            G_raw = extract_topology(db_id, db_name="topologies_4_none.db", N=4)
-            G_solved, pos_init, pos_solved_exact, faces, n2i = solve_tiling(G_raw, symmetry='none', N=4)
-            blob = export_frozen_blob(G_solved, pos_solved_exact, n2i, faces)
+    sample = random.sample(range(1, 9000), 20)
+    # sample = [6270]
+    cps = []
+    folds = []
+    labels = []
+    trees = []
+
+    for i, db_id in enumerate(sample):
+        # Simulate Module 1 (extract frozen topology -> tiling)
+        G_raw = extract_topology(db_id, db_name="topologies_4_diag.db", N=4)
+        output = solve_tiling(G_raw, symmetry='diag', N=4, verbose=False, time_limit = 10)
+        if output is None:
+            print(Warning(f"ID {db_id}: Failed to solve within time limit."))
+            # axes_flat[i].set_title(f"ID {db_id} (Solve Failed)", color='red')
+            # axes_flat[i].axis('off')
+            continue
+        G_solved, pos_init, pos_solved_exact, faces, n2i = output
+        blob = export_frozen_blob(G_solved, pos_solved_exact, n2i, faces)
+        
+        # Simulate Module 2 (Blob -> CP)
+        loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
+        cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=4)
+        cp = add_hinges(cp)
+        cps.append(cp)
+        
+        # Simulate Module 3 (CP -> tree)
+        fold = cp_to_fold(cp)
+        folds.append(fold)
+        tree = fold.get_tree_and_packing()[0]
+        embedding = extract_eigenvalues(tree, dim = 32)
+
+        # labels.append(f"ID {db_id}")
+        # draw_cp_ax(axes_flat[i], cp, title=f"CP from Blob (ID {db_id})")
+        print(f"ID {db_id}: Successfully processed full pipeline.")
             
-            # Simulate Module 2 (Blob -> CP)
-            loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
-            cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=4)
-            
-            draw_cp_ax(axes_flat[i], cp, title=f"CP from Blob (ID {db_id})")
-            print(f"ID {db_id}: Successfully processed full pipeline.")
-            
-        except Exception as e:
-            print(f"Failed to process topology {db_id}: {e}")
-            axes_flat[i].set_title(f"ID {db_id} (Failed)", color='red')
-            axes_flat[i].axis('off')
-            
-    plt.tight_layout()
-    plt.show()
+    profiler.disable()
+    stats = pstats.Stats(profiler)
+    stats.sort_stats("cumulative")  # Sort by cumulative time
+    stats.print_stats(20)  # Print the top  functions
+    print("====== Plotting Results ======")
+    # try:
+    #     # plot_multiple(folds,debug = True)
+    #     plot_multi_state_grid(folds,cps = cps, labels = labels,packing_instead_of_cp=False)
+    # except Exception as e:
+    #     print("Error during folding/plotting:", e)
+    # plt.tight_layout()
+    # plt.show()
+
+
+    """
+    6270
+    1952
+    """

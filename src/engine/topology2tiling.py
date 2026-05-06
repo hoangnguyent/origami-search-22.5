@@ -12,10 +12,11 @@ import math
 import pulp
 from itertools import combinations
 import sympy as sp
+import time
 # =============================================================================
 # CONFIGURATION & TUNING (Easily Accessible)
 # =============================================================================
-EPSILON = 1 / 2  # Minimum feature size as a fraction of 1/N.
+EPSILON = 1 / 4  # Minimum feature size as a fraction of 1/N.
 C_scale = 3  # for big-M constraints in MILP, scaled by N. Should be larger than max possible incircle radius, but not too large to cause numerical instability.
 
 
@@ -24,7 +25,7 @@ class MILPTuning:
     Adjust these parameters to tune how the MILP prioritizes quadruplet selection.
     """
 
-    CONCAVE_WEIGHT = 5.0
+    CONCAVE_WEIGHT = 10.0
     BASE_WEIGHT = 1.0
 
     @staticmethod
@@ -33,7 +34,7 @@ class MILPTuning:
         Deprioritize quadruplets from large faces, which have multiple redundant
         quadruplets, pushing the solver to lock down smaller faces first.
         """
-        return 0.5 / max(1.0, poly_size - 3.0)
+        return 1# / max(1.0, poly_size - 3.0)
 
 
 # =============================================================================
@@ -561,7 +562,8 @@ def run_milp_selection(
     # 2. PROXIMITY CULLING (Anti-Bowtie)
     for face_idx, face in enumerate(faces):
         k = len(face)
-        if k <= 3:
+        if k <= 4:
+            # No such thing as a concave triangle. The only concave quadrilateral is the Y molecule, which physically cannot bowtie.
             continue
 
         area = sum(
@@ -588,7 +590,7 @@ def run_milp_selection(
             edge_dists.sort(key=lambda x: x[0])
             closest_edges = edge_dists[
                 :3
-            ]  # Only bound the 3 closest walls. Annihilates B&B explosion.
+            ]  # Only bound the 3 closest walls. reduces branch and bound explosion.
 
             for dist, j, u, v in closest_edges:
                 dx_init, dy_init = (
@@ -596,8 +598,9 @@ def run_milp_selection(
                     pos_init[v][1] - pos_init[u][1],
                 )
                 L_init = math.hypot(dx_init, dy_init)
-                if L_init < 1e-5:
-                    continue
+                # if L_init < 1e-5:
+                #     # 
+                #     continue
 
                 t_x, t_y = dx_init / L_init, dy_init / L_init
                 n_x, n_y = -t_y, t_x
@@ -612,25 +615,24 @@ def run_milp_selection(
                     f"safe3_f{face_idx}_vc{v_c}_{u}_{v}", cat=pulp.LpBinary
                 )
                 prob += b1 + b2 + b3 >= 1
-                tol = 1e-4
 
-                proj_n = (x_vars[v_c] - x_vars[u]) * n_x + (
-                    y_vars[v_c] - y_vars[u]
-                ) * n_y
+                gap = EPSILON # The minimum physical feature clearance
+
+                proj_n = (x_vars[v_c] - x_vars[u]) * n_x + (y_vars[v_c] - y_vars[u]) * n_y
                 if is_ccw:
-                    prob += proj_n >= -tol - C_dynamic * (1 - b1)
+                    # Normal points inside. Safe zone is strictly inside.
+                    prob += proj_n >= gap - C_dynamic * (1 - b1)
                 else:
-                    prob += proj_n <= tol + C_dynamic * (1 - b1)
+                    # Normal points outside. Safe zone is strictly inside (negative).
+                    prob += proj_n <= -gap + C_dynamic * (1 - b1)
 
-                proj_t_left = (x_vars[v_c] - x_vars[u]) * t_x + (
-                    y_vars[v_c] - y_vars[u]
-                ) * t_y
-                prob += proj_t_left <= tol + C_dynamic * (1 - b2)
+                # Safe zone is strictly before the start of the edge
+                proj_t_left = (x_vars[v_c] - x_vars[u]) * t_x + (y_vars[v_c] - y_vars[u]) * t_y
+                prob += proj_t_left <= -gap + C_dynamic * (1 - b2)
 
-                proj_t_right = (x_vars[v_c] - x_vars[v]) * t_x + (
-                    y_vars[v_c] - y_vars[v]
-                ) * t_y
-                prob += proj_t_right >= -tol - C_dynamic * (1 - b3)
+                # Safe zone is strictly after the end of the edge
+                proj_t_right = (x_vars[v_c] - x_vars[v]) * t_x + (y_vars[v_c] - y_vars[v]) * t_y
+                prob += proj_t_right >= gap - C_dynamic * (1 - b3)
 
     # Quadruplet Toggles
     for k_idx, cand in enumerate(all_candidates):
@@ -816,18 +818,34 @@ def is_valid_geometry(ans, nodes, G, pos_init, faces, N, face_reflex_verts):
                 if L_init < 1e-5:
                     continue
 
+                # t_x, t_y = dx_init / L_init, dy_init / L_init
+                # n_x, n_y = -t_y, t_x
+                # EPSILON = 1e-4
+
+                # proj_n = (ex_c[0] - ex_u[0]) * n_x + (ex_c[1] - ex_u[1]) * n_y
+                # safe1 = (proj_n >= -EPSILON) if is_ccw else (proj_n <= EPSILON)
+
+                # proj_t_left = (ex_c[0] - ex_u[0]) * t_x + (ex_c[1] - ex_u[1]) * t_y
+                # safe2 = proj_t_left <= EPSILON
+
+                # proj_t_right = (ex_c[0] - ex_v[0]) * t_x + (ex_c[1] - ex_v[1]) * t_y
+                # safe3 = proj_t_right >= -EPSILON
+
+                # if not (safe1 or safe2 or safe3):
+                #     return False
                 t_x, t_y = dx_init / L_init, dy_init / L_init
                 n_x, n_y = -t_y, t_x
-                tol = 1e-4
+                
+                gap = EPSILON # Match the MILP constraint
 
                 proj_n = (ex_c[0] - ex_u[0]) * n_x + (ex_c[1] - ex_u[1]) * n_y
-                safe1 = (proj_n >= -tol) if is_ccw else (proj_n <= tol)
+                safe1 = (proj_n >= gap) if is_ccw else (proj_n <= -gap)
 
                 proj_t_left = (ex_c[0] - ex_u[0]) * t_x + (ex_c[1] - ex_u[1]) * t_y
-                safe2 = proj_t_left <= tol
+                safe2 = proj_t_left <= -gap
 
                 proj_t_right = (ex_c[0] - ex_v[0]) * t_x + (ex_c[1] - ex_v[1]) * t_y
-                safe3 = proj_t_right >= -tol
+                safe3 = proj_t_right >= gap
 
                 if not (safe1 or safe2 or safe3):
                     return False
@@ -884,8 +902,11 @@ def get_rank_and_sliding_nodes(M_list, num_vars, nodes):
 # ==== Main function ====
 
 
-def solve_tiling(G_in, symmetry="none", N=4):
-    """Main solver function that orchestrates the entire pipeline: constraint assembly, MILP selection, directed nullspace scavenging if needed, and final exact solution with geometric verification."""
+def solve_tiling(G_in, symmetry="none", N=4,verbose=False, time_limit = 10):
+    """Main solver function that orchestrates the entire pipeline: constraint assembly, MILP selection, directed nullspace scavenging if needed, and final exact solution with geometric verification.
+    
+    time_limit: Maximum time (in seconds) to allow for the Directed Nullspace Scavenger DFS. If exceeded, the function will return None.
+    """
     G, pos_init, nodes, n2i = clean_deg2_vertices(G_in, N)
     n = len(nodes)
     num_vars = 4 * n
@@ -935,7 +956,8 @@ def solve_tiling(G_in, symmetry="none", N=4):
             b_list += b_eq
 
     current_rank, current_sliding = get_rank_and_sliding_nodes(M_list, num_vars, nodes)
-    print(f"MILP Base Assembly Complete. Current rank: {current_rank} / {num_vars}")
+    if verbose:
+        print(f"MILP Base Assembly Complete. Current rank: {current_rank} / {num_vars}")
 
     # =========================================================================
     # 3. EXACT CONSTRAINT SCAVENGER (Depth-First Search)
@@ -947,13 +969,19 @@ def solve_tiling(G_in, symmetry="none", N=4):
     if current_rank == num_vars:
         ans_final = exact_fraction_solve(M_list, b_list, num_vars)
     else:
-        print("System underconstrained. Launching Directed Nullspace Scavenger...")
+        if verbose:
+            print("System underconstrained. Launching Directed Nullspace Scavenger...")
         exhaustive_candidates = harvest_candidates(
             faces, pos_init, symmetry, N, exhaustive=True
         )
         unused_candidates = [c for c in exhaustive_candidates if c not in applied]
 
+        t0 = time.time()
         def directed_scavenger_dfs(M_curr, b_curr, rank_curr, sliding_curr, pool):
+            if time.time() - t0 > time_limit:
+                # if verbose:
+                #     print("Directed Scavenger DFS time limit exceeded. Aborting search.")
+                return None
             # Base Case: Full Rank Achieved
             if rank_curr == num_vars:
                 ans_test = exact_fraction_solve(M_curr, b_curr, num_vars)
@@ -1014,11 +1042,16 @@ def solve_tiling(G_in, symmetry="none", N=4):
         # If the directed filter aggressively prunes the necessary path, fall back
         # ---------------------------------------------------------------------
         if ans_final is None:
-            print(
-                "Directed Scavenger failed. Falling back to Undirected Exhaustive Scavenger..."
-            )
+            if verbose:
+                print(
+                    "Directed Scavenger failed. Falling back to Undirected Exhaustive Scavenger..."
+                )
 
             def undirected_scavenger_dfs(M_curr, b_curr, rank_curr, pool):
+                if time.time() - t0 > time_limit:
+                    # if verbose:
+                    #     print("Undirected Scavenger DFS time limit exceeded. Aborting search.")
+                    return None
                 if rank_curr == num_vars:
                     ans_test = exact_fraction_solve(M_curr, b_curr, num_vars)
                     if None not in ans_test:
@@ -1050,11 +1083,14 @@ def solve_tiling(G_in, symmetry="none", N=4):
             )
 
     if ans_final is None or None in ans_final:
-        raise ValueError(
-            "Constraint Scavenger exhausted all geometric branches. System mathematically deficient."
-        )
+        # raise ValueError(
+        #     "Constraint Scavenger exhausted all geometric branches. System mathematically deficient."
+        # )
+        print(f"Constraint Scavenger failed to find a valid full-rank solution within the time limit.")
+        return None
 
-    print("Exact Constraints locked and physically verified.")
+    if verbose:
+        print("Exact Constraints locked and physically verified.")
     pos_solved_exact = {}
     for i, u in enumerate(nodes):
         pos_solved_exact[u] = Vertex4D(
@@ -1154,13 +1190,21 @@ if __name__ == "__main__":
     profiler = cProfile.Profile()
     profiler.enable()
 
-    # for i, db_id in enumerate([483,4613,5669,3744]):
+    # for i, db_id in enumerate([483,4613,5669,3744,8899]):
     results = []
-    for i, db_id in enumerate(random.sample(range(1, 9000), 15)):
+    sample = random.sample(range(1, 9000), 8)
+    # sample = [8899]
+    for i, db_id in enumerate(sample):
         G_raw = extract_topology(db_id, db_name="topologies_4_none.db", N=4)
-        G, pos_init, pos_solved_exact, faces, n2i = solve_tiling(
-            G_raw, symmetry="none", N=4
+
+        print(f"====> Processing ID {db_id} ({i+1}/{len(sample)})=====")
+        output = solve_tiling(
+            G_raw, symmetry="none", N=4, verbose=True, time_limit=10
         )
+        if output is None:
+            print(Warning(f"ID {db_id}: Failed to solve within time limit."))
+            continue
+        G, pos_init, pos_solved_exact, faces, n2i = output
         blob = export_frozen_blob(G, pos_solved_exact, n2i, faces)
         results.append(
             {
@@ -1173,7 +1217,8 @@ if __name__ == "__main__":
                 "blob": blob,
             }
         )
-        print(f"ID {db_id}: Successfully frozen.")
+        print(f"Successfully frozen.")
+        print("=========")
 
     # plt.tight_layout()
     # plt.show()
@@ -1182,7 +1227,7 @@ if __name__ == "__main__":
     stats.sort_stats("cumulative")  # Sort by cumulative time
     stats.print_stats(20)  # Print the top  functions
 
-    fig, axes = plt.subplots(3, 5, figsize=(20, 8))
+    fig, axes = plt.subplots(2, 4, figsize=(20, 8))
     axes_flat = axes.flatten()
     for i, res in enumerate(results):
         draw_debug_ax(

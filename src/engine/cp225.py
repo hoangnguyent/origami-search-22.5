@@ -81,6 +81,7 @@ class Cp225:
         """
         Compute list of faces from vertex neighbor connectivity.
         Each face is represented as a list of edge indices into self.edges.
+        The outer boundary face is algorithmically detected and removed using signed area.
         """
         self.get_vertex_neighbors()
         faces = []
@@ -97,10 +98,12 @@ class Cp225:
                     continue
 
                 face_edge_indices = []
+                face_vertex_indices = []  # Keep track of vertices in order to compute area
                 curr_v, next_v = v1, v2
 
                 while True:
                     visited.add((curr_v, next_v))
+                    face_vertex_indices.append(curr_v)
 
                     # Step 0: get global edge index
                     edge_idx = edge_lookup[frozenset((curr_v, next_v))]
@@ -125,21 +128,23 @@ class Cp225:
 
                     curr_v, next_v = next_v, next2_v
 
-                faces.append(face_edge_indices)
+                # Step 4: Calculate signed area to identify and reject the outer face.
+                # Because the traversal takes the "next CCW" edge, interior faces are 
+                # traced clockwise (negative area), and the exterior face is traced 
+                # counter-clockwise (positive area).
+                area = 0.0
+                k = len(face_vertex_indices)
+                for i in range(k):
+                    v_curr = self.vertices[face_vertex_indices[i]]
+                    v_next = self.vertices[face_vertex_indices[(i + 1) % k]]
+                    x1, y1 = v_curr.to_cartesian()
+                    x2, y2 = v_next.to_cartesian()
+                    area += (x1 * y2 - x2 * y1)
 
-        # remove the outer square face if present
-        if len(faces) > 0:
-            # the outer face contains all four boundary vertices
-            outer_face = None
-            for face in faces:
-                face_vertices = {
-                    self.vertices[self.edges[edge_idx][0]] for edge_idx in face
-                } | {self.vertices[self.edges[edge_idx][1]] for edge_idx in face}
-                if BOUNDARY_CORNERS.issubset(face_vertices):
-                    outer_face = face
-                    break
-            if outer_face:
-                faces.remove(outer_face)
+                # Keep only interior faces (area < 0). We use a 1e-5 buffer for float noise.
+                if area < 1e-5:
+                    faces.append(face_edge_indices)
+
         self.faces = faces
         return faces
 
@@ -218,7 +223,9 @@ class Cp225:
                 continue
 
             # 5. Track closest intersection
-            dist = start_vertex.distance_to(P)
+            diff = P - start_vertex
+            x,y = diff.to_cartesian()
+            dist = (x**2 + y**2) #don't even need to take sqrt since just comparing distances
             if dist < closest_dist:
                 closest_dist = dist
                 hit_edge_idx = edge_idx
@@ -415,14 +422,14 @@ def freeze(fold: Cp225) -> tuple:
     # Step 1: convert vertices into 8-tuples (use tuple comprehension, slightly faster)
     vertices = tuple(
         (
-            vert.x.numerator,
-            vert.x.denominator,
-            vert.y.numerator,
-            vert.y.denominator,
-            vert.z.numerator,
-            vert.z.denominator,
-            vert.w.numerator,
-            vert.w.denominator,
+            vert.x.num,
+            vert.x.den,
+            vert.y.num,
+            vert.y.den,
+            vert.z.num,
+            vert.z.den,
+            vert.w.num,
+            vert.w.den,
         )
         for vert in fold.vertices
     )
@@ -449,6 +456,23 @@ def freeze(fold: Cp225) -> tuple:
     frozen_edges = tuple(sorted(remapped_edges))
 
     return (frozen_vertices, frozen_edges)
+
+def unfreeze(frozen: tuple) -> Cp225:
+    """
+    Convert a frozen canonical form back into a mutable Fold225 object.
+    """
+    frozen_vertices, frozen_edges = frozen
+    vertices = [
+        Vertex4D(
+            Fraction(x_num, x_den),
+            Fraction(y_num, y_den),
+            Fraction(z_num, z_den),
+            Fraction(w_num, w_den),
+        )
+        for (x_num, x_den, y_num, y_den, z_num, z_den, w_num, w_den) in frozen_vertices
+    ]
+    edges = [[v1, v2, line_type] for (v1, v2, line_type) in frozen_edges]
+    return Cp225(vertices, edges)
 
 if __name__ == "__main__":
     pass
