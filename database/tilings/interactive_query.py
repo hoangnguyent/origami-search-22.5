@@ -10,12 +10,14 @@ Controls:
 """
 
 import math
+import json
 import networkx as nx
 import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
+from matplotlib.widgets import Button, Slider
 
 # Import your pipeline functions
 from database.tilings.query import query_tilings, plot_query_megaplot
+from src.engine.tree import get_proportional_tree_pos
 
 class TreeDrawer:
     def __init__(self, N=4, symmetry="none", n_results=5):
@@ -26,7 +28,9 @@ class TreeDrawer:
         # Initialize Figure and Axes
         self.fig, self.ax = plt.subplots(figsize=(8, 8))
         self.fig.canvas.manager.set_window_title("Draw Query Tree")
-        plt.subplots_adjust(bottom=0.15) # Make room for the button
+        
+        # Make extra room at the bottom for the slider and buttons
+        plt.subplots_adjust(bottom=0.25) 
         
         self.ax.set_xlim(0, 10)
         self.ax.set_ylim(0, 10)
@@ -44,10 +48,25 @@ class TreeDrawer:
         self.dragging_node = None
         self.hit_radius = 0.4 # Distance threshold for clicking a node
 
-        # Setup Button
-        self.btn_ax = plt.axes([0.4, 0.02, 0.2, 0.06])
-        self.btn_run = Button(self.btn_ax, 'Run Query', color='lightblue', hovercolor='0.975')
+        # --- SETUP UI ELEMENTS ---
+        # Slider for t-parameter (Log space: 10^val)
+        self.ax_slider = plt.axes([0.25, 0.12, 0.5, 0.03])
+        self.t_slider = Slider(
+            ax=self.ax_slider,
+            label='simple <--> complex',
+            valmin=-5.0,
+            valmax=1.0,
+            valinit=-2.0
+        )
+
+        # Buttons
+        self.btn_run_ax = plt.axes([0.3, 0.03, 0.15, 0.06])
+        self.btn_run = Button(self.btn_run_ax, 'Run Query', color='lightblue', hovercolor='0.975')
         self.btn_run.on_clicked(self.run_query)
+
+        self.btn_save_ax = plt.axes([0.55, 0.03, 0.15, 0.06])
+        self.btn_save = Button(self.btn_save_ax, 'Save Tree', color='lightgreen', hovercolor='0.975')
+        self.btn_save.on_clicked(self.save_tree)
 
         # Connect Events
         self.fig.canvas.mpl_connect('button_press_event', self.on_press)
@@ -88,9 +107,6 @@ class TreeDrawer:
                 self.nodes[new_id] = (event.xdata, event.ydata)
                 self.edges.append((self.selected_node, new_id))
                 self.selected_node = new_id # Auto-select the new leaf
-            else:
-                # No node selected, do nothing
-                pass
                 
         self.draw_tree()
 
@@ -142,9 +158,39 @@ class TreeDrawer:
             
         self.fig.canvas.draw_idle()
 
+    def save_tree(self, event):
+        """Saves the current drawing as a JSON file for tuning."""
+        filename = input("\nEnter filename to save tree (e.g., dragon.json): ")
+        if not filename.strip():
+            print("Save cancelled.")
+            return
+        if not filename.endswith('.json'):
+            filename += '.json'
+            
+        export_data = {"nodes": {}, "edges": []}
+        
+        for n_id, (x, y) in self.nodes.items():
+            export_data["nodes"][n_id] = {"x": x, "y": y}
+            
+        for u, v in self.edges:
+            x1, y1 = self.nodes[u]
+            x2, y2 = self.nodes[v]
+            dist = math.hypot(x1 - x2, y1 - y2)
+            if dist < 1e-5: dist = 1e-5 
+            export_data["edges"].append({"u": u, "v": v, "length": dist})
+            
+        with open(filename, 'w') as f:
+            json.dump(export_data, f, indent=4)
+        print(f"Successfully saved tree to {filename}\n")
+
     def run_query(self, event):
         """Converts the drawing to a NetworkX graph and triggers the FAISS pipeline."""
-        print("Building graph and extracting edge lengths...")
+        
+        # --- Grab and calculate the t-parameter from the slider ---
+        log_t = self.t_slider.val
+        t_val = 10 ** log_t
+        # print(f"\nBuilding graph and extracting edge lengths...")
+        # print(f"Executing query with t = {t_val:.6f} (log10 = {log_t:.2f})")
         
         G = nx.Graph()
         G.add_nodes_from(self.nodes.keys())
@@ -155,19 +201,24 @@ class TreeDrawer:
             x2, y2 = self.nodes[v]
             dist = math.hypot(x1 - x2, y1 - y2)
             
-            # Avoid division by zero if nodes are dragged exactly on top of each other
             if dist < 1e-5: dist = 1e-5 
             
-            G.add_edge(u, v, length=1/dist, weight=dist)
+            G.add_edge(u, v, length=dist, weight=1/dist)
             
-        # Check connectivity (Laplacian eigenvalues require a single connected component)
         if not nx.is_connected(G):
             print("WARNING: The drawn graph is disconnected! Please connect all nodes to form a single tree.")
             return
 
         # Execute query
         try:
-            results = query_tilings(G, N=self.N, symmetry=self.symmetry, n=self.n_results)
+            results = query_tilings(
+                G, 
+                N=self.N, 
+                symmetry=self.symmetry, 
+                n=self.n_results,
+                weight_method="value_decay", 
+                weight_param=t_val
+            )
             plot_query_megaplot(G, results)
         except Exception as e:
             print(f"Error executing query: {e}")

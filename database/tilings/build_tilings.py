@@ -35,7 +35,7 @@ from src.engine.tree import extract_eigenvalues
 # CONFIGURATION
 # =============================================================================
 N = 4
-SYMMETRY = "diag"
+SYMMETRY = "none"
 TIME_LIMIT = 10 # Internal Python DFS time limit
 EXTERNAL_TIMEOUT = 12 # External backup timeout (slightly higher to allow graceful internal exit)
 
@@ -148,6 +148,11 @@ def process_topology_task(topo_id, binary_state, n_val, symmetry_val, time_lim):
         # Catch degenerate float errors, kawasaki errors, or exact-fraction crashes
         return (topo_id, 3, None, None) # STATUS 3: CP/Pipeline Error
 
+def worker_wrapper(topo_id, binary_state, n_val, symmetry_val, time_lim, return_dict):
+    """Wraps the task to pipe the tuple result back into a shared dictionary."""
+    res = process_topology_task(topo_id, binary_state, n_val, symmetry_val, time_lim)
+    return_dict[topo_id] = res
+
 # =============================================================================
 # MAIN ORCHESTRATOR
 # =============================================================================
@@ -194,7 +199,6 @@ def main():
         return
 
     print(f"Resuming operation: {total_pending} topologies left to process.")
-    
     # 5. Multiprocessing Execution
     num_workers = max(1, mp.cpu_count() - 2)
     print(f"Spinning up {num_workers} parallel workers...")
@@ -205,36 +209,47 @@ def main():
     timeout_count = 0
     error_count = 0
 
-    with concurrent.futures.ProcessPoolExecutor(max_workers=num_workers) as executor:
-        # Dictionary mapping Future -> (topo_id, start_time)
-        active_futures = {}
-        pending_iter = iter(pending_topologies)
-        
-        # Initial fill
-        for _ in range(num_workers):
+    # Thread-safe dictionary to retrieve results from the isolated processes
+    manager = mp.Manager()
+    return_dict = manager.dict()
+    
+    active_processes = {}  # Maps topo_id -> (mp.Process object, start_time)
+    pending_iter = iter(pending_topologies)
+    
+    while True:
+        # --- 1. Fill Available Cores ---
+        while len(active_processes) < num_workers:
             try:
                 topo = next(pending_iter)
-                fut = executor.submit(process_topology_task, topo.id, topo.binary_state, N, SYMMETRY, TIME_LIMIT)
-                active_futures[fut] = (topo.id, time.time())
+                # Spawn a fresh process for every task. This eliminates memory leaks natively.
+                p = mp.Process(target=worker_wrapper, args=(
+                    topo.id, topo.binary_state, N, SYMMETRY, TIME_LIMIT, return_dict
+                ))
+                p.start()
+                active_processes[topo.id] = (p, time.time())
             except StopIteration:
-                break
+                break # No more pending tasks
+
+        # Break the main loop if all tasks are deployed and all processes have finished
+        if not active_processes:
+            break
+
+        # --- 2. Monitor Running Processes ---
+        current_time = time.time()
+        for topo_id in list(active_processes.keys()):
+            p, start_time = active_processes[topo_id]
+
+            # Case A: The process finished gracefully
+            if not p.is_alive():
+                p.join()
+                del active_processes[topo_id]
+                processed_count += 1
                 
-        while active_futures:
-            # Wait for at least one task to complete (or 1 second to check for external timeouts)
-            done, not_done = concurrent.futures.wait(
-                active_futures.keys(), 
-                timeout=1.0, 
-                return_when=concurrent.futures.FIRST_COMPLETED
-            )
-            
-            # --- 1. Handle Completed Tasks ---
-            for fut in done:
-                topo_id, _ = active_futures.pop(fut)
-                try:
-                    res_topo_id, status, blob_bytes, embedding_bytes = fut.result()
-                    
-                    # Update DB
+                # Check if it returned data (it won't if it physically Segfaulted)
+                if topo_id in return_dict:
+                    res_topo_id, status, blob_bytes, embedding_bytes = return_dict[topo_id]
                     dest_session.query(Topology).filter(Topology.id == res_topo_id).update({"status": status})
+                    
                     if status == 1:
                         dest_session.add(Tiling(
                             topology_id=res_topo_id,
@@ -247,53 +262,157 @@ def main():
                     elif status == 3:
                         error_count += 1
                         
-                except Exception as e:
-                    print(f"Critical Worker Crash on ID {topo_id}: {e}")
+                    del return_dict[topo_id] # Free memory
+                else:
+                    # Severe C++ Segfault caught
                     dest_session.query(Topology).filter(Topology.id == topo_id).update({"status": 3})
                     error_count += 1
-                
+
+            # Case B: The process is frozen and exceeded the External Timeout
+            elif current_time - start_time > EXTERNAL_TIMEOUT:
+                # FORCE KILL the zombie process
+                p.terminate()
+                p.join()
+                del active_processes[topo_id]
                 processed_count += 1
+                timeout_count += 1
+                
+                dest_session.query(Topology).filter(Topology.id == topo_id).update({"status": 2})
 
-            # --- 2. Enforce External Timeout ---
-            current_time = time.time()
-            for fut in list(not_done):
-                topo_id, start_time = active_futures[fut]
-                if current_time - start_time > EXTERNAL_TIMEOUT:
-                    # The task is hung in C++ or stuck. We abandon the future and flag the DB.
-                    # Note: ProcessPoolExecutor doesn't natively "kill" the process, but abandoning 
-                    # it allows the pipeline to continue moving forward.
-                    active_futures.pop(fut)
-                    dest_session.query(Topology).filter(Topology.id == topo_id).update({"status": 2})
-                    timeout_count += 1
-                    processed_count += 1
-                    # print(f"External Timeout Triggered for ID {topo_id}")
-
-            # --- 3. Refill the Queue ---
-            while len(active_futures) < num_workers:
-                try:
-                    topo = next(pending_iter)
-                    fut = executor.submit(process_topology_task, topo.id, topo.binary_state, N, SYMMETRY, TIME_LIMIT)
-                    active_futures[fut] = (topo.id, time.time())
-                except StopIteration:
-                    break
-                    
-            # Periodically commit to DB and print progress
-            if processed_count % 20 == 0 or len(active_futures) == 0:
-                dest_session.commit()
-                elapsed = time.time() - t0
-                rate = processed_count / elapsed if elapsed > 0 else 0
-                print(f"Progress: [{processed_count}/{total_pending}] | Rate: {rate:.1f} it/s | "
-                      f"Success: {success_count} | Timeouts: {timeout_count} | Errors: {error_count}")
+        # --- 3. Save Progress & Prevent CPU Spinning ---
+        if processed_count % 20 == 0:
+            dest_session.commit()
+            elapsed = time.time() - t0
+            rate = processed_count / elapsed if elapsed > 0 else 0
+            print(f"Progress: [{processed_count}/{total_pending}] | Rate: {rate:.1f} it/s | "
+                  f"Success: {success_count} | Timeouts: {timeout_count} | Errors: {error_count}", end='\r')
+            
+        time.sleep(0.05) # Yield to the OS so the while loop doesn't max out a core
 
     # Final commit and cleanup
     dest_session.commit()
-    print("=== Pipeline Complete ===")
+    print("\n=== Pipeline Complete ===")
     print(f"Total Processed: {processed_count}")
     print(f"Successful Tilings Added: {success_count}")
-    print(f"Flagged (Timeout): {timeout_count}")
-    print(f"Flagged (Pipeline Error): {error_count}")
+    print(f"Flagged (Timeout Force-Killed): {timeout_count}")
+    print(f"Flagged (Pipeline/Segfault Error): {error_count}")
+
+def retry_timeouts(new_time_limit=20, new_external_timeout=25):
+    """
+    Makes a second pass at topologies that previously timed out (status == 2).
+    Applies a longer time limit to give complex constraints more time to resolve.
+    """
+    print(f"\n=== Retrying Timeouts (N={N}, Symmetry={SYMMETRY}) ===")
+    print(f"New Time Limit: {new_time_limit}s (External: {new_external_timeout}s)")
+    
+    dest_engine = create_engine(DEST_DB_URI)
+    DestSession = sessionmaker(bind=dest_engine)
+    dest_session = DestSession()
+
+    # Fetch ONLY the topologies that previously timed out
+    timeout_topologies = dest_session.query(Topology.id, Topology.binary_state)\
+                                     .filter(Topology.status == 2).all()
+    
+    total_pending = len(timeout_topologies)
+    if total_pending == 0:
+        print("No timed-out topologies found. Nothing to retry!")
+        return
+
+    print(f"Found {total_pending} topologies to retry.")
+    
+    num_workers = max(1, mp.cpu_count() - 2)
+    print(f"Spinning up {num_workers} parallel workers...")
+    
+    t0 = time.time()
+    processed_count = 0
+    success_count = 0
+    still_timeout_count = 0
+    error_count = 0
+
+    manager = mp.Manager()
+    return_dict = manager.dict()
+    
+    active_processes = {}
+    pending_iter = iter(timeout_topologies)
+    
+    while True:
+        # --- 1. Fill Available Cores ---
+        while len(active_processes) < num_workers:
+            try:
+                topo = next(pending_iter)
+                # Pass the NEW, longer time limit to the worker wrapper
+                p = mp.Process(target=worker_wrapper, args=(
+                    topo.id, topo.binary_state, N, SYMMETRY, new_time_limit, return_dict
+                ))
+                p.start()
+                active_processes[topo.id] = (p, time.time())
+            except StopIteration:
+                break 
+
+        if not active_processes:
+            break
+
+        # --- 2. Monitor Running Processes ---
+        current_time = time.time()
+        for topo_id in list(active_processes.keys()):
+            p, start_time = active_processes[topo_id]
+
+            # Case A: Finished gracefully
+            if not p.is_alive():
+                p.join()
+                del active_processes[topo_id]
+                processed_count += 1
+                
+                if topo_id in return_dict:
+                    res_topo_id, status, blob_bytes, embedding_bytes = return_dict[topo_id]
+                    
+                    if status == 1:
+                        # SUCCESS on the second try! Update status and add tiling
+                        dest_session.query(Topology).filter(Topology.id == res_topo_id).update({"status": 1})
+                        dest_session.add(Tiling(
+                            topology_id=res_topo_id,
+                            tiling_blob=blob_bytes,
+                            embedding=embedding_bytes
+                        ))
+                        success_count += 1
+                    elif status == 2:
+                        still_timeout_count += 1 # Status remains 2 in DB
+                    elif status == 3:
+                        # It failed for a different reason this time (e.g. CP error)
+                        dest_session.query(Topology).filter(Topology.id == res_topo_id).update({"status": 3})
+                        error_count += 1
+                        
+                    del return_dict[topo_id]
+                else:
+                    dest_session.query(Topology).filter(Topology.id == topo_id).update({"status": 3})
+                    error_count += 1
+
+            # Case B: Exceeded the NEW External Timeout
+            elif current_time - start_time > new_external_timeout:
+                p.terminate()
+                p.join()
+                del active_processes[topo_id]
+                processed_count += 1
+                still_timeout_count += 1 # Status remains 2 in DB
+
+        # --- 3. Save Progress ---
+        if processed_count % 5 == 0 or len(active_processes) == 0:
+            dest_session.commit()
+            elapsed = time.time() - t0
+            rate = processed_count / elapsed if elapsed > 0 else 0
+            print(f"Progress: [{processed_count}/{total_pending}] | Rate: {rate:.1f} it/s | "
+                  f"Recovered: {success_count} | Still Timeout: {still_timeout_count} | Errors: {error_count}", end='\r')
+            
+        time.sleep(0.1) 
+
+    dest_session.commit()
+    print("\n=== Retry Pipeline Complete ===")
+    print(f"Topologies Recovered (Success): {success_count}")
+    print(f"Topologies Still Timing Out: {still_timeout_count}")
+    print(f"Topologies Failed (CP/Pipeline Error): {error_count}")
 
 if __name__ == "__main__":
     mp.freeze_support()
     with keep.running():
         main()
+        retry_timeouts(new_time_limit=30, new_external_timeout=35)

@@ -266,7 +266,7 @@ if __name__ == "__main__":
     # --- CONFIGURATION ---
     N = 4
     symmetry = "none"
-    prefix_length = 8 # Number of edges to hardcode (2^8 = 256 parallel chunks)
+    prefix_length = N*2 # Number of edges to hardcode (2^8 = 256 parallel chunks)
     # ---------------------
     
     db_uri = f'sqlite:///database/tilings/storage/topologies_{N}_{symmetry}.db'
