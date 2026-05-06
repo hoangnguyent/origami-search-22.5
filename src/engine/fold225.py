@@ -1193,13 +1193,13 @@ def plot_multiple(folds: list[Fold225], debug=False):
         if xs and ys:
             bounds.append((min(xs), max(xs), min(ys), max(ys)))
 
-        for edge in fold.edges:
-            v1, v2 = fold.vertices[edge[0]], fold.vertices[edge[1]]
-            if v1.angle_to(v2) is None:
-                print("Warning: non 22.5 edge found.")
-                v1_float = v1.to_cartesian()
-                v2_float = v2.to_cartesian()
-                ax.plot([v1_float[0], v2_float[0]], [v1_float[1], v2_float[1]], "yellow", linewidth=3, alpha=1)
+        # for edge in fold.edges:
+        #     v1, v2 = fold.vertices[edge[0]], fold.vertices[edge[1]]
+        #     if v1.angle_to(v2) is None:
+        #         print("Warning: non 22.5 edge found.")
+        #         v1_float = v1.to_cartesian()
+        #         v2_float = v2.to_cartesian()
+        #         ax.plot([v1_float[0], v2_float[0]], [v1_float[1], v2_float[1]], "yellow", linewidth=3, alpha=1)
 
         ax.set_aspect("equal")
         # Hide axes and bounding box

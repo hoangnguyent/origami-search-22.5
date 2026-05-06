@@ -17,6 +17,8 @@ renders/
 .vscode/
 
 *.db
+*.pkl
+*.index
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
