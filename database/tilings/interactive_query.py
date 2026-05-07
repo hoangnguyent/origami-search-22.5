@@ -225,4 +225,4 @@ class TreeDrawer:
 
 if __name__ == "__main__":
     # Launch the Interactive GUI
-    app = TreeDrawer(N=4, symmetry="diag", n_results=5)
+    app = TreeDrawer(N=4, symmetry="none", n_results=5)

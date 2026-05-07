@@ -120,7 +120,7 @@ def canonical_float(p):
 # 3. EXACT TOPOLOGY ROUTER
 # =============================================================================
 
-def build_crease_pattern(G, pos_solved_exact, faces, N=4):
+def build_crease_pattern(G, pos_solved_exact, faces, N=4, verbose=False):
     """
     Main entry point. Initializes the base Cp225 with boundary geometry, then 
     routes straight skeleton creases using exact algebraic raycasting.
@@ -210,7 +210,8 @@ def build_crease_pattern(G, pos_solved_exact, faces, N=4):
                         break
                         
             if not progress:
-                print("Warning: Skeleton topology contains unresolvable internal vertices. (Likely Float Degeneracy)")
+                if verbose:
+                    print("Warning: Skeleton topology contains unresolvable internal vertices. (Likely Float Degeneracy)")
                 break
 
         # Tag Reflex Bounds for MV assignments

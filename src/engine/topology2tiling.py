@@ -460,7 +460,7 @@ def get_safe_invader_edges(quad_indices, reflex_vertices, k):
 
 
 def run_milp_selection(
-    G, pos_init, nodes, faces, all_candidates, symmetry, N, forced_candidates=None
+    G, pos_init, nodes, faces, all_candidates, symmetry, N, diversity_threshold, num_solutions, forced_candidates=None,
 ):
     """Run the MILP to select an optimal subset of candidate quadruplets (collapse as many straight skeleton vertices as possible), subject to geometric and topological constraints"""
     # 1. LP Tightening: Constrain variables to realistic travel distances
@@ -668,22 +668,44 @@ def run_milp_selection(
                     expr = -nx * Px - ny * Py + nx * x_vars[u_f] + ny * y_vars[u_f] - r
                     prob += expr >= -C_dynamic * (1 - z)
 
-    prob.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=60))
+    # prob.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=60))
 
-    milp_pos = {}
-    active_candidates = []
-    if prob.status == pulp.LpStatusOptimal:
-        for u in nodes:
-            milp_pos[u] = (pulp.value(x_vars[u]), pulp.value(y_vars[u]))
+    # milp_pos = {}
+    # active_candidates = []
+    # if prob.status == pulp.LpStatusOptimal:
+    #     for u in nodes:
+    #         milp_pos[u] = (pulp.value(x_vars[u]), pulp.value(y_vars[u]))
+    #     for k_idx, cand in enumerate(all_candidates):
+    #         if (
+    #             pulp.value(z_vars[k_idx]) is not None
+    #             and pulp.value(z_vars[k_idx]) > 0.5
+    #         ):
+    #             active_candidates.append(cand)
+
+    # return active_candidates
+    diverse_solutions = []
+    
+    for _ in range(num_solutions):
+        prob.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=30))
+        
+        if prob.status != pulp.LpStatusOptimal:
+            break 
+            
+        active_indices = []
+        active_cands = []
+        
         for k_idx, cand in enumerate(all_candidates):
-            if (
-                pulp.value(z_vars[k_idx]) is not None
-                and pulp.value(z_vars[k_idx]) > 0.5
-            ):
-                active_candidates.append(cand)
-
-    return active_candidates
-
+            if pulp.value(z_vars[k_idx]) is not None and pulp.value(z_vars[k_idx]) > 0.5:
+                active_indices.append(k_idx)
+                active_cands.append(cand)
+                
+        diverse_solutions.append(active_cands)
+        
+        # THE INTEGER CUT: Ban the current solution to force diversity
+        if active_indices:
+            prob += pulp.lpSum([z_vars[i] for i in active_indices]) <= len(active_indices) - diversity_threshold
+            
+    return diverse_solutions
 
 # =============================================================================
 # 5. EXACT SOLVER
@@ -770,9 +792,8 @@ def is_valid_geometry(ans, nodes, G, pos_init, faces, N, face_reflex_verts):
         px = x + S2 * (y - w)
         pz = z + S2 * (y + w)
         pos_float[u] = (px, pz)
-
+    gap = EPSILON/N # Match the MILP constraint
     # Check 1: Edge integrity (No collapsing or inverting)
-    epsilon = 0.01
     for u, v in G.edges():
         dx_init = pos_init[v][0] - pos_init[u][0]
         dy_init = pos_init[v][1] - pos_init[u][1]
@@ -783,7 +804,7 @@ def is_valid_geometry(ans, nodes, G, pos_init, faces, N, face_reflex_verts):
         dy_ex = ex_v[1] - ex_u[1]
 
         dot = dx_ex * (dx_init / L_init) + dy_ex * (dy_init / L_init)
-        if dot < epsilon:
+        if dot < gap:
             return False
 
     # Check 2: Global Anti-Bowtie Safe Zones
@@ -818,25 +839,8 @@ def is_valid_geometry(ans, nodes, G, pos_init, faces, N, face_reflex_verts):
                 if L_init < 1e-5:
                     continue
 
-                # t_x, t_y = dx_init / L_init, dy_init / L_init
-                # n_x, n_y = -t_y, t_x
-                # EPSILON = 1e-4
-
-                # proj_n = (ex_c[0] - ex_u[0]) * n_x + (ex_c[1] - ex_u[1]) * n_y
-                # safe1 = (proj_n >= -EPSILON) if is_ccw else (proj_n <= EPSILON)
-
-                # proj_t_left = (ex_c[0] - ex_u[0]) * t_x + (ex_c[1] - ex_u[1]) * t_y
-                # safe2 = proj_t_left <= EPSILON
-
-                # proj_t_right = (ex_c[0] - ex_v[0]) * t_x + (ex_c[1] - ex_v[1]) * t_y
-                # safe3 = proj_t_right >= -EPSILON
-
-                # if not (safe1 or safe2 or safe3):
-                #     return False
                 t_x, t_y = dx_init / L_init, dy_init / L_init
                 n_x, n_y = -t_y, t_x
-                
-                gap = EPSILON # Match the MILP constraint
 
                 proj_n = (ex_c[0] - ex_u[0]) * n_x + (ex_c[1] - ex_u[1]) * n_y
                 safe1 = (proj_n >= gap) if is_ccw else (proj_n <= -gap)
@@ -902,7 +906,7 @@ def get_rank_and_sliding_nodes(M_list, num_vars, nodes):
 # ==== Main function ====
 
 
-def solve_tiling(G_in, symmetry="none", N=4,verbose=False, time_limit = 10):
+def solve_tiling(G_in, symmetry="none", N=4,verbose=False, time_limit = 10, diversity_threshold = 1, num_solutions = 5):
     """Main solver function that orchestrates the entire pipeline: constraint assembly, MILP selection, directed nullspace scavenging if needed, and final exact solution with geometric verification.
     
     time_limit: Maximum time (in seconds) to allow for the Directed Nullspace Scavenger DFS. If exceeded, the function will return None.
@@ -943,165 +947,88 @@ def solve_tiling(G_in, symmetry="none", N=4,verbose=False, time_limit = 10):
     heuristic_candidates = harvest_candidates(
         faces, pos_init, symmetry, N, exhaustive=False
     )
-    applied = run_milp_selection(
-        G, pos_init, nodes, faces, heuristic_candidates, symmetry, N
+    
+    applied_list = run_milp_selection(
+        G, pos_init, nodes, faces, heuristic_candidates, symmetry, N, 
+        diversity_threshold=diversity_threshold, num_solutions=num_solutions
     )
 
-    M_list = list(M_base)
-    b_list = list(b_base)
-    for cand in applied:
-        M_eq, b_eq = build_quadruplet_constraint_4d(cand["edges"], n2i)
-        if M_eq:
-            M_list += M_eq
-            b_list += b_eq
-
-    current_rank, current_sliding = get_rank_and_sliding_nodes(M_list, num_vars, nodes)
-    if verbose:
-        print(f"MILP Base Assembly Complete. Current rank: {current_rank} / {num_vars}")
-
-    # =========================================================================
-    # 3. EXACT CONSTRAINT SCAVENGER (Depth-First Search)
-    # Hunts down the remaining quadruplets that lock sliding rigid-blocks
-    # without violating physical geometry.
-    # =========================================================================
-    ans_final = None
-
-    if current_rank == num_vars:
-        ans_final = exact_fraction_solve(M_list, b_list, num_vars)
-    else:
+    valid_solutions = []
+    t0 = time.time()
+    
+    # Try each diverse MILP seed and collect all valid geometric solutions
+    for seed_idx, applied in enumerate(applied_list):
         if verbose:
-            print("System underconstrained. Launching Directed Nullspace Scavenger...")
-        exhaustive_candidates = harvest_candidates(
-            faces, pos_init, symmetry, N, exhaustive=True
-        )
-        unused_candidates = [c for c in exhaustive_candidates if c not in applied]
+            print(f"Testing MILP Seed {seed_idx + 1}/{len(applied_list)}...")
+            
+        M_list = list(M_base)
+        b_list = list(b_base)
+        for cand in applied:
+            M_eq, b_eq = build_quadruplet_constraint_4d(cand["edges"], n2i)
+            if M_eq:
+                M_list += M_eq
+                b_list += b_eq
 
-        t0 = time.time()
-        def directed_scavenger_dfs(M_curr, b_curr, rank_curr, sliding_curr, pool):
-            if time.time() - t0 > time_limit:
-                # if verbose:
-                #     print("Directed Scavenger DFS time limit exceeded. Aborting search.")
-                return None
-            # Base Case: Full Rank Achieved
-            if rank_curr == num_vars:
-                ans_test = exact_fraction_solve(M_curr, b_curr, num_vars)
-                if None not in ans_test:
-                    # Final physical gauntlet
-                    if is_valid_geometry(
-                        ans_test, nodes, G, pos_init, faces, N, face_reflex_verts
-                    ):
-                        return ans_test
-                return None
+        current_rank, current_sliding = get_rank_and_sliding_nodes(M_list, num_vars, nodes)
 
-            # 1. Filter the pool to target ONLY the quadruplets that touch a sliding node
-            targeted_pool = []
-            for cand in pool:
-                touches_slider = any(
-                    edge["u"] in sliding_curr or edge["v"] in sliding_curr
-                    for edge in cand["edges"]
-                )
-                if touches_slider:
-                    targeted_pool.append(cand)
+        if current_rank == num_vars:
+            ans_test = exact_fraction_solve(M_list, b_list, num_vars)
+            if None not in ans_test and is_valid_geometry(ans_test, nodes, G, pos_init, faces, N, face_reflex_verts):
+                valid_solutions.append(ans_test)
+        else:
+            exhaustive_candidates = harvest_candidates(faces, pos_init, symmetry, N, exhaustive=True)
+            unused_candidates = [c for c in exhaustive_candidates if c not in applied]
 
-            if not targeted_pool:
-                return (
-                    None  # Dead end: No unused quadruplets touch the sliding geometry
-                )
-
-            # 2. Recursive Branching on targeted candidates
-            for i, cand in enumerate(targeted_pool):
-                M_eq, b_eq = build_quadruplet_constraint_4d(cand["edges"], n2i)
-                if not M_eq:
-                    continue
-
-                M_next = M_curr + M_eq
-                # Compute rank and next set of sliding nodes simultaneously
-                rank_next, sliding_next = get_rank_and_sliding_nodes(
-                    M_next, num_vars, nodes
-                )
-
-                if rank_next > rank_curr:
-                    # Pass down the entire remaining pool (excluding this cand),
-                    # it will be re-filtered by the new nullspace at the next depth.
-                    remaining_pool = [c for c in pool if c != cand]
-
-                    res = directed_scavenger_dfs(
-                        M_next, b_curr + b_eq, rank_next, sliding_next, remaining_pool
-                    )
-                    if res is not None:
-                        return res
-
-            return None
-
-        ans_final = directed_scavenger_dfs(
-            M_list, b_list, current_rank, current_sliding, unused_candidates
-        )
-
-        # ---------------------------------------------------------------------
-        # THE BACKUP PLAN: Undirected Exhaustive DFS
-        # If the directed filter aggressively prunes the necessary path, fall back
-        # ---------------------------------------------------------------------
-        if ans_final is None:
-            if verbose:
-                print(
-                    "Directed Scavenger failed. Falling back to Undirected Exhaustive Scavenger..."
-                )
-
-            def undirected_scavenger_dfs(M_curr, b_curr, rank_curr, pool):
+            def directed_scavenger_dfs(M_curr, b_curr, rank_curr, sliding_curr, pool):
                 if time.time() - t0 > time_limit:
-                    # if verbose:
-                    #     print("Undirected Scavenger DFS time limit exceeded. Aborting search.")
                     return None
+                    
                 if rank_curr == num_vars:
                     ans_test = exact_fraction_solve(M_curr, b_curr, num_vars)
-                    if None not in ans_test:
-                        if is_valid_geometry(
-                            ans_test, nodes, G, pos_init, faces, N, face_reflex_verts
-                        ):
-                            return ans_test
+                    if None not in ans_test and is_valid_geometry(ans_test, nodes, G, pos_init, faces, N, face_reflex_verts):
+                        return ans_test
                     return None
 
-                for i, cand in enumerate(pool):
+                targeted_pool = [cand for cand in pool if any(edge["u"] in sliding_curr or edge["v"] in sliding_curr for edge in cand["edges"])]
+
+                for cand in targeted_pool:
                     M_eq, b_eq = build_quadruplet_constraint_4d(cand["edges"], n2i)
-                    if not M_eq:
-                        continue
+                    if not M_eq: continue
 
                     M_next = M_curr + M_eq
-                    rank_next, _ = get_rank_and_sliding_nodes(M_next, num_vars, nodes)
+                    rank_next, sliding_next = get_rank_and_sliding_nodes(M_next, num_vars, nodes)
 
                     if rank_next > rank_curr:
                         remaining_pool = [c for c in pool if c != cand]
-                        res = undirected_scavenger_dfs(
-                            M_next, b_curr + b_eq, rank_next, remaining_pool
-                        )
+                        res = directed_scavenger_dfs(M_next, b_curr + b_eq, rank_next, sliding_next, remaining_pool)
                         if res is not None:
                             return res
                 return None
 
-            ans_final = undirected_scavenger_dfs(
-                M_list, b_list, current_rank, unused_candidates
-            )
+            ans_test = directed_scavenger_dfs(M_list, b_list, current_rank, current_sliding, unused_candidates)
+            if ans_test is not None:
+                valid_solutions.append(ans_test)
 
-    if ans_final is None or None in ans_final:
-        # raise ValueError(
-        #     "Constraint Scavenger exhausted all geometric branches. System mathematically deficient."
-        # )
-        print(f"Constraint Scavenger failed to find a valid full-rank solution within the time limit.")
+    if not valid_solutions:
+        if verbose:
+            print(f"Constraint Scavenger failed all {len(applied_list)} MILP seeds within time limit.")
         return None
-
+        
     if verbose:
-        print("Exact Constraints locked and physically verified.")
-    pos_solved_exact = {}
-    for i, u in enumerate(nodes):
-        pos_solved_exact[u] = Vertex4D(
-            ans_final[4 * i],
-            ans_final[4 * i + 1],
-            ans_final[4 * i + 2],
-            ans_final[4 * i + 3],
-        )
+        print(f"Found {len(valid_solutions)} exact constraints locked and physically verified.")
+        
+    # Reconstruct the exact 4D geometry for all successful solutions
+    outputs = []
+    for ans_final in valid_solutions:
+        pos_solved_exact = {}
+        for i, u in enumerate(nodes):
+            pos_solved_exact[u] = Vertex4D(
+                ans_final[4 * i], ans_final[4 * i + 1],
+                ans_final[4 * i + 2], ans_final[4 * i + 3],
+            )
+        outputs.append((G, pos_init, pos_solved_exact, faces, n2i))
 
-    return G, pos_init, pos_solved_exact, faces, n2i
-
+    return outputs
 
 # =============================================================================
 # 6. FREEZE & EXPORT
@@ -1134,7 +1061,39 @@ def export_frozen_blob(G, pos_solved_exact, n2i, faces):
 
     return blob
 
-
+def canonicalize_tiling_geometry(G, pos_solved_exact, N):
+    """
+    D4 Canonicalization of the exact Tiling geometry.
+    Maps the 8 D4 transformations over the Vertex4D edges and returns 
+    a robust 64-bit hash of the lexicographically smallest state.
+    """
+    def map_pt(v, t):
+        x, y, z, w = v.x, v.y, v.z, v.w
+        FN = Fraction(N)
+        F0 = Fraction(0)
+        # Apply standard D4 rotations/reflections to the 22.5 fractional bases
+        if t == 0: return Vertex4D(x, y, z, w) 
+        elif t == 1: return Vertex4D(z, w, FN-x, F0-y) 
+        elif t == 2: return Vertex4D(FN-x, F0-y, FN-z, F0-w) 
+        elif t == 3: return Vertex4D(FN-z, F0-w, x, y) 
+        elif t == 4: return Vertex4D(FN-x, F0-y, z, w) 
+        elif t == 5: return Vertex4D(x, y, FN-z, F0-w) 
+        elif t == 6: return Vertex4D(z, w, x, y) 
+        elif t == 7: return Vertex4D(FN-z, F0-w, FN-x, F0-y) 
+        
+    variants = []
+    for t in range(8):
+        edges = []
+        for u, v in G.edges():
+            pt_u, pt_v = map_pt(pos_solved_exact[u], t), map_pt(pos_solved_exact[v], t)
+            # Tuple conversion strips away Python object IDs to guarantee deterministic sorting/hashing
+            tup_u = (pt_u.x.num, pt_u.x.den, pt_u.y.num, pt_u.y.den, pt_u.z.num, pt_u.z.den, pt_u.w.num, pt_u.w.den)
+            tup_v = (pt_v.x.num, pt_v.x.den, pt_v.y.num, pt_v.y.den, pt_v.z.num, pt_v.z.den, pt_v.w.num, pt_v.w.den)
+            edges.append(tuple(sorted((tup_u, tup_v))))
+        variants.append(tuple(sorted(edges)))
+        
+    canonical_edges = min(variants)
+    return canonical_edges
 # =============================================================================
 # 7. DEBUG & VISUALIZATION
 # =============================================================================

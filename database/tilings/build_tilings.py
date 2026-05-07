@@ -19,25 +19,27 @@ import concurrent.futures
 import pickle
 import numpy as np
 import networkx as nx
+import mmh3
 
 from wakepy import keep
-from sqlalchemy import create_engine, Column, Integer, LargeBinary, ForeignKey, Boolean
+from sqlalchemy import create_engine, Column, Integer, LargeBinary, ForeignKey, Boolean, BigInteger
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 from sqlalchemy.dialects.sqlite import insert
 
 # Pipeline Imports
-from src.engine.topology2tiling import solve_tiling, export_frozen_blob
+from src.engine.topology2tiling import solve_tiling, export_frozen_blob, canonicalize_tiling_geometry
 from src.engine.tiling2cp import load_frozen_blob, build_crease_pattern, add_hinges
 from src.engine.fold225 import cp_to_fold
+from src.engine.cp225 import canonicalize
 from src.engine.tree import extract_eigenvalues
 
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
 N = 4
-SYMMETRY = "none"
-TIME_LIMIT = 10 # Internal Python DFS time limit
-EXTERNAL_TIMEOUT = 12 # External backup timeout (slightly higher to allow graceful internal exit)
+SYMMETRY = "book"
+TIME_LIMIT = 120 # Internal Python DFS time limit
+EXTERNAL_TIMEOUT = 125 # External backup timeout (slightly higher to allow graceful internal exit)
 
 SOURCE_DB_URI = f'sqlite:///database/tilings/storage/topologies_{N}_{SYMMETRY}.db'
 DEST_DB_URI = f'sqlite:///database/tilings/storage/tilings_{N}_{SYMMETRY}.db'
@@ -66,6 +68,7 @@ class Tiling(DestBase):
     __tablename__ = 'tilings'
     id = Column(Integer, primary_key=True)
     topology_id = Column(Integer, ForeignKey('topologies.id'), nullable=False)
+    hashed_tiling = Column(BigInteger, unique=True, index=True) # <-- ADDED
     tiling_blob = Column(LargeBinary, nullable=False) # Pickled dictionary
     embedding = Column(LargeBinary, nullable=False) # Float32 Numpy Array Bytes
     
@@ -109,44 +112,63 @@ def decompress_edges(binary_blob, N):
 # MULTIPROCESSING: THE PIPELINE WORKER
 # =============================================================================
 def process_topology_task(topo_id, binary_state, n_val, symmetry_val, time_lim):
-    """
-    Isolated worker task. Reconstructs graph, solves tiling, builds CP, and extracts tree.
-    Returns: (topo_id, status_flag, pickled_blob, embedding_bytes)
-    """
     try:
-        # 1. Decompress & Build Graph
         edges = decompress_edges(binary_state, n_val)
         G_raw = nx.Graph()
         G_raw.add_edges_from(edges)
         pos = {node: node for node in G_raw.nodes()}
         nx.set_node_attributes(G_raw, pos, 'pos')
         
-        # 2. Solve Tiling
-        output = solve_tiling(G_raw, symmetry=symmetry_val, N=n_val, verbose=False, time_limit=time_lim)
-        if output is None:
-            return (topo_id, 2, None, None) # STATUS 2: Timeout
+        # 1. Gather all diverse exact solutions
+        outputs = solve_tiling(
+            G_raw, symmetry=symmetry_val, N=n_val, verbose=False, 
+            time_limit=time_lim, diversity_threshold=4, num_solutions=5
+        )
+        
+        if outputs is None or len(outputs) == 0:
+            return (topo_id, 2, []) # STATUS 2: Timeout / Empty List
             
-        G_solved, pos_init, pos_solved_exact, faces, n2i = output
-        blob_dict = export_frozen_blob(G_solved, pos_solved_exact, n2i, faces)
+        success_tilings = []
         
-        # 3. Post-Processing Pipeline (CP -> Fold -> Tree -> Eigenvalues)
-        loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob_dict)
-        cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=n_val)
-        cp = add_hinges(cp)
+        # 2. Iterate through all diverse valid tilings
+        for out in outputs:
+            G_solved, pos_init, pos_solved_exact, faces, n2i = out
+            
+            # Canonicalize and prep for duplicate check
+            raw_canonical_tuple = canonicalize_tiling_geometry(G_solved, pos_solved_exact, n_val)
+            
+            # 2. Hash the tuple into a 64-bit integer for the database!
+            tiling_hash = mmh3.hash64(pickle.dumps(raw_canonical_tuple), signed=True)[0]
+            blob_dict = export_frozen_blob(G_solved, pos_solved_exact, n2i, faces)
+            
+            # 3. Post-Processing Pipeline
+            try:
+                loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob_dict)
+                cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=n_val)
+                cp = add_hinges(cp)
+                
+                fold = cp_to_fold(cp)
+                tree = fold.get_tree_and_packing()[0]
+                embedding = extract_eigenvalues(tree, dim=32)
+                
+                blob_bytes = pickle.dumps(blob_dict, protocol=pickle.HIGHEST_PROTOCOL)
+                embedding_bytes = np.array(embedding, dtype=np.float32).tobytes()
+                
+                success_tilings.append({
+                    "tiling_hash": tiling_hash,
+                    "blob_bytes": blob_bytes,
+                    "embedding_bytes": embedding_bytes
+                })
+            except Exception as e:
+                continue # If one specific tiling has a CP degeneracy, skip it but try the others
         
-        fold = cp_to_fold(cp)
-        tree = fold.get_tree_and_packing()[0]
-        embedding = extract_eigenvalues(tree, dim=32)
-        
-        # 4. Serialize for DB (Pickle is hyper-efficient for exact math objects / dicts)
-        blob_bytes = pickle.dumps(blob_dict, protocol=pickle.HIGHEST_PROTOCOL)
-        embedding_bytes = np.array(embedding, dtype=np.float32).tobytes()
-        
-        return (topo_id, 1, blob_bytes, embedding_bytes) # STATUS 1: Success
+        if not success_tilings:
+            return (topo_id, 3, []) # STATUS 3: ALL tilings failed CP generation
+            
+        return (topo_id, 1, success_tilings) # STATUS 1: Success
         
     except Exception as e:
-        # Catch degenerate float errors, kawasaki errors, or exact-fraction crashes
-        return (topo_id, 3, None, None) # STATUS 3: CP/Pipeline Error
+        return (topo_id, 3, [])
 
 def worker_wrapper(topo_id, binary_state, n_val, symmetry_val, time_lim, return_dict):
     """Wraps the task to pipe the tuple result back into a shared dictionary."""
@@ -159,22 +181,18 @@ def worker_wrapper(topo_id, binary_state, n_val, symmetry_val, time_lim, return_
 def main():
     print(f"=== Tiling Pipeline Initializing (N={N}, Symmetry={SYMMETRY}) ===")
     
-    # 1. Setup Source DB
     src_engine = create_engine(SOURCE_DB_URI)
     SrcSession = sessionmaker(bind=src_engine)
     src_session = SrcSession()
     
-    # 2. Setup Dest DB
     dest_engine = create_engine(DEST_DB_URI)
     DestBase.metadata.create_all(dest_engine)
     DestSession = sessionmaker(bind=dest_engine)
     dest_session = DestSession()
     
-    # 3. Sync Databases: Copy all topologies over that don't exist yet
     print("Syncing topologies from source database...")
     all_source_states = src_session.query(SourceState.id, SourceState.binary_state).yield_per(1000)
     
-    # We use SQLite's INSERT OR IGNORE to massively speed up syncing
     sync_batch = []
     for s_id, s_bin in all_source_states:
         sync_batch.append({"id": s_id, "binary_state": s_bin, "status": 0})
@@ -190,7 +208,6 @@ def main():
     dest_session.commit()
     print("Sync complete.")
 
-    # 4. Fetch Pending Tasks
     pending_topologies = dest_session.query(Topology.id, Topology.binary_state).filter(Topology.status == 0).all()
     total_pending = len(pending_topologies)
     
@@ -199,7 +216,7 @@ def main():
         return
 
     print(f"Resuming operation: {total_pending} topologies left to process.")
-    # 5. Multiprocessing Execution
+    
     num_workers = max(1, mp.cpu_count() - 2)
     print(f"Spinning up {num_workers} parallel workers...")
     
@@ -209,11 +226,10 @@ def main():
     timeout_count = 0
     error_count = 0
 
-    # Thread-safe dictionary to retrieve results from the isolated processes
     manager = mp.Manager()
     return_dict = manager.dict()
     
-    active_processes = {}  # Maps topo_id -> (mp.Process object, start_time)
+    active_processes = {}  
     pending_iter = iter(pending_topologies)
     
     while True:
@@ -221,81 +237,98 @@ def main():
         while len(active_processes) < num_workers:
             try:
                 topo = next(pending_iter)
-                # Spawn a fresh process for every task. This eliminates memory leaks natively.
                 p = mp.Process(target=worker_wrapper, args=(
                     topo.id, topo.binary_state, N, SYMMETRY, TIME_LIMIT, return_dict
                 ))
                 p.start()
                 active_processes[topo.id] = (p, time.time())
             except StopIteration:
-                break # No more pending tasks
+                break 
 
-        # Break the main loop if all tasks are deployed and all processes have finished
         if not active_processes:
             break
 
         # --- 2. Monitor Running Processes ---
         current_time = time.time()
         for topo_id in list(active_processes.keys()):
+            if topo_id not in active_processes:
+                continue
+                
             p, start_time = active_processes[topo_id]
 
             # Case A: The process finished gracefully
             if not p.is_alive():
                 p.join()
-                del active_processes[topo_id]
+                active_processes.pop(topo_id, None) 
                 processed_count += 1
                 
-                # Check if it returned data (it won't if it physically Segfaulted)
-                if topo_id in return_dict:
-                    res_topo_id, status, blob_bytes, embedding_bytes = return_dict[topo_id]
+                res = return_dict.pop(topo_id, None)
+                
+                if res is not None:
+                    res_topo_id, status, tilings_data = res
                     dest_session.query(Topology).filter(Topology.id == res_topo_id).update({"status": status})
                     
                     if status == 1:
-                        dest_session.add(Tiling(
-                            topology_id=res_topo_id,
-                            tiling_blob=blob_bytes,
-                            embedding=embedding_bytes
-                        ))
-                        success_count += 1
+                        # 1. Deduplicate hashes *within* the returned list itself
+                        tiling_inserts = []
+                        seen_hashes = set()
+                        for t_data in tilings_data:
+                            h = t_data["tiling_hash"]
+                            if h not in seen_hashes:
+                                seen_hashes.add(h)
+                                tiling_inserts.append({
+                                    "topology_id": res_topo_id,
+                                    "hashed_tiling": h,
+                                    "tiling_blob": t_data["blob_bytes"],
+                                    "embedding": t_data["embedding_bytes"]
+                                })
+                        
+                        # 2. Bulk Insert with native SQLite Conflict Ignorance
+                        if tiling_inserts:
+                            try:
+                                stmt = insert(Tiling).values(tiling_inserts).on_conflict_do_nothing(index_elements=['hashed_tiling'])
+                                dest_session.execute(stmt)
+                                success_count += 1
+                            except Exception as e:
+                                print(f"\nDB Error on Topo {res_topo_id}: {e}")
+                                dest_session.query(Topology).filter(Topology.id == res_topo_id).update({"status": 3})
+                                error_count += 1
+                                
                     elif status == 2:
                         timeout_count += 1
                     elif status == 3:
                         error_count += 1
-                        
-                    del return_dict[topo_id] # Free memory
                 else:
-                    # Severe C++ Segfault caught
                     dest_session.query(Topology).filter(Topology.id == topo_id).update({"status": 3})
                     error_count += 1
 
-            # Case B: The process is frozen and exceeded the External Timeout
+            # Case B: Exceeded the External Timeout
             elif current_time - start_time > EXTERNAL_TIMEOUT:
-                # FORCE KILL the zombie process
                 p.terminate()
                 p.join()
-                del active_processes[topo_id]
+                active_processes.pop(topo_id, None) 
+                
                 processed_count += 1
                 timeout_count += 1
-                
                 dest_session.query(Topology).filter(Topology.id == topo_id).update({"status": 2})
 
         # --- 3. Save Progress & Prevent CPU Spinning ---
-        if processed_count % 20 == 0:
+        if processed_count % 20 == 0 or len(active_processes) == 0:
             dest_session.commit()
             elapsed = time.time() - t0
             rate = processed_count / elapsed if elapsed > 0 else 0
             print(f"Progress: [{processed_count}/{total_pending}] | Rate: {rate:.1f} it/s | "
-                  f"Success: {success_count} | Timeouts: {timeout_count} | Errors: {error_count}", end='\r')
+                  f"Success: {success_count} | Timeouts: {timeout_count} | Errors: {error_count}    ", end='\r')
             
-        time.sleep(0.05) # Yield to the OS so the while loop doesn't max out a core
+        time.sleep(0.05) 
 
-    # Final commit and cleanup
     dest_session.commit()
     print("\n=== Pipeline Complete ===")
     print(f"Total Processed: {processed_count}")
-    print(f"Successful Tilings Added: {success_count}")
+    print(f"Successful Topologies Found: {success_count}")
     print(f"Flagged (Timeout Force-Killed): {timeout_count}")
     print(f"Flagged (Pipeline/Segfault Error): {error_count}")
+
 
 def retry_timeouts(new_time_limit=20, new_external_timeout=25):
     """
@@ -309,7 +342,6 @@ def retry_timeouts(new_time_limit=20, new_external_timeout=25):
     DestSession = sessionmaker(bind=dest_engine)
     dest_session = DestSession()
 
-    # Fetch ONLY the topologies that previously timed out
     timeout_topologies = dest_session.query(Topology.id, Topology.binary_state)\
                                      .filter(Topology.status == 2).all()
     
@@ -336,11 +368,9 @@ def retry_timeouts(new_time_limit=20, new_external_timeout=25):
     pending_iter = iter(timeout_topologies)
     
     while True:
-        # --- 1. Fill Available Cores ---
         while len(active_processes) < num_workers:
             try:
                 topo = next(pending_iter)
-                # Pass the NEW, longer time limit to the worker wrapper
                 p = mp.Process(target=worker_wrapper, args=(
                     topo.id, topo.binary_state, N, SYMMETRY, new_time_limit, return_dict
                 ))
@@ -352,56 +382,69 @@ def retry_timeouts(new_time_limit=20, new_external_timeout=25):
         if not active_processes:
             break
 
-        # --- 2. Monitor Running Processes ---
         current_time = time.time()
         for topo_id in list(active_processes.keys()):
+            if topo_id not in active_processes:
+                continue
+                
             p, start_time = active_processes[topo_id]
 
-            # Case A: Finished gracefully
             if not p.is_alive():
                 p.join()
-                del active_processes[topo_id]
+                active_processes.pop(topo_id, None)
                 processed_count += 1
                 
-                if topo_id in return_dict:
-                    res_topo_id, status, blob_bytes, embedding_bytes = return_dict[topo_id]
+                res = return_dict.pop(topo_id, None)
+                
+                if res is not None:
+                    res_topo_id, status, tilings_data = res
+                    dest_session.query(Topology).filter(Topology.id == res_topo_id).update({"status": status})
                     
                     if status == 1:
-                        # SUCCESS on the second try! Update status and add tiling
-                        dest_session.query(Topology).filter(Topology.id == res_topo_id).update({"status": 1})
-                        dest_session.add(Tiling(
-                            topology_id=res_topo_id,
-                            tiling_blob=blob_bytes,
-                            embedding=embedding_bytes
-                        ))
-                        success_count += 1
-                    elif status == 2:
-                        still_timeout_count += 1 # Status remains 2 in DB
-                    elif status == 3:
-                        # It failed for a different reason this time (e.g. CP error)
-                        dest_session.query(Topology).filter(Topology.id == res_topo_id).update({"status": 3})
-                        error_count += 1
+                        tiling_inserts = []
+                        seen_hashes = set()
+                        for t_data in tilings_data:
+                            h = t_data["tiling_hash"]
+                            if h not in seen_hashes:
+                                seen_hashes.add(h)
+                                tiling_inserts.append({
+                                    "topology_id": res_topo_id,
+                                    "hashed_tiling": h,
+                                    "tiling_blob": t_data["blob_bytes"],
+                                    "embedding": t_data["embedding_bytes"]
+                                })
                         
-                    del return_dict[topo_id]
+                        if tiling_inserts:
+                            try:
+                                stmt = insert(Tiling).values(tiling_inserts).on_conflict_do_nothing(index_elements=['hashed_tiling'])
+                                dest_session.execute(stmt)
+                                success_count += 1
+                            except Exception as e:
+                                print(f"\nDB Error on Topo {res_topo_id}: {e}")
+                                dest_session.query(Topology).filter(Topology.id == res_topo_id).update({"status": 3})
+                                error_count += 1
+                                
+                    elif status == 2:
+                        still_timeout_count += 1 
+                    elif status == 3:
+                        error_count += 1
                 else:
                     dest_session.query(Topology).filter(Topology.id == topo_id).update({"status": 3})
                     error_count += 1
 
-            # Case B: Exceeded the NEW External Timeout
             elif current_time - start_time > new_external_timeout:
                 p.terminate()
                 p.join()
-                del active_processes[topo_id]
+                active_processes.pop(topo_id, None)
                 processed_count += 1
-                still_timeout_count += 1 # Status remains 2 in DB
+                still_timeout_count += 1 
 
-        # --- 3. Save Progress ---
         if processed_count % 5 == 0 or len(active_processes) == 0:
             dest_session.commit()
             elapsed = time.time() - t0
             rate = processed_count / elapsed if elapsed > 0 else 0
             print(f"Progress: [{processed_count}/{total_pending}] | Rate: {rate:.1f} it/s | "
-                  f"Recovered: {success_count} | Still Timeout: {still_timeout_count} | Errors: {error_count}", end='\r')
+                  f"Recovered: {success_count} | Still Timeout: {still_timeout_count} | Errors: {error_count}    ", end='\r')
             
         time.sleep(0.1) 
 
@@ -410,7 +453,6 @@ def retry_timeouts(new_time_limit=20, new_external_timeout=25):
     print(f"Topologies Recovered (Success): {success_count}")
     print(f"Topologies Still Timing Out: {still_timeout_count}")
     print(f"Topologies Failed (CP/Pipeline Error): {error_count}")
-
 if __name__ == "__main__":
     mp.freeze_support()
     with keep.running():

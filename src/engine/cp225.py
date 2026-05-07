@@ -474,5 +474,89 @@ def unfreeze(frozen: tuple) -> Cp225:
     edges = [[v1, v2, line_type] for (v1, v2, line_type) in frozen_edges]
     return Cp225(vertices, edges)
 
+def canonicalize(fold: Cp225) -> tuple:
+    """
+    Given a mutable Cp225 object, return a frozen canonical form
+    that is invariant under rotations (by 90° multiples) and reflection.
+    """
+    # Start with the original - make a copy to avoid mutating the input
+    f0 = Cp225(list(fold.vertices), list(fold.edges))
+
+    # Remove degree-2 vertices with opposite edges (angle difference 8)
+    f0.get_vertex_neighbors()
+
+    # Collect removal info in one pass
+    remove_indices = [
+        idx
+        for idx, neighbors in enumerate(f0.vertex_neighbors)
+        if len(neighbors) == 2 and abs((neighbors[0][1] - neighbors[1][1]) % 16) == 8
+    ]
+
+    # Process from largest index to smallest
+    for idx in sorted(remove_indices, reverse=True):
+        if idx >= len(f0.vertices):
+            continue
+
+        # Get fresh neighbors after previous modifications
+        f0.get_vertex_neighbors()
+        neighbors = f0.vertex_neighbors[idx]
+
+        if len(neighbors) != 2:
+            continue  # may have changed after earlier removals
+
+        v1, v2 = neighbors[0][0], neighbors[1][0]
+        line_type1 = neighbors[0][2]
+
+        # Remove edges involving the vertex (filter in place is faster)
+        f0.edges = [(e0, e1, lt) for e0, e1, lt in f0.edges if idx not in (e0, e1)]
+
+        # Add the new connecting edge (only if not already present)
+        if not any(
+            e0 == v1 and e1 == v2 or e0 == v2 and e1 == v1 for e0, e1, _ in f0.edges
+        ):
+            f0.edges.append((v1, v2, line_type1))
+
+        # Remove the vertex
+        f0.vertices.pop(idx)
+
+        # Remap vertex indices in edges (inline for speed)
+        f0.edges = [
+            (e0 - 1 if e0 > idx else e0, e1 - 1 if e1 > idx else e1, lt)
+            for e0, e1, lt in f0.edges
+        ]
+
+    rotations = [
+        f0,
+        Cp225([rotate_90(v) for v in f0.vertices], f0.edges),
+        Cp225([rotate_180(v) for v in f0.vertices], f0.edges),
+        Cp225([rotate_270(v) for v in f0.vertices], f0.edges),
+    ]
+
+    # Add reflections of each rotation
+    variants = [freeze(rot) for rot in rotations] + [
+        freeze(Cp225([reflect_x_axis(v) for v in rot.vertices], rot.edges))
+        for rot in rotations
+    ]
+
+    return min(variants)
+def rotate_90(v):
+    x, y, z, w = v.x, v.y, v.z, v.w
+    return Vertex4D(-z, -w, x, y)
+
+
+def rotate_180(v):
+    x, y, z, w = v.x, v.y, v.z, v.w
+    return Vertex4D(-x, -y, -z, -w)
+
+
+def rotate_270(v):
+    x, y, z, w = v.x, v.y, v.z, v.w
+    return Vertex4D(z, w, -x, -y)
+
+
+def reflect_x_axis(v):
+    x, y, z, w = v.x, v.y, v.z, v.w
+    return Vertex4D(x, -w, -z, -y)
+
 if __name__ == "__main__":
     pass

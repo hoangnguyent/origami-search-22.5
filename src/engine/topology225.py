@@ -116,15 +116,15 @@ def is_valid_tiling_global(edges):
         if not check_unique_directions(f): return False
         
     return True
-def lex_le(vars_A, vars_B):
-    """Returns a Z3 constraint that boolean array A is lexicographically <= array B."""
-    # Base case: if arrays are equal, they are <=
-    res = BoolVal(True)
-    # Walk backwards to build the AST efficiently
-    for a, b in reversed(list(zip(vars_A, vars_B))):
-        # A < B means (Not A and B). A == B means (a == b).
-        res = Or(And(Not(a), b), And(a == b, res))
-    return res
+# def lex_le(vars_A, vars_B):
+#     """Returns a Z3 constraint that boolean array A is lexicographically <= array B."""
+#     # Base case: if arrays are equal, they are <=
+#     res = BoolVal(True)
+#     # Walk backwards to build the AST efficiently
+#     for a, b in reversed(list(zip(vars_A, vars_B))):
+#         # A < B means (Not A and B). A == B means (a == b).
+#         res = Or(And(Not(a), b), And(a == b, res))
+#     return res
 
 
 def enumerate_graphs(N=3, symmetry='none'):
@@ -217,7 +217,7 @@ def enumerate_graphs(N=3, symmetry='none'):
     # =========================================================================
     # Establish a strict canonical ordering of all internal edges
     ordered_edges = sorted(list(edge_vars.keys()))
-    base_vars = [edge_vars[e] for e in ordered_edges]
+    # base_vars = [edge_vars[e] for e in ordered_edges]
 
     # Apply the 7 non-identity transformations of the D4 group
     for t_type in range(1, 8):
@@ -234,11 +234,11 @@ def enumerate_graphs(N=3, symmetry='none'):
                 transformed_vars.append(BoolVal(True)) 
                 
         # Force Z3 to only solve for the lexicographically smallest orientation
-        s.add(lex_le(base_vars, transformed_vars))
+        # s.add(lex_le(base_vars, transformed_vars))
 
-    valid_graphs = []
-    seen_hashes = set()
-    model_count = 0
+    # valid_graphs = []
+    # seen_hashes = set()
+    # model_count = 0
     
     print("Z3 Constraints built. Searching for valid models...")
     

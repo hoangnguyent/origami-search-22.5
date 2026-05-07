@@ -147,8 +147,8 @@ def query_tilings(query_tree, N=4, symmetry="none", n=5, weight_method="value_de
     # 5. Reconstruct the Pipeline for Top N Results
     for dist, idx in zip(D[0], I[0]):
         tiling_id = faiss_map[idx]
-        tiling = session.query(Tiling).get(tiling_id)
-        topo = session.query(Topology).get(tiling.topology_id)
+        tiling = session.get(Tiling, tiling_id) 
+        topo = session.get(Topology, tiling.topology_id)
         
         # A. Reconstruct Raw Topology
         G_raw = nx.Graph()
@@ -291,13 +291,14 @@ def plot_query_megaplot(query_tree, results):
 # USAGE EXAMPLE
 # =============================================================================
 if __name__ == "__main__":
+
     from src.engine.tree import random_tree
     
     # 1. Generate a mock target query tree
     q_tree = random_tree(10)
     
     # 2. Run Pipeline
-    query_results = query_tilings(q_tree, N=4, symmetry="none", n=5, weight_method="value_decay", weight_param=0.05)
+    query_results = query_tilings(q_tree, N=4, symmetry="diag", n=5, weight_method="value_decay", weight_param=0.05)
     
     # 3. Render
     plot_query_megaplot(q_tree, query_results)
