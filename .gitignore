@@ -9,10 +9,22 @@
 bin/
 obj/
 
+
 # uv
 uv.lock
 
 renders/
+
+# latex stuff
+*.aux
+*.bbl
+*.bcf
+*.fdb_latexmk
+*.fls
+*.blg
+*.out
+*.xml
+*.gz
 
 .vscode/
 
