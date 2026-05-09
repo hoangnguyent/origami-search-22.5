@@ -20,9 +20,8 @@ from database.tilings.query import query_tilings, plot_query_megaplot
 from src.engine.tree import get_proportional_tree_pos
 
 class TreeDrawer:
-    def __init__(self, N=4, symmetry="none", n_results=5):
-        self.N = N
-        self.symmetry = symmetry
+    def __init__(self, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')], n_results=5):
+        self.db_configs = db_configs
         self.n_results = n_results
         
         # Initialize Figure and Axes
@@ -213,16 +212,27 @@ class TreeDrawer:
         try:
             results = query_tilings(
                 G, 
-                N=self.N, 
-                symmetry=self.symmetry, 
+                db_configs=self.db_configs, 
                 n=self.n_results,
-                weight_method="value_decay", 
-                weight_param=t_val
+                # t_min = t_min,
+                # t_max = t_max
             )
+
             plot_query_megaplot(G, results)
         except Exception as e:
             print(f"Error executing query: {e}")
 
 if __name__ == "__main__":
     # Launch the Interactive GUI
-    app = TreeDrawer(N=4, symmetry="none", n_results=5)
+    # dbs_to_search = [(4, 'diag'), (4, 'none'), (3, 'none'), (3, 'diag')]
+    dbs_to_search = [(4, 'diag'),(3, 'diag')]
+
+    app = TreeDrawer(db_configs = dbs_to_search, n_results=5)
+
+
+"""
+maybe when plotting trees, truncate small edges
+
+heat kernel query is a bit slower. probably can speed up by caching
+
+"""

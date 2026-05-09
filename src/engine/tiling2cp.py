@@ -344,7 +344,51 @@ def add_hinges(cp):
 # =============================================================================
 # 4. DEBUG & VISUALIZATION
 # =============================================================================
-
+COLORS = {
+    'rm': 'red',  #ridge mountain
+    'rv': 'blue', #ridge valley
+    'av': 'blue', #axial valley
+    'hm': 'red',  #hinge mountain
+    'hv': 'blue', #hinge valley
+    'h': 'grey', #unknown/flat hinge
+    'v': 'blue', 
+    'm': 'red',
+    'b': 'black'
+}
+import matplotlib.pyplot as plt
+def draw_cp_ax(ax, cp, title="Crease Pattern", debug = False):
+    ax.set_title(title, fontsize=14)
+    
+    # Ensure neighbors are computed to access neighbor counts
+    cp.get_vertex_neighbors()
+    
+    # Draw edges
+    for t, x1, y1, x2, y2 in cp.render():
+        ax.plot([x1, x2], [y1, y2], color=COLORS.get(t, 'grey'), 
+                lw=(1 if t in {'h','hv','hm'} else 2), zorder=2, alpha=0.7)
+    
+    # Draw vertices and crease count labels
+    if debug:
+        for i, v in enumerate(cp.vertices):
+            x, y = v.to_cartesian()
+            ax.scatter(x, y, color='black', s=10, zorder=3, alpha=0.3)
+            
+            # Get count from the neighbor list populated by get_vertex_neighbors()
+            crease_count = len(cp.vertex_neighbors[i])
+            
+            # Add text label with a slight offset so it doesn't overlap the point
+            ax.text(x + 0.02, y + 0.02, str(crease_count), 
+                    fontsize=8, color='blue', zorder=4)
+            
+            # look for non-kawasaki vertices (even or odd) and flag
+        for i, nbrs in enumerate(cp.vertex_neighbors):
+            angles = [angle for _, angle, _ in nbrs]
+            if angles and not vertex_kawasaki(angles):
+                x, y = cp.vertices[i].to_cartesian()
+                ax.scatter(x, y, color='magenta', s=50, zorder=4, alpha=0.8, marker='X')
+        
+    ax.set_aspect('equal')
+    ax.axis('off')
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     import random
@@ -355,51 +399,8 @@ if __name__ == "__main__":
 
     import cProfile
     import pstats
-    COLORS = {
-        'rm': 'red',  #ridge mountain
-        'rv': 'blue', #ridge valley
-        'av': 'blue', #axial valley
-        'hm': 'red',  #hinge mountain
-        'hv': 'blue', #hinge valley
-        'h': 'grey', #unknown/flat hinge
-        'v': 'blue', 
-        'm': 'red',
-        'b': 'black'
-    }
     # 1. Plotter
-    def draw_cp_ax(ax, cp, title="Crease Pattern", debug = False):
-        ax.set_title(title, fontsize=14)
-        
-        # Ensure neighbors are computed to access neighbor counts
-        cp.get_vertex_neighbors()
-        
-        # Draw edges
-        for t, x1, y1, x2, y2 in cp.render():
-            ax.plot([x1, x2], [y1, y2], color=COLORS.get(t, 'grey'), 
-                    lw=(1 if t in {'h','hv','hm'} else 2), zorder=2, alpha=0.7)
-        
-        # Draw vertices and crease count labels
-        if debug:
-            for i, v in enumerate(cp.vertices):
-                x, y = v.to_cartesian()
-                ax.scatter(x, y, color='black', s=10, zorder=3, alpha=0.3)
-                
-                # Get count from the neighbor list populated by get_vertex_neighbors()
-                crease_count = len(cp.vertex_neighbors[i])
-                
-                # Add text label with a slight offset so it doesn't overlap the point
-                ax.text(x + 0.02, y + 0.02, str(crease_count), 
-                        fontsize=8, color='blue', zorder=4)
-                
-                # look for non-kawasaki vertices (even or odd) and flag
-            for i, nbrs in enumerate(cp.vertex_neighbors):
-                angles = [angle for _, angle, _ in nbrs]
-                if angles and not vertex_kawasaki(angles):
-                    x, y = cp.vertices[i].to_cartesian()
-                    ax.scatter(x, y, color='magenta', s=50, zorder=4, alpha=0.8, marker='X')
-            
-        ax.set_aspect('equal')
-        ax.axis('off')
+
 
     # 2. Pipeline Integration Test
 

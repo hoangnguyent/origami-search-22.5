@@ -7,7 +7,7 @@ import itertools
 import mmh3
 from wakepy import keep
 
-from sqlalchemy import create_engine, Column, Integer, LargeBinary, Boolean, String, text, BigInteger
+from sqlalchemy import create_engine, Column, Integer, LargeBinary, Boolean, String, text, BigInteger, func
 from sqlalchemy.orm import declarative_base, sessionmaker
 from sqlalchemy.dialects.sqlite import insert
 
@@ -387,7 +387,7 @@ def db_writer(db_uri, result_queue, total_prefixes):
         res = result_queue.get()
         if res is None: break # Poison pill
         
-        prefix_id, states, is_complete = res
+        prefix_id, states, _ = res
         
         # 1. Bulk save NEWLY discovered topologies incrementally
         if states:
@@ -408,23 +408,24 @@ def db_writer(db_uri, result_queue, total_prefixes):
             session.commit() # Safely committed to disk immediately!
             
         # 2. Mark Prefix as done ONLY when the worker signals it has exhausted the prefix
-        if is_complete:
-            session.query(Prefix).filter_by(id=prefix_id).update({"is_done": True})
-            session.commit()
+        # if is_complete:
+        #     session.query(Prefix).filter_by(id=prefix_id).update({"is_done": True})
+        #     session.commit()
             
-            processed += 1
-            elapsed = time.time() - t_start
-            print(f">>> [DB Writer] Progress: [{processed}/{total_prefixes}] Prefixes Exhausted | Time: {elapsed:.1f}s")
+        #     processed += 1
+        #     elapsed = time.time() - t_start
+        #     print(f">>> [DB Writer] Progress: [{processed}/{total_prefixes}] Prefixes Exhausted | Time: {elapsed:.1f}s")
 # =============================================================================
 # MAIN ORCHESTRATOR
 # =============================================================================
 
 if __name__ == "__main__":
+
     mp.freeze_support() # Safe execution on Windows
     
 
     # --- CONFIGURATION ---
-    N = 3
+    N = 4
     symmetry = "none"
     
     # total_edges = 4 * (N ** 2) - 2 * N
@@ -433,7 +434,6 @@ if __name__ == "__main__":
     prefix_length = 10
 
     print(f"Configuration: N={N}, Symmetry={symmetry}")
-    print(f"Calculated Ideal Prefix Length: {prefix_length} bits")
     # ---------------------
     
     db_uri = f'sqlite:///database/tilings/storage/topologies_{N}_{symmetry}.db'
@@ -450,12 +450,15 @@ if __name__ == "__main__":
         
         # 1. Initialize the Prefixes via Z3 Pre-Pruning (if starting fresh)
         if session.query(Prefix).count() == 0:
+            print(f"Calculated Ideal Prefix Length: {prefix_length} bits")
             valid_bits = generate_viable_prefixes(N, symmetry, prefix_length)
             prefix_objects = [Prefix(bits=b) for b in valid_bits]
             session.bulk_save_objects(prefix_objects)
             session.commit()
             
-        pending_prefixes = session.query(Prefix).filter_by(is_done=False).all()
+        # pending_prefixes = session.query(Prefix).filter_by(is_done=False).all()
+        # total_pending = len(pending_prefixes)
+        pending_prefixes = session.query(Prefix).filter_by(is_done=False).order_by(func.random()).all()
         total_pending = len(pending_prefixes)
         
         if total_pending == 0:
@@ -482,6 +485,8 @@ if __name__ == "__main__":
             
         # 3. Feed the tasks
         for prefix in pending_prefixes:
+            prefix.is_done = True
+            session.commit()
             task_queue.put((prefix.id, prefix.bits))
             
         # Send poison pills to workers
@@ -514,4 +519,11 @@ For ever 1e5, that's around 10 hours and 3-4MB.
 
 Last time ran 4 none: prefix ids 1, 20-23, 26-39 ran up til around 80k raw z3 each with no signs of nearing completion. this generated around 27k states in total. If 4 none resumes, mark these prefixes as done and move on to other prefixes.
 Can try to generate tilings from these 27k I guess
+
+
+Goal: get the largest complete db possible for each of the symmetry types
+None: use N = 3 (complete) and some prefixes from N = 4. Also query from book and diag. or use the book and diag topologies but asymmetric tilings
+Diag: use N = 4  
+Book: use N = 4 
+
 """

@@ -1097,139 +1097,131 @@ def canonicalize_tiling_geometry(G, pos_solved_exact, N):
 # =============================================================================
 # 7. DEBUG & VISUALIZATION
 # =============================================================================
+import matplotlib.pyplot as plt
+import random
+import math
 
-if __name__ == "__main__":
-    import random
-    import matplotlib.pyplot as plt
+# def draw_tiling_solution(ax, G, pos_init, pos_solved_exact, title=""):
+#     """
+#     Renders a specific tiling solution onto a matplotlib axis.
+#     Plots the original topology in light gray and the exact solution in blue.
+#     """
+#     ax.set_title(title, fontsize=10)
+    
+#     # 22.5 degree projection constants
+#     S2 = math.sqrt(2) / 2.0
+    
+#     # Map exact 4D coordinates to Cartesian for visualization
+#     pos_float = {}
+#     for u, v_ex in pos_solved_exact.items():
+#         pos_float[u] = (
+#             float(v_ex.x) + S2 * (float(v_ex.y) - float(v_ex.w)),
+#             float(v_ex.z) + S2 * (float(v_ex.y) + float(v_ex.w)),
+#         )
 
-    import cProfile
-    import pstats
+#     # Draw underlying topology (lightly) for context
+#     for u, v in G.edges():
+#         ax.plot(
+#             [pos_init[u][0], pos_init[v][0]],
+#             [pos_init[u][1], pos_init[v][1]],
+#             "k-", lw=1, alpha=0.1, zorder=1
+#         )
 
-    def draw_debug_ax(ax, G, pos_init, pos_solved_exact, title):
-        ax.set_title(title, fontsize=14)
+#     # Draw the solved Tiling geometry
+#     for u, v in G.edges():
+#         ax.plot(
+#             [pos_float[u][0], pos_float[v][0]],
+#             [pos_float[u][1], pos_float[v][1]],
+#             "b-", lw=1.5, alpha=0.8, zorder=2
+#         )
 
-        # Float conversion just for debug plotting
-        S2 = math.sqrt(2) / 2.0
-        pos_float = {}
-        for u, v_ex in pos_solved_exact.items():
-            pos_float[u] = (
-                float(v_ex.x) + S2 * (float(v_ex.y) - float(v_ex.w)),
-                float(v_ex.z) + S2 * (float(v_ex.y) + float(v_ex.w)),
-            )
+#     # Plot vertices
+#     for u in G.nodes():
+#         ax.plot(pos_float[u][0], pos_float[u][1], "ko", markersize=3, zorder=3)
 
-        # Plot original lightly
-        for u, v in G.edges():
-            ax.plot(
-                [pos_init[u][0], pos_init[v][0]],
-                [pos_init[u][1], pos_init[v][1]],
-                "k-",
-                lw=1.5,
-                alpha=0.2,
-            )
+#     ax.set_aspect("equal")
+#     ax.axis("off")
+from src.engine.tiling2cp import draw_cp_ax, build_crease_pattern, load_frozen_blob
+def debug_plot_diverse_tilings(db_id=None, db_name="topologies_4_none.db", N=4, 
+                               symmetry="none", diversity_threshold=2, num_solutions=5):
+    """
+    Pick a topology, solve for multiple tilings, and plot them in a grid.
+    """
+    if db_id is None:
+        # Assuming a range based on your previous N=4 'none' runs
+        db_id = random.randint(1, 9000)
+        
+    print(f"--- Debugging Topo ID: {db_id} (N={N}, Sym={symmetry}) ---")
+    
+    # Extract the base topology from the database
+    G_raw = extract_topology(db_id, db_name=db_name, N=N)
+    if G_raw is None:
+        return
 
-        # Plot Solved Constraints
-        for u, v in G.edges():
-            ax.plot(
-                [pos_float[u][0], pos_float[v][0]],
-                [pos_float[u][1], pos_float[v][1]],
-                "b-",
-                lw=2,
-                zorder=2,
-                alpha=0.5,
-            )
+    # Solve with multi-solution requirements
+    # Note: solve_tiling now returns a list of (G, pos_init, pos_solved_exact, faces, n2i)
+    outputs = solve_tiling(
+        G_raw, 
+        symmetry=symmetry, 
+        N=N, 
+        verbose=True, 
+        time_limit=15, 
+        diversity_threshold=diversity_threshold, 
+        num_solutions=num_solutions
+    )
 
-        for u in G.nodes():
-            ax.plot(pos_float[u][0], pos_float[u][1], "ko", markersize=4, zorder=3)
+    if not outputs:
+        print(f"No valid tilings found for Topo {db_id}.")
+        return
 
-        ax.set_aspect("equal")
-        ax.axis("off")
+    num_found = len(outputs)
+    print(f"Found {num_found} diverse solutions.")
 
-    # Example batch run
+    # Setup plotting grid
+    cols = min(3, num_found)
+    rows = math.ceil(num_found / cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
+    
+    if num_found == 1:
+        axes_flat = [axes]
+    else:
+        axes_flat = axes.flatten()
 
-    profiler = cProfile.Profile()
-    profiler.enable()
-
-    # for i, db_id in enumerate([483,4613,5669,3744,8899]):
-    results = []
-    sample = random.sample(range(1, 9000), 8)
-    # sample = [8899]
-    for i, db_id in enumerate(sample):
-        G_raw = extract_topology(db_id, db_name="topologies_4_none.db", N=4)
-
-        print(f"====> Processing ID {db_id} ({i+1}/{len(sample)})=====")
-        output = solve_tiling(
-            G_raw, symmetry="none", N=4, verbose=True, time_limit=10
-        )
-        if output is None:
-            print(Warning(f"ID {db_id}: Failed to solve within time limit."))
-            continue
-        G, pos_init, pos_solved_exact, faces, n2i = output
+    for i, out in enumerate(outputs):
+        G, pos_init, pos_solved_exact, faces, n2i = out
         blob = export_frozen_blob(G, pos_solved_exact, n2i, faces)
-        results.append(
-            {
-                "db_id": db_id,
-                "G": G,
-                "pos_init": pos_init,
-                "pos_solved_exact": pos_solved_exact,
-                "faces": faces,
-                "n2i": n2i,
-                "blob": blob,
-            }
-        )
-        print(f"Successfully frozen.")
-        print("=========")
 
-    # plt.tight_layout()
-    # plt.show()
-    profiler.disable()
-    stats = pstats.Stats(profiler)
-    stats.sort_stats("cumulative")  # Sort by cumulative time
-    stats.print_stats(20)  # Print the top  functions
-
-    fig, axes = plt.subplots(2, 4, figsize=(20, 8))
-    axes_flat = axes.flatten()
-    for i, res in enumerate(results):
-        draw_debug_ax(
+        loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
+        cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=4)
+        draw_cp_ax(
             axes_flat[i],
-            res["G"],
-            res["pos_init"],
-            res["pos_solved_exact"],
-            f"ID {res['db_id']}",
+            cp,
+            title=f"Solution {i+1} (ID: {db_id})"
         )
+
+    # Hide unused axes
+    for j in range(i + 1, len(axes_flat)):
+        axes_flat[j].axis('off')
+
     plt.tight_layout()
     plt.show()
 
+if __name__ == "__main__":
+  
+    # Example: solve for 5 diverse solutions with a threshold of 2 cuts
+    debug_plot_diverse_tilings(
+        db_id=13936, 
+        db_name="topologies_4_book.db", 
+        N=4, 
+        symmetry="book", 
+        diversity_threshold=4, 
+        num_solutions=6
+    )
+
 
 """
+for 4 diag: threshold 4, count 6
 
-# Inside run_milp_selection, replace the prob.solve() block with this:
-    
-    diverse_solutions = []
-    num_solutions_to_find = 3
-    diversity_threshold = 2 # Minimum number of quadruplets that must be different
-    
-    for iteration in range(num_solutions_to_find):
-        prob.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=60))
-        
-        if prob.status != pulp.LpStatusOptimal:
-            break # No more valid geometric configurations found
-            
-        active_indices = []
-        active_cands = []
-        
-        for k_idx, cand in enumerate(all_candidates):
-            if pulp.value(z_vars[k_idx]) is not None and pulp.value(z_vars[k_idx]) > 0.5:
-                active_indices.append(k_idx)
-                active_cands.append(cand)
-                
-        diverse_solutions.append(active_cands)
-        
-        # THE INTEGER CUT: 
-        # The sum of the currently active variables cannot exceed their total count minus the threshold.
-        # This bans the current solution and forces the MILP to swap at least `diversity_threshold` variables.
-        if active_indices:
-            prob += pulp.lpSum([z_vars[i] for i in active_indices]) <= len(active_indices) - diversity_threshold
-            
-    # Return the best one, or return the whole list and let the DFS try them all
-    return diverse_solutions[0]
+
+for 4 book: 24680,13936 is applying asymmetric constraint
 """

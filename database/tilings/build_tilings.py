@@ -37,9 +37,11 @@ from src.engine.tree import extract_eigenvalues
 # CONFIGURATION
 # =============================================================================
 N = 4
-SYMMETRY = "book"
-TIME_LIMIT = 120 # Internal Python DFS time limit
-EXTERNAL_TIMEOUT = 125 # External backup timeout (slightly higher to allow graceful internal exit)
+SYMMETRY = "none"
+diversity_threshold = 4
+num_solutions = 6
+TIME_LIMIT = 30 # Internal Python DFS time limit
+EXTERNAL_TIMEOUT = 35 # External backup timeout (slightly higher to allow graceful internal exit)
 
 SOURCE_DB_URI = f'sqlite:///database/tilings/storage/topologies_{N}_{SYMMETRY}.db'
 DEST_DB_URI = f'sqlite:///database/tilings/storage/tilings_{N}_{SYMMETRY}.db'
@@ -122,7 +124,7 @@ def process_topology_task(topo_id, binary_state, n_val, symmetry_val, time_lim):
         # 1. Gather all diverse exact solutions
         outputs = solve_tiling(
             G_raw, symmetry=symmetry_val, N=n_val, verbose=False, 
-            time_limit=time_lim, diversity_threshold=4, num_solutions=5
+            time_limit=time_lim, diversity_threshold=diversity_threshold, num_solutions=num_solutions
         )
         
         if outputs is None or len(outputs) == 0:
@@ -457,4 +459,9 @@ if __name__ == "__main__":
     mp.freeze_support()
     with keep.running():
         main()
-        retry_timeouts(new_time_limit=30, new_external_timeout=35)
+        retry_timeouts(new_time_limit=120, new_external_timeout=125)
+
+"""
+
+
+"""
