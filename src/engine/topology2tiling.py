@@ -668,21 +668,7 @@ def run_milp_selection(
                     expr = -nx * Px - ny * Py + nx * x_vars[u_f] + ny * y_vars[u_f] - r
                     prob += expr >= -C_dynamic * (1 - z)
 
-    # prob.solve(pulp.PULP_CBC_CMD(msg=False, timeLimit=60))
-
-    # milp_pos = {}
-    # active_candidates = []
-    # if prob.status == pulp.LpStatusOptimal:
-    #     for u in nodes:
-    #         milp_pos[u] = (pulp.value(x_vars[u]), pulp.value(y_vars[u]))
-    #     for k_idx, cand in enumerate(all_candidates):
-    #         if (
-    #             pulp.value(z_vars[k_idx]) is not None
-    #             and pulp.value(z_vars[k_idx]) > 0.5
-    #         ):
-    #             active_candidates.append(cand)
-
-    # return active_candidates
+    
     diverse_solutions = []
     
     for _ in range(num_solutions):

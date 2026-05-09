@@ -8,6 +8,7 @@
 \usepackage{algpseudocode}
 \usepackage{setspace}
 \usepackage{biblatex}
+\usepackage{arydshln}
 \setstretch{1.15}
 \addbibresource{references.bib} %Import the bibliography file
 
@@ -48,7 +49,7 @@ To document the SEARCH 22.5 data pipeline, we define the following levels of abs
     % \item \textbf{Quadruplet:} A geometric configuration within a polygonal face where four boundary edges possess angular bisectors that converge at a single central point. 
     \item \textbf{Fold/Folded form:} The folded state of a crease pattern, defined by an unordered set of faces and their connectivity in 2d space. In this report, we neglect layer ordering and self intersection.
     \item \textbf{Uniaxial Tree:} The projection of the folded form onto some axis, resulting in a tree structure of flaps and rivers representing the stick figure of the folded form.
-    % \item \textbf{Hypercube Basis:} A 4-dimensional algebraic basis in $\mathbb{Q}^4$ mapped to the Euclidean $\mathbb{R}^2$ plane. A vector $\mathbf{v} = [x, y, z, w]^T$ represents the physical 2D coordinate $\mathbf{p}$ via the mapping: $\mathbf{p} = x \mathbf{b}_1 + y \mathbf{b}_2 + z \mathbf{b}_3 + w \mathbf{b}_4$, where the basis vectors are $\mathbf{b}_1 = [1,0]^T$, $\mathbf{b}_2 = [s,s]^T$, $\mathbf{b}_3 = [0,1]^T$, and $\mathbf{b}_4 = [-s,s]^T$ with $s = \sqrt{2}/2$.
+    % \item \textbf{Hypercube Basis:} A 4-dimensional algebraic basis in $\mathbb{Q}^4$ mapped to the Euclidean $\mathbb{R}^2$ plane. A vector $\vec{v} = [x, y, z, w]^T$ represents the physical 2D coordinate $\vec{p}$ via the mapping: $\vec{p} = x \vec{b}_1 + y \vec{b}_2 + z \vec{b}_3 + w \vec{b}_4$, where the basis vectors are $\vec{b}_1 = [1,0]^T$, $\vec{b}_2 = [s,s]^T$, $\vec{b}_3 = [0,1]^T$, and $\vec{b}_4 = [-s,s]^T$ with $s = \sqrt{2}/2$.
 \end{itemize}
 
 \section{Vertex and Crease Level Architecture}
@@ -63,7 +64,7 @@ It would be possible to directly convert the 2D Cartesian coordinate to the orth
 \textcolor{red}{[Figure Placeholder: A coordinate plane showing the 8-directional hypercube basis. The vertex (1,1,-1,1) is visually constructed by adding the basis vectors $\hat{x}, \hat{y}, -\hat{z}, \hat{w}$ tail-to-head.]}
 
 \subsection{Crease Intersections and Exact Fractions}
-To intersect creases formed by vertices $\mathbf{v}_a$ and $\mathbf{v}_b$ at angles $\alpha$ and $\beta$, we utilize precomputed rational tangents. The intersection vertex $\mathbf{v}_c$ is calculated as:
+To intersect creases formed by vertices $\vec{v}_a$ and $\vec{v}_b$ at angles $\alpha$ and $\beta$, we utilize precomputed rational tangents. The intersection vertex $\vec{v}_c$ is calculated as:
 \begin{align}
     \Delta i & = (v_{b_x} - v_{a_x}) + (v_{b_y} - v_{a_y} - v_{b_w} + v_{a_w})\frac{\sqrt{2}}{2} \\
     \Delta j & = (v_{b_z} - v_{a_z}) + (v_{b_y} - v_{a_y} + v_{b_w} - v_{a_w})\frac{\sqrt{2}}{2} \\
@@ -135,7 +136,7 @@ First, we require the graph to be a single connected component. Disconnected com
 Second, we validate the internal faces. We utilize a Doubly-Connected Edge List (DCEL) half-edge traversal to extract all faces of the graph: for every vertex $v$, its incident neighbors are sorted angularly using a standard $\text{atan2}(dy, dx)$ function. Walking counter-clockwise around the leftmost turns allows us to systematically extract the closed loops that define the internal polygonal faces.
 
 For each extracted face, we calculate the directional vector 
-\[\mathbf{d} = (\Delta x / \gcd(\Delta x, \Delta y), \Delta y / \gcd(\Delta x, \Delta y))\]
+\[\vec{d} = (\Delta x / \gcd(\Delta x, \Delta y), \Delta y / \gcd(\Delta x, \Delta y))\]
 of every boundary segment. We strictly enforce that a valid topological face must consist of sides with unique directions (ignoring sequential collinear segments). While this allows concave polygons, it limits the number of sides to 8 and ensures they do not zig-zag or ``gerrymander'', which would also make crease pattern generation significantly more difficult.
 
 With these local boolean constraints and global topology filters, the SAT solver is able to enumerate all valid topologies.
@@ -152,7 +153,7 @@ The output of the topology enumeration phase is an unweighted planar graph. Alth
 
 If a topology contains $n$ nodes, we theoretically possess $2n$ degrees of freedom in the Euclidean plane (moving each node in $x$ and $y$). Our objective is to apply constraints until all degrees of freedom are removed, and the tiling is fully locked into a single crease pattern with fully defined references.
 
-\subsection{Basic Geometric Constraints}
+\subsection{Basic Geometric Constraints}\label{sec:basic_constraints}
 We begin by establishing the absolute requirements of the tiling. We first remove redundant degree-2 vertices from the topology. 
 
 \subsubsection{Angle preservation constraints}
@@ -175,7 +176,72 @@ Note that this introduces another inhomogeneous constraint. For diagonal symmetr
     u_x - u^*_y = 0 \quad \text{and} \quad u_y - u^*_x = 0
 \end{equation}
 
-We can then combine these linear constraints into a single matrix form $A\vec{x} = \vec{b}$, where $x = {[x_1, y_1, x_2, y_2, \ldots, x_n, y_n]}^T$ is a vector containing all node coordinates, each row of $A$ corresponds to one of the aforementioned linear constraints, and $\vec{b}$ is a vector of constants (mostly zeros, except for the few inhomogeneous conditions). %TODO: add an example matrix? or a figure 
+We can then combine these linear constraints into a single matrix form $A\vec{x} = \vec{b}$, where $x = {[x_1, y_1, x_2, y_2, \ldots, x_n, y_n]}^T$ is a vector containing all node coordinates, each row of $A$ corresponds to one of the aforementioned linear constraints, and $\vec{b}$ is a vector of constants (mostly zeros, except for the few inhomogeneous conditions). 
+
+
+To visualize this system, take for example the constraints imposed on the empty square. The global system $A \vec{x} = \vec{b}$, with both the basic geometric constraints as well as a single quadruplet constraint, takes the following structure:
+\begin{equation}\label{eq:Axb}
+\begin{array}{l}
+    \text{Edge angle constraints}\\
+    \\ \\ \\
+    \text{Boundary pinning}\\
+    \\ \\ \\
+    \text{Diagonal symmetry}\\
+
+    
+\end{array}
+\underbrace{
+    \begin{bmatrix}
+        0 & 1 & 0 & -1 & 0 & 0 & 0 & 0\\
+        0 &  0 &  1 &   0 & -1  &  0 & 0  & 0  \\
+        0 & 0 &  0 &   0 &  0 &  1 &  0 &  -1 \\
+        1 &  0 &  0 &  0  &  0 & 0  & -1  & 0  \\
+        \hdashline
+        1 & 0 & 0 & 0 & 0 & 0 & 0 & 0\\
+        0 & 1 & 0 & 0 & 0 & 0 & 0 & 0\\
+        0 & 0 & 0 & 0 & 1 & 0 & 0 & 0\\
+        0 & 0 & 0 & 0 & 0 & 1 & 0 & 0\\
+        \hdashline
+        1 & -1 & 0 & 0 & 0 & 0 & 0 & 0\\
+        0 & 0 & 0 & 0 & 1 & -1 & 0 & 0\\
+        0 & 0 & 1 & 0 & 0 & 0 & 0 & -1\\
+        0 & 0 & 0 & 1 & 0 & 0 & -1 & 0\\
+        % -1 & 1 & 0 & 0 & 1 &-1 & 0 & 0  
+    \end{bmatrix}
+}_{A}
+\underbrace{
+    \begin{bmatrix}
+        x_1 \\
+        y_1 \\
+        x_2 \\
+        y_2 \\
+        x_3 \\
+        y_3 \\
+        x_4 \\
+        y_4 \\
+    \end{bmatrix}
+}_{\vec{x}}
+=
+\underbrace{
+    \begin{bmatrix}
+        0 \\
+        0 \\
+        0 \\
+        0 \\
+        \hdashline
+        0 \\
+        0 \\ 
+        1 \\ 
+        1 \\ 
+        \hdashline
+        0 \\ 
+        0 \\
+        0 \\ 
+        0 \\
+        % 0 
+    \end{bmatrix}
+}_{\vec{b}}
+\end{equation}
 
 The crease pattern is fully defined if and only if the matrix $A$ has full rank, $\text{rank}(A) = 2n$. If the matrix is rank-deficient, then there are still degrees of freedom for vertices in the tiling to move without violating constraints. These motions are described by columns of the null space. To resolve these degrees of freedom, we need to inject additional constraints.
 
@@ -236,26 +302,30 @@ For the incircle to exist, we must satisfy:
     \vec{w}^T \vec{\xi} = w_1 (\hat{n}_1 \cdot \vec{v}_1) + w_2 (\hat{n}_2 \cdot \vec{v}_2) + w_3 (\hat{n}_3 \cdot \vec{v}_3) + w_4 (\hat{n}_4 \cdot \vec{v}_4) = 0
 \end{equation}
 By expanding the inner dot products $\hat{n}_i \cdot \vec{v}_i = n_{ix}x_i + n_{iy}y_i$, we group the terms by the coordinate variables of our vertices:
-\begin{equation}
+\begin{equation}\label{eq:quadruplet_constraint}
     \sum_{i=1}^{4} \left( (w_i n_{ix}) x_i + (w_i n_{iy}) y_i \right) = 0
 \end{equation}
-Note that this is a strictly linear, homogeneous constraint acting entirely on the node positions $x_i$ and $y_i$, which can also be expressed as a row in the constraint matrix $A$ without ever solving for the position or radius of the incircle. 
-% The quadruplet constraint adds the following constraint as a row to the global constraint matrix $A$:
-% \begin{equation}
-%     \begin{bmatrix}
-%     \dots & (w_1 n_{1x}) & (w_1 n_{1y}) & \dots & (w_4 n_{4x}) & (w_4 n_{4y}) & \dots
-%     \end{bmatrix}
-%     \begin{bmatrix}
-%     \vdots \\
-%     x_1 \\
-%     y_1 \\
-%     \vdots \\
-%     x_4 \\
-%     y_4 \\
-%     \vdots
-%     \end{bmatrix}
-%     = 0
-% \end{equation}
+Note that this is a strictly linear, homogeneous constraint acting entirely on the node positions $x_i$ and $y_i$, which can also be expressed as a row in the constraint matrix $A$ without ever solving for the position or radius of the incircle. For example, to add a quadruplet constraint to matrix expanded in Equation~\ref{eq:Axb}, we would append the following row to $A$ and $b$ based on the normals of the rectangle:
+\begin{equation}\label{eq:quadruplet_example}
+\begin{bmatrix}
+    -1 & 1 & 0 & 0 & 1 &-1 & 0 & 0  
+\end{bmatrix}
+\begin{bmatrix}
+    x_1 \\
+    y_1 \\
+    x_2 \\
+    y_2 \\
+    x_3 \\
+    y_3 \\
+    x_4 \\
+    y_4 \\
+\end{bmatrix}
+=
+\begin{bmatrix}
+    0 
+\end{bmatrix}
+\end{equation}
+Note that the constraint in this example is equivalent to asserting that $x_3 - x_1 = y_3 - y_1$, or in other words, the aspect ratio of the rectangle is square.
 
 In general, constraining a quadruplet (that contains at least one unconstrained edge) will remove one degree of freedom. However, due to internal symmetries across the tiling, it is possible for a single quadruplet constraint to collapse multiple straight skeleton vertices at once, while still only spending one degree of freedom. Therefore, we want to strategically select quadruplets that maximize the number of straight skeleton vertices they collapse. 
 
@@ -264,53 +334,153 @@ But more importantly, it is possible for a quadruplet constraint to be satisfied
 Even worse, it is possible for the enforcing of a quadruplet constraint to cause an edge to collapse to 0 or negative length, violating the planarity of the tiling. These two effects are defined by inequalities. Therefore, we must resort to a Mixed-Integer Linear Programming (MILP) formulation to strategically select the optimal set of quadruplets that maximize the number of collapsed straight skeleton vertices while ensuring the physical foldability of the tiling.
 
 
-
-\subsection{Quadruplet selection via MILP}
-
-We formulate the selection of these quadruplets as a MILP problem. Let $z_k \in \{0, 1\}$ be the boolean decision variable to enforce quadruplet $k$. Our objective is to maximize geometric simplicity:
+\subsection{Quadruplet Harvesting and the MILP Formulator}
+To evaluate the physical consequences of activating different quadruplets, the solver must be able to solve the linear system (Equation~\ref{eq:Axb}) for any possible combination of quadruplets, and evaluate the validity of the resulting geometry. Therefore, let the state vector $\vec{X}$ be an augmented version of the vertex coordinate vector $\vec{x}$:
 \begin{equation}
-    \max \sum_{k} W_k z_k
+    \vec{X} = \left[ \, \vec{x}, \; \vec{z}_{quads}, \; \vec{p}_{incircles}, \; \vec{r}_{incircles}, \; \vec{b}_{bowtie} \, \right]^T
 \end{equation}
-The weight $W_k$ is heavily biased. Unresolved quadruplets containing concave (reflex) vertices create disproportionately messier crease patterns if not collapsed into a clean internal vertex. Therefore, quadruplets involving reflex vertices are assigned a priority weight ($W = 10.0$), while standard convex quadruplets receive a base weight ($W = 1.0$). 
+Where we concatenate the following vectors:
+\begin{itemize}
+    \item $\vec{x}$: A concatenation of continuous 2D coordinates $\vec{x}_u = (x_u, y_u)$ for every vertex in the graph
+    \item $\vec{z}_{quads}$: Boolean decision variables $z_k \in \{0, 1\}$ denoting whether quadruplet candidate $k$ is enforced.
+    \item $\vec{p}_{incircles}$: Continuous 2D coordinates $\vec{p}_k = (p_{k_x}, p_{k_y})$ representing the prospective incircle center for quadruplet candidate $k$.
+    \item $\vec{r}_{incircles}$: Continuous variables $r_k \ge 0$ representing the prospective incircle radius for quadruplet candidate $k$.
+    \item $\vec{b}_{bowtie}$: Boolean variables used to check topological validity of concave polygons.
+\end{itemize}
 
-\subsubsection{Continuous Variables and the Anti-Bowtie Clearance}
-The MILP must evaluate the continuous physical consequences of toggling $z_k = 1$. For every node $u$, we assign continuous variables $x_u, y_u$ bounded by the grid dimensions $\pm N$. For every candidate quadruplet $k$, we assign continuous variables for its theoretical incircle center $(Px_k, Py_k)$ and its radius $r_k \ge 0$.
-
-If $z_k = 1$, the distance from the incircle center to all four edges in the quadruplet must exactly equal $r_k$. For an edge $e$ with normal vector $\mathbf{n} = (n_x, n_y)$ and an origin node $u$, we enforce:
-\begin{equation}
-    -C(1 - z_k) \le \mathbf{n} \cdot (\mathbf{P}_k - \mathbf{p}_u) - r_k \le C(1 - z_k)
-\end{equation}
-where $C$ is a sufficiently large Big-M scalar (in our architecture, $C_{dynamic} = 3N$) that mathematically disables the constraint when $z_k = 0$.
-
-Furthermore, moving nodes to satisfy quadruplets risks causing the polygon to fold over itself---creating a non-physical ``bowtie'' intersection. To prevent this, we implement \textbf{Proximity Culling Clearance Constraints}. For every reflex vertex $v_c$ and every opposing non-adjacent edge $(u, v)$ with normal $\mathbf{n}$ and tangent $\mathbf{t}$, the reflex vertex must remain safely outside a minimum feature size tolerance, which we define as $\text{gap} = \frac{1}{4N}$.
-
-We divide the space around the edge $(u, v)$ into three boolean sectors: strictly inside the normal ($b_1$), strictly behind the start of the tangent ($b_2$), or strictly ahead of the end of the tangent ($b_3$). The reflex vertex must reside in at least one safe sector:
-\begin{equation}
-    b_1 + b_2 + b_3 \ge 1
-\end{equation}
+Now recall that the standard form of a MILP problem is:
 \begin{align}
-    \mathbf{n} \cdot (\mathbf{p}_c - \mathbf{p}_u) &\ge \text{gap} - C(1 - b_1) \\
-    \mathbf{t} \cdot (\mathbf{p}_c - \mathbf{p}_u) &\le -\text{gap} + C(1 - b_2) \\
-    \mathbf{t} \cdot (\mathbf{p}_c - \mathbf{p}_v) &\ge \text{gap} - C(1 - b_3)
+    \max_{\vec{X}} \quad & \vec{c}^T \vec{X} \\
+    \text{subject to} \quad & M \vec{X} \le \vec{B}
 \end{align}
-By bounding these continuous variables, the MILP guarantees that any selected set of quadruplets $z_k = 1$ is physically realizable without causing 2D geometry collisions.
+where $\vec{c}$ is the objective function as reward weights on the elements of $\vec{X}$, $M$ is the constraint matrix that encodes all of the linear equalities and inequalities, and $\vec{B}$ stores the constants on the right-hand side of each constraints.
+
+
+Our objective is to maximize the number of quadruplets that can be activated without violating geometric constraints. Therefore, $\vec{c}$ contains non-zero weights only for the decision variables $\vec{z}_{quads}$. We heavily reward resolving concave (reflex) vertices because they create disproportionately messier crease patterns if not collapsed into a clean internal vertex. Therefore, quadruplets involving reflex vertices are assigned a priority weight ($c_k = 10.0$), while standard convex quadruplets receive a base weight ($c_k = 1.0$).
+
+\subsubsection{Formulating the Constraint Rows}
+
+\paragraph{1. Basic geometric constraints}
+First, the same basic geometric constraints described in Section~\ref{sec:basic_constraints} are applied to the vertex coordinates. These constraints only depend on the vertex coordinates $\vec{x}$. These are the only equality constraints (which can be expressed as two inequalities, or sometimes written as a separate matrix).
+
+\paragraph{2. Edge Integrity:}
+To prevent edges from collapsing to zero or negative length (inversion), we enforce a minimum feature size, $\epsilon$. Let $\hat{t}$ be the unit tangent vector of an edge. For any directed edge from vertex $u$ to vertex $v$, the projected distance must remain at least $\epsilon$:
+\begin{equation}
+    \hat{t} \cdot (\vec{x}_v - \vec{x}_u) \ge \epsilon \quad \implies \quad - \hat{t}^T \vec{x}_v + \hat{t}^T \vec{x}_u \le -\epsilon
+\end{equation}
+Note that $\epsilon$ is not for numerical stability, but another metric of crease patern ``niceness''. If $\epsilon$ is too small, the resulting crease pattern may contain tiny creases that are unpleasant to fold. If $\epsilon$ is too large, the solver may not be able to find any valid solutions. We empirically set $\epsilon = \frac{1}{4N}$, where $N$ is the grid size of the original topology.
+
+\paragraph{3. Quadruplet Activation and Convex Chain Invaders (Big-M Method):}
+If $z_k = 1$, quadruplet $k$ must be constrained such that the distance from the incircle center $\vec{P}_k$ to the boundary edge originating at node $u$ with inward normal $\hat{n}$ must exactly equal the radius $r_k$. However, if $z_k = 0$, we need the constraint to be relaxed. To encode this as linear rows in $M$, we choose a large constant $C\approx 3N$ and apply the following inequalities for each edge $u$ in the quadruplet (where $\vec{x}_u$ is one of the two vertices on the edge):
+\begin{align}
+    \hat{n}_u^T \vec{p}_k - \hat{n}_u^T \vec{x}_u - r_k + C z_k \le C \\
+    -\hat{n}_u^T \vec{p}_k + \hat{n}_u^T \vec{x}_u + r_k + C z_k \le C
+\end{align}
+
+Recall that a vertex only appears in the straight skeleton if and only if it is strictly closer to its constituent edges than to any other edge in the polygon. Therefore, if another edge ``invades'' the incircle, the quadruplet constraint is effectively useless. To prevent this, we must ensure that any invader edge $i$ maintains a normal projection distance from the incircle center $\vec{P}_k$ that is at least $r_k$:
+
+\begin{equation}
+    -\vec{n}_i^T \vec{p}_k + \vec{n}_i^T \vec{x}_i - r_k + C z_k \le C
+\end{equation}
+The addition of this constraint is why the MILP formulation requires $\vec{p}_k, r_k$ as state variables, while Equation~\ref{eq:quadruplet_constraint} did not.
+
+However, applying this to \textit{all} other edges in the polygon often over-constrains the MILP because edges separated by a reflex vertex may have a normal projection that appears to intersect the incircle---when in reality, the reflex vertex creates a physical barrier that prevents the edge from actually invading the incircle. Therefore, we precompute the convex chains of the polygon (groups of contiguous edges without reflex vertices), and only apply the invader constraint to edges that share a convex chain with any edge in the quadruplet.
+
+\paragraph{4. Proximity Culling (Anti-Bowtie Clearance):}
+In some concave polygons, it is possible for a concave ``mouth'' vertex to clip through an edge on the opposite side of the polygon.
+
+For every reflex vertex $\vec{x}_c$ and a non-adjacent edge $(u, v)$ with normal $\hat{n}$ and tangent $\hat{t}$, we create three boolean variables based on the vertex's position relative to the edge: 
+\begin{itemize}
+    \item $b_1$ = 1 if $\hat{n} \cdot (\vec{x}_c - \vec{x}_u) < 0$ (the vertex is behind the edge)
+    \item $b_2$ = 1 if $\hat{t} \cdot (\vec{x}_c - \vec{x}_u) > 0$ (the vertex is to the left of the edge)
+    \item $b_3$ = 1 if $\hat{t} \cdot (\vec{x}_c - \vec{x}_u) < 0$ (the vertex is to the right of the edge)
+\end{itemize} 
+We can enforce that the reflex vertex must reside in at least one safe sector by applying the constraint:
+\[b_1 + b_2 + b_3 \ge 1 \implies -b_1 - b_2 - b_3 \le -1\]
+The MILP solver gets to choose which of $b_1, b_2, b_3$ is true. Similar to the quadruplet toggles $z_k$, we can use big-M constraints to link these boolean variables to toggle which which safe zone the vertex is constrained to. For example, the corresponding constraint for $b_1$ would be:
+\begin{equation}
+    \vec{n} \cdot (\vec{p}_c - \vec{p}_u) \ge \epsilon - C(1 - b_1) \quad \implies \quad -\vec{n}^T \vec{p}_c + \vec{n}^T \vec{p}_u + C b_1 \le C - \epsilon
+\end{equation}
+Recall that these constraints are added for every pair of reflex vertex and non-adjacent edge. 
+
+\subsubsection{The Compound Matrix Inequality}
+By concatenating these varied constraints, we construct the master MILP matrix equation. The inequality system $M \vec{X} \le \vec{B}$ takes the following block matrix structure:\footnote{Technically, the basic geometric constraints should be in a separate matrix because they represent equalities rather than inequalities, though for the sake of visual compactness we can handwave that each equality can be represented as a pair of inequalities.}
+
+\begin{equation}\label{eq:milp}
+\begin{array}{l}
+    \text{Basic constraints} \\
+    \text{Edge Integrity} \\
+    \text{Quadruplets} \\
+    \\
+    \text{Incircle Clearance} \\
+    \\
+    \text{Anti-bowtie}
+    \\
+\end{array}
+\underbrace{
+\left[
+\begin{array}{ccccc}
+    A & 0 & 0 & 0 & 0 \\
+    \hdashline
+    M_{edges} & 0 & 0 & 0 & 0 \\
+    \hdashline
+    -N_{quad} & C \cdot I_{quad} & N_{incircle} & -I_{quad} & 0 \\
+    N_{quad} & C \cdot I_{quad} & -N_{incircle} & I_{quad} & 0 \\
+    \hdashline
+    N_{invader} & C \cdot I_{inv} & -N_{incircle} & -I_{inv} & 0 \\
+    \hdashline
+    0 & 0 & 0 & 0 & -S_{sector} \\
+    N_{bowtie} & 0 & 0 & 0 & C \cdot I_{bowtie} 
+\end{array}
+\right]}_{M}
+\underbrace{
+\begin{bmatrix}
+    \vec{x} \\
+    \vec{z}_{quads} \\
+    \vec{P}_{incircles} \\
+    \vec{r}_{incircles} \\
+    \vec{b}_{bowtie}
+\end{bmatrix}}_{\vec{X}}
+\le
+\underbrace{
+\begin{bmatrix}
+    \mathbf{0} \\
+    \hdashline
+    -\boldsymbol{\epsilon} \\
+    \hdashline
+    \mathbf{C} \\
+    \mathbf{C} \\
+    \hdashline
+    \mathbf{C} \\
+    \hdashline
+    -\mathbf{1} \\
+    \mathbf{C} - \boldsymbol{\epsilon}
+\end{bmatrix}}_{\vec{B}}
+\end{equation}
+
+Where:
+\begin{itemize}
+    \item $M_{edges}$ applies the tangent vector projections ($\hat{t}^T$) mapping adjacent vertices to their required edge clearance.
+    \item $N_{quad}$, $N_{invader}$, and $N_{bowtie}$ apply the corresponding inward normal and tangent projections ($\hat{n}^T, \hat{t}^T$) mapping vertices to their respective distance inequalities.
+    \item $N_{incircle}$ projects the prospective incircle centers ($\vec{P}_k$) against those same normal vectors.
+    \item $S_{sector}$ is a block summation matrix that groups and adds the three boolean sector variables $(b_1 + b_2 + b_3)$ for each reflex-edge pair.
+    \item $I$ represents identity matrices of the appropriate dimensions mapping the scalar variables ($\vec{r}_{incircles}$ and the boolean toggles).
+    \item $\mathbf{C}$, $\boldsymbol{\epsilon}$, and $\mathbf{1}$ represent column vectors populated dynamically with the respective constants.
+\end{itemize}
+In total, $M$ and $\vec{B}$ are composed of pre-computable constants for each topology. The problem in this form can be passed into a MILP solver like PuLP to constrain the maximum number of quadruplets while maintaining the geometric validity of the tiling.
 
 \subsubsection{Iterative Integer Cuts for Database Diversity}
 A single topology can often be tiled in several geometrically distinct ways. To populate the database with diverse layouts from the same root topology, we loop the MILP solver. Upon finding an optimal set of active quadruplets $\mathcal{A}$, we log the configuration and inject a strict integer cut back into the solver:
 \begin{equation}
     \sum_{i \in \mathcal{A}} z_i \le |\mathcal{A}| - d_{threshold}
 \end{equation}
-where $d_{threshold} = 2$. This bans the previous solution and forces the MILP to swap at least two quadruplets, discovering alternative geometric variations.
+where $d_{threshold}$ is a hyperparameter defining the minimum diversity difference between solutions. This bans the previous solution and forces the MILP to swap at least $d_{threshold}$ quadruplets, nudging it to discover alternative geometric variations---though it is not guaranteed that the resulting tilings will be unique, even if the sets of selected quadruplets are different.
 
-\textcolor{red}{[Figure Placeholder: A visual diagram comparing three distinct MILP tilings generated from the exact same unweighted topology. Highlight the specific quadruplets chosen in each iteration and how they radically alter the placement of the interior straight skeleton vertices.]}
-
-The solution to the MILP comes with a set of vertex positions that is guaranteed to be physically realizable (satisfying the constraints applied to $M$). However, it cannot guarantee that the tiling is fully locked. Therefore, we need to take the quadruplets selected by the MILP and apply them as additional rows in the constraint matrix $A$, then check if $A$ has full rank. If not, we need to go back and select more quadruplets until we have a full-rank matrix that fully locks the tiling into a single crease pattern.
+%% TODO in the section above: be consistent between v and x. probably use v for vertex coordinates
 
 \subsection{Quadruplet harvesting}
-The MILP maximizes the number of active quadruplets, but because an $n$-gon contains $\binom{n}{4}$ possible quadruplet combinations, it is computationally prohibitive to feed every possible quadruplet into the MILP. 
 
-
-Consequently, the quadruplets selected by the MILP might leave the 4D matrix rank-deficient (having fewer than $4n$ independent constraints), meaning some nodes can still "slide" freely along creases.
+The solution to the MILP comes with a set of vertex positions that is guaranteed to be physically realizable (satisfying the constraints applied to $M$). However, it cannot guarantee that the tiling is fully locked. This is because it is computationally prohibitive to feed every possible quadruplet into the MILP (consider the fact that an $n$-gon contains $\binom{n}{4}$ possible quadruplets), so we initialize it with a heuristic ``harvest'' of quadruplets that are either contiguous or are the nearest edges to a concave pair of edges. As a result, the MILP might overlook a key quadruplet needed to fully constrain the tiling.
 
 Before performing the expensive Gauss-Jordan elimination, we check the algebraic rank of the constraint matrix $M$. To do this instantaneously, we perform Gaussian Elimination over a finite field $Z_p$ using a large prime (e.g., $P = 1000000007$). 
 
@@ -325,7 +495,7 @@ This process is thorough, albeit roundabout. First we use heuristics to choose w
 \subsection{The Exact Linear Solver and the Two-Row Formulation}
 The MILP provides a guaranteed-safe set of geometric intents, but floating-point MILP coordinates are too noisy for strict origami raycasting. We must lock these intents into an exact fractional matrix in the 4D Hypercube basis $\mathbb{Q}^4$. 
 
-Consider a standard angular constraint requiring the edge between node $u$ and node $v$ to remain parallel to a known 22.5$^\circ$ directional vector $\mathbf{d} = (d_x, d_y)$. The 2D cross product must be exactly zero:
+Consider a standard angular constraint requiring the edge between node $u$ and node $v$ to remain parallel to a known 22.5$^\circ$ directional vector $\vec{d} = (d_x, d_y)$. The 2D cross product must be exactly zero:
 \begin{equation}
     (v_x - u_x)d_y - (v_y - u_y)d_x = 0
 \end{equation}
@@ -334,7 +504,7 @@ In our 4D basis, the physical 2D coordinates are derived from the 4D rational co
     \Delta X &= (x_2 - x_1) + \frac{\sqrt{2}}{2}((y_2-y_1) - (w_2-w_1)) = A_x + B_x \sqrt{2} \\
     \Delta Y &= (z_2 - z_1) + \frac{\sqrt{2}}{2}((y_2-y_1) + (w_2-w_1)) = A_y + B_y \sqrt{2}
 \end{align}
-The directional vector $\mathbf{d}$ is similarly defined as $d_x = a_x + b_x \sqrt{2}$ and $d_y = a_y + b_y \sqrt{2}$. Substituting these components into the cross product yields a polynomial expansion:
+The directional vector $\vec{d}$ is similarly defined as $d_x = a_x + b_x \sqrt{2}$ and $d_y = a_y + b_y \sqrt{2}$. Substituting these components into the cross product yields a polynomial expansion:
 \begin{equation}
     (A_x + B_x \sqrt{2})(a_y + b_y \sqrt{2}) - (A_y + B_y \sqrt{2})(a_x + b_x \sqrt{2}) = 0
 \end{equation}
@@ -396,9 +566,9 @@ Every instance possesses an implied address $(f, i)$, where $f$ is the face inde
 \subsection{Orthogonal Slicing and Tree Extraction}
 With the paper successfully folded into a layered stack of 2D polygons, we must extract its uniaxial "Stick Figure" (the macroscopic tree). Because all layers overlap, we execute an orthogonal slicing algorithm---conceptually identical to a medical CT scan---to isolate the connected appendages.
 
-First, we determine the optimal projection axis $\mathbf{a}$ by evaluating the bounding box width along the primary orthogonal and diagonal vectors, selecting the axis that yields the maximum span. Every vertex $\mathbf{v}_i$ in the folded state projects a critical height onto this axis: $h_i = \mathbf{v}_i \cdot \mathbf{a}$. We isolate and sort the unique critical heights generated by the vertices .
+First, we determine the optimal projection axis $\vec{a}$ by evaluating the bounding box width along the primary orthogonal and diagonal vectors, selecting the axis that yields the maximum span. Every vertex $\vec{v}_i$ in the folded state projects a critical height onto this axis: $h_i = \vec{v}_i \cdot \vec{a}$. We isolate and sort the unique critical heights generated by the vertices .
 
-We mathematically sweep a 1D slice line $\mathcal{L}(h)$ perpendicular to $\mathbf{a}$. Between any two adjacent critical heights $(h_i, h_{i+1})$, the topology of the folded layers is entirely immutable. Therefore, we sample the structure precisely at these critical heights.
+We mathematically sweep a 1D slice line $\mathcal{L}(h)$ perpendicular to $\vec{a}$. Between any two adjacent critical heights $(h_i, h_{i+1})$, the topology of the folded layers is entirely immutable. Therefore, we sample the structure precisely at these critical heights.
 
 When a slice intersects the folded state, it severs the topological faces. We utilize a highly optimized C++ routine (\texttt{split\_and\_rebuild\_cpp}) to bifurcate the affected faces and instantly remap the multi-layered instance pointers to the newly severed geometry. 
 
