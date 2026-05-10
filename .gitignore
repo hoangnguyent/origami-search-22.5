@@ -32,6 +32,7 @@ renders/
 *.pkl
 *.index
 *.npy
+*.transform
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

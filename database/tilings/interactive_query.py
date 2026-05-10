@@ -17,7 +17,7 @@ from matplotlib.widgets import Button, Slider
 
 # Import your pipeline functions
 from database.tilings.query import query_tilings, plot_query_megaplot
-from src.engine.tree import get_proportional_tree_pos
+from src.engine.tree import get_proportional_tree_pos, random_tree
 
 class TreeDrawer:
     def __init__(self, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')], n_results=5):
@@ -209,23 +209,25 @@ class TreeDrawer:
             return
 
         # Execute query
-        try:
-            results = query_tilings(
-                G, 
-                db_configs=self.db_configs, 
-                n=self.n_results,
-                # t_min = t_min,
-                # t_max = t_max
-            )
+        results = query_tilings(
+            G, 
+            db_configs=self.db_configs, 
+            n=self.n_results,
+        )
 
-            plot_query_megaplot(G, results)
-        except Exception as e:
-            print(f"Error executing query: {e}")
+        plot_query_megaplot(results, query_tree=G)
+
 
 if __name__ == "__main__":
     # Launch the Interactive GUI
     # dbs_to_search = [(4, 'diag'), (4, 'none'), (3, 'none'), (3, 'diag')]
-    dbs_to_search = [(4, 'diag'),(3, 'diag')]
+    dbs_to_search = [
+        # (4, 'diag'), 
+        (3, 'diag'), 
+        # (4, 'none'),
+        (3, 'none'),
+        # (5, 'diag')
+    ]
 
     app = TreeDrawer(db_configs = dbs_to_search, n_results=5)
 
@@ -235,4 +237,7 @@ maybe when plotting trees, truncate small edges
 
 heat kernel query is a bit slower. probably can speed up by caching
 
+add interface for random pull from database
+
+maybe also plot "heat signature" of each tree
 """

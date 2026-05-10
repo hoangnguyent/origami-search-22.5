@@ -437,7 +437,7 @@ if __name__ == "__main__":
         fold = cp_to_fold(cp)
         folds.append(fold)
         tree = fold.get_tree_and_packing()[0]
-        embedding = extract_eigenvalues(tree, dim = 32)
+        embedding = extract_eigenvalues(tree, eig_count = 32)
 
         # labels.append(f"ID {db_id}")
         # draw_cp_ax(axes_flat[i], cp, title=f"CP from Blob (ID {db_id})")

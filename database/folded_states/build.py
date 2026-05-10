@@ -108,7 +108,7 @@ def compute_children_task(parent_id, binary_parent, generation):
         # Extract data
         binary_child = np.array(frozen_child, dtype=np.int16).tobytes()
         try:
-            embedding = extract_eigenvalues(tree, dim=DIMENSION)
+            embedding = extract_eigenvalues(tree, eig_count=DIMENSION)
             tree_eff = sum(nx.get_edge_attributes(tree, 'length').values())
         except Exception:
             embedding = [0.0] * DIMENSION  # fallback for degenerate graphs
@@ -151,7 +151,7 @@ def main_parallel(time_limit=60, time_per_tree=10, tree_growth_rate = 1):
                         tree = random_tree(8 + len(random_trees)* np.floor(len(random_trees) * tree_growth_rate).astype(int))
                         print(f"\n--- Switching to a new training tree with {len(tree.nodes())} nodes---")
                         random_trees.append(tree)
-                        target_embedding = extract_eigenvalues(tree, dim=DIMENSION)
+                        target_embedding = extract_eigenvalues(tree, eig_count=DIMENSION)
                         temp = time.time()
                         print(f"Total states: {session.query(State).count()} | Time elapsed: {time.time() - t0:.2f}s |  RAM usage: {current_memory_usage() / 1024 / 1024:.2f} MB")
 

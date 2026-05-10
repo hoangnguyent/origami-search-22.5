@@ -36,10 +36,10 @@ from src.engine.tree import extract_eigenvalues
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-N = 4
-SYMMETRY = "none"
+N = 5
+SYMMETRY = "diag"
 diversity_threshold = 4
-num_solutions = 6
+num_solutions = 10
 TIME_LIMIT = 30 # Internal Python DFS time limit
 EXTERNAL_TIMEOUT = 35 # External backup timeout (slightly higher to allow graceful internal exit)
 
@@ -113,6 +113,33 @@ def decompress_edges(binary_blob, N):
 # =============================================================================
 # MULTIPROCESSING: THE PIPELINE WORKER
 # =============================================================================
+
+def clean_tree_for_storage(tree):
+    """
+    Strips unnecessary metadata from the tree to minimize SQLite database size.
+    Converts custom exact-math objects to standard Python floats.
+    Retains ONLY the 'length' attribute on edges.
+    """
+    # 1. Clear global graph attributes
+    tree.graph.clear()
+    
+    # 2. Clear all node-level attributes
+    for n in tree.nodes():
+        tree.nodes[n].clear()
+        
+    # 3. Clean edge-level attributes
+    for u, v, data in tree.edges(data=True):
+        # Extract length, defaulting to 1.0
+        raw_length = data.get('length', 1.0)
+        
+        clean_length = float(raw_length)
+        data.clear()
+        
+        # Re-assign ONLY the cleaned float length
+        data['length'] = clean_length
+        
+    return tree
+
 def process_topology_task(topo_id, binary_state, n_val, symmetry_val, time_lim):
     try:
         edges = decompress_edges(binary_state, n_val)
@@ -151,15 +178,16 @@ def process_topology_task(topo_id, binary_state, n_val, symmetry_val, time_lim):
                 
                 fold = cp_to_fold(cp)
                 tree = fold.get_tree_and_packing()[0]
-                embedding = extract_eigenvalues(tree, dim=32)
-                
+                clean_tree = clean_tree_for_storage(tree)
+                # embedding = extract_eigenvalues(tree, dim=32)
                 blob_bytes = pickle.dumps(blob_dict, protocol=pickle.HIGHEST_PROTOCOL)
-                embedding_bytes = np.array(embedding, dtype=np.float32).tobytes()
+                # embedding_bytes = np.array(embedding, dtype=np.float32).tobytes()
+                tree_bytes = pickle.dumps(clean_tree, protocol=pickle.HIGHEST_PROTOCOL)
                 
                 success_tilings.append({
                     "tiling_hash": tiling_hash,
                     "blob_bytes": blob_bytes,
-                    "embedding_bytes": embedding_bytes
+                    "embedding_bytes": tree_bytes
                 })
             except Exception as e:
                 continue # If one specific tiling has a CP degeneracy, skip it but try the others

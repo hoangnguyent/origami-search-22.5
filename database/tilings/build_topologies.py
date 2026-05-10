@@ -110,66 +110,7 @@ def extract_topology(state_id,db_name=None, N = 4):
 # =============================================================================
 # MULTIPROCESSING: Z3 WORKER
 # =============================================================================
-# def generate_viable_prefixes(N, symmetry, prefix_length):
-#     """
-#     Uses Z3 to aggressively pre-prune the search tree. 
-#     Instead of blindly generating 2^L bitstrings, we ask Z3 to find ONLY 
-#     the prefixes that don't immediately violate planarity, degree limits, or symmetry.
-#     """
-#     print(f"Asking Z3 to dynamically pre-prune and generate viable {prefix_length}-bit prefixes...")
-#     ordered_edges = get_ordered_internal_edges(N)
-#     boundary_edges = get_boundary_edges(N)
 
-#     s = Solver()
-#     edge_vars = {e: Bool(f"e_{i}") for i, e in enumerate(ordered_edges)}
-
-#     # Apply base geometric rules
-#     for x in range(N):
-#         for y in range(N):
-#             d1 = tuple(sorted(((x, y), (x+1, y+1))))
-#             d2 = tuple(sorted(((x+1, y), (x, y+1))))
-#             s.add(Not(And(edge_vars[d1], edge_vars[d2])))
-
-#     incident_vars = { (x,y): [] for x in range(N+1) for y in range(N+1) }
-#     for u, v in boundary_edges:
-#         incident_vars[u].append(1)
-#         incident_vars[v].append(1)
-#     for e, var in edge_vars.items():
-#         val = If(var, 1, 0)
-#         incident_vars[e[0]].append(val)
-#         incident_vars[e[1]].append(val)
-#     for node, vars_list in incident_vars.items():
-#         s.add(sum(vars_list) != 1)
-
-#     if symmetry != 'none':
-#         t_type = 6 if symmetry == 'diag' else 4 #book
-#         for e, var in edge_vars.items():
-#             re = tuple(sorted((apply_transform(e[0], N, t_type), apply_transform(e[1], N, t_type))))
-#             if re in edge_vars:
-#                 s.add(var == edge_vars[re])
-
-#     # We ONLY constrain the search to the first `prefix_length` variables
-#     prefix_vars = [edge_vars[ordered_edges[i]] for i in range(prefix_length)]
-    
-#     valid_prefixes = []
-    
-#     # Loop to find all valid combinations for the prefix variables
-#     while s.check() == sat:
-#         m = s.model()
-        
-#         # Extract the bitstring for this valid prefix
-#         bits = "".join('1' if is_true(m.evaluate(v, model_completion=True)) else '0' for v in prefix_vars)
-#         valid_prefixes.append(bits)
-
-#         # Block this specific prefix from being found again
-#         block = []
-#         for v in prefix_vars:
-#             is_active = is_true(m.evaluate(v, model_completion=True))
-#             block.append(v != is_active)
-#         s.add(Or(*block))
-
-#     print(f"Z3 pruning complete! Shrunk search tree from {2**prefix_length} down to {len(valid_prefixes)} viable prefixes.")
-#     return valid_prefixes
 def _prefix_worker(args):
     """
     Isolated Z3 worker that searches for valid prefixes starting with a specific bit seed.
@@ -425,13 +366,9 @@ if __name__ == "__main__":
     
 
     # --- CONFIGURATION ---
-    N = 4
-    symmetry = "none"
-    
-    # total_edges = 4 * (N ** 2) - 2 * N
-    # Keep prefix length between 8 and 18 bits. 
-    # Too small = chunks take hours. Too big = Prefix generation takes too long.
-    prefix_length = 10
+    N = 5
+    symmetry = "diag"
+    prefix_length = 28
 
     print(f"Configuration: N={N}, Symmetry={symmetry}")
     # ---------------------
@@ -450,7 +387,7 @@ if __name__ == "__main__":
         
         # 1. Initialize the Prefixes via Z3 Pre-Pruning (if starting fresh)
         if session.query(Prefix).count() == 0:
-            print(f"Calculated Ideal Prefix Length: {prefix_length} bits")
+            print(f"Prefix Length: {prefix_length} bits")
             valid_bits = generate_viable_prefixes(N, symmetry, prefix_length)
             prefix_objects = [Prefix(bits=b) for b in valid_bits]
             session.bulk_save_objects(prefix_objects)
