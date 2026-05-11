@@ -122,10 +122,16 @@ We can optionally enforce symmetry. For a requested symmetry (e.g., book symmetr
     e = e_{sym}
 \end{equation}
 
-\textcolor{red}{[Figure Placeholder: A $3 \times 3$ grid diagram illustrating the four local constraints. Specifically, show a cell with an invalid crossing diagonal marked with a red 'X', a valid 4-way intersection highlighting the T-junction rule, and a dotted line showing book symmetry reflecting edges from the left side to the right.]}
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{figs/topology_constraints.pdf}
+    \caption{Illustration of the 5 topology constraints (not including symmetry). From left to right: (1) Planarity, no crossing diagonals; (2) No dangling edges; (3) No T-junctions; (4) Full connectivity, no floating polygons; (5) All normals in a polygon must be unique}
+\end{figure}
+
 
 \subsection{Global Topological Constraints}
 Once Z3 yields a satisfying assignment based on local constraints, we extract the resulting graph $G=(V,E)$ and pass it through a Python-level global topology filter before accepting it into the database.
+
 
 \subsubsection{Connectivity Constraint}
 
@@ -180,6 +186,11 @@ We can then combine these linear constraints into a single matrix form $A\vec{x}
 
 
 To visualize this system, take for example the constraints imposed on the empty square. The global system $A \vec{x} = \vec{b}$, with both the basic geometric constraints as well as a single quadruplet constraint, takes the following structure:
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.3\textwidth]{figs/tiling_square.pdf}
+    \caption{Basic geometric constraints on the bare minimum tiling (empty square)}
+\end{figure}
 \begin{equation}\label{eq:Axb}
 \begin{array}{l}
     \text{Edge angle constraints}\\
@@ -306,6 +317,13 @@ By expanding the inner dot products $\hat{n}_i \cdot \vec{v}_i = n_{ix}x_i + n_{
     \sum_{i=1}^{4} \left( (w_i n_{ix}) x_i + (w_i n_{iy}) y_i \right) = 0
 \end{equation}
 Note that this is a strictly linear, homogeneous constraint acting entirely on the node positions $x_i$ and $y_i$, which can also be expressed as a row in the constraint matrix $A$ without ever solving for the position or radius of the incircle. For example, to add a quadruplet constraint to matrix expanded in Equation~\ref{eq:Axb}, we would append the following row to $A$ and $b$ based on the normals of the rectangle:
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{figs/rectangle_quadruplet.pdf}
+    \caption{A rectangular quadruplet constrained to a single equidistant point by Equation~\ref{eq:quadruplet_example}. Note that the constraint in this example is equivalent to asserting that $x_3 - x_1 = y_3 - y_1$, or in other words, the aspect ratio of the rectangle is square.}
+\end{figure}
+
 \begin{equation}\label{eq:quadruplet_example}
 \begin{bmatrix}
     -1 & 1 & 0 & 0 & 1 &-1 & 0 & 0  
@@ -325,7 +343,7 @@ Note that this is a strictly linear, homogeneous constraint acting entirely on t
     0 
 \end{bmatrix}
 \end{equation}
-Note that the constraint in this example is equivalent to asserting that $x_3 - x_1 = y_3 - y_1$, or in other words, the aspect ratio of the rectangle is square.
+
 
 In general, constraining a quadruplet (that contains at least one unconstrained edge) will remove one degree of freedom. However, due to internal symmetries across the tiling, it is possible for a single quadruplet constraint to collapse multiple straight skeleton vertices at once, while still only spending one degree of freedom. Therefore, we want to strategically select quadruplets that maximize the number of straight skeleton vertices they collapse. 
 
@@ -341,7 +359,7 @@ To evaluate the physical consequences of activating different quadruplets, the s
 \end{equation}
 Where we concatenate the following vectors:
 \begin{itemize}
-    \item $\vec{x}$: A concatenation of continuous 2D coordinates $\vec{x}_u = (x_u, y_u)$ for every vertex in the graph
+    \item $\vec{x}$: A concatenation of continuous 2D coordinates $\vec{x}_i = (x_i, y_i)$ for every vertex in the graph
     \item $\vec{z}_{quads}$: Boolean decision variables $z_k \in \{0, 1\}$ denoting whether quadruplet candidate $k$ is enforced.
     \item $\vec{p}_{incircles}$: Continuous 2D coordinates $\vec{p}_k = (p_{k_x}, p_{k_y})$ representing the prospective incircle center for quadruplet candidate $k$.
     \item $\vec{r}_{incircles}$: Continuous variables $r_k \ge 0$ representing the prospective incircle radius for quadruplet candidate $k$.
@@ -364,19 +382,20 @@ Our objective is to maximize the number of quadruplets that can be activated wit
 First, the same basic geometric constraints described in Section~\ref{sec:basic_constraints} are applied to the vertex coordinates. These constraints only depend on the vertex coordinates $\vec{x}$. These are the only equality constraints (which can be expressed as two inequalities, or sometimes written as a separate matrix).
 
 \paragraph{2. Edge Integrity:}
-To prevent edges from collapsing to zero or negative length (inversion), we enforce a minimum feature size, $\epsilon$. Let $\hat{t}$ be the unit tangent vector of an edge. For any directed edge from vertex $u$ to vertex $v$, the projected distance must remain at least $\epsilon$:
+To prevent edges from collapsing to zero or negative length (inversion), we enforce a minimum feature size, $\epsilon$. Let $\hat{t}$ be the unit tangent vector of an edge. For any directed edge from vertex $\vec{u}$ to vertex $\vec{v}$, the projected distance must remain at least $\epsilon$:
 \begin{equation}
-    \hat{t} \cdot (\vec{x}_v - \vec{x}_u) \ge \epsilon \quad \implies \quad - \hat{t}^T \vec{x}_v + \hat{t}^T \vec{x}_u \le -\epsilon
+    \hat{t} \cdot (\vec{v}-\vec{u}) \ge \epsilon \quad \implies \quad - \hat{t}^T \vec{v} + \hat{t}^T \vec{u} \le -\epsilon
 \end{equation}
 Note that $\epsilon$ is not for numerical stability, but another metric of crease patern ``niceness''. If $\epsilon$ is too small, the resulting crease pattern may contain tiny creases that are unpleasant to fold. If $\epsilon$ is too large, the solver may not be able to find any valid solutions. We empirically set $\epsilon = \frac{1}{4N}$, where $N$ is the grid size of the original topology.
 
-\paragraph{3. Quadruplet Activation and Convex Chain Invaders (Big-M Method):}
-If $z_k = 1$, quadruplet $k$ must be constrained such that the distance from the incircle center $\vec{P}_k$ to the boundary edge originating at node $u$ with inward normal $\hat{n}$ must exactly equal the radius $r_k$. However, if $z_k = 0$, we need the constraint to be relaxed. To encode this as linear rows in $M$, we choose a large constant $C\approx 3N$ and apply the following inequalities for each edge $u$ in the quadruplet (where $\vec{x}_u$ is one of the two vertices on the edge):
+\paragraph{3. Quadruplet Activation (Big-M Method):}
+If $z_k = 1$, quadruplet $k$ must be constrained such that the distance from the incircle center $\vec{P}_k$ to the boundary edge originating at vertex $\vec{u}$ with inward normal $\hat{n}$ must exactly equal the radius $r_k$. However, if $z_k = 0$, we need the constraint to be relaxed. To encode this as linear rows in $M$, we choose a large constant $C\approx 3N$ and apply the following inequalities to a vertex $\vec{u}$ on each edge in the quadruplet:
 \begin{align}
-    \hat{n}_u^T \vec{p}_k - \hat{n}_u^T \vec{x}_u - r_k + C z_k \le C \\
-    -\hat{n}_u^T \vec{p}_k + \hat{n}_u^T \vec{x}_u + r_k + C z_k \le C
+    \hat{n}_u^T \vec{p}_k - \hat{n}_u^T \vec{u} - r_k + C z_k \le C \\
+    -\hat{n}_u^T \vec{p}_k + \hat{n}_u^T \vec{u} + r_k + C z_k \le C
 \end{align}
 
+\paragraph{4. Incircle invasion:}
 Recall that a vertex only appears in the straight skeleton if and only if it is strictly closer to its constituent edges than to any other edge in the polygon. Therefore, if another edge ``invades'' the incircle, the quadruplet constraint is effectively useless. To prevent this, we must ensure that any invader edge $i$ maintains a normal projection distance from the incircle center $\vec{P}_k$ that is at least $r_k$:
 
 \begin{equation}
@@ -384,22 +403,36 @@ Recall that a vertex only appears in the straight skeleton if and only if it is 
 \end{equation}
 The addition of this constraint is why the MILP formulation requires $\vec{p}_k, r_k$ as state variables, while Equation~\ref{eq:quadruplet_constraint} did not.
 
-However, applying this to \textit{all} other edges in the polygon often over-constrains the MILP because edges separated by a reflex vertex may have a normal projection that appears to intersect the incircle---when in reality, the reflex vertex creates a physical barrier that prevents the edge from actually invading the incircle. Therefore, we precompute the convex chains of the polygon (groups of contiguous edges without reflex vertices), and only apply the invader constraint to edges that share a convex chain with any edge in the quadruplet.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=\textwidth]{figs/incircle_invasion.pdf}
+    \caption{From left to right: (1) An unconstrained polygon and its messy straight skeleton. (2) Applying an incircle constraint to a quadruplet collapses two interior points into one. (3) If an edge from the same convex chain invades the incircle, the constraint is useless and the straight skeleton is broken. (4) An edge from a different convex chain (separated by a concave vertex) has a normal projection that invades the incircle, but without breaking the straight skeleton.}
+\end{figure}
 
-\paragraph{4. Proximity Culling (Anti-Bowtie Clearance):}
+However, this equation treats every side of the polygon as an infinite line, while incircle invasion only occurs if the actual line segment invades the circle. Formulating this stronger constraint woould introduce a quadratic term (Euclidean distance from the incircle center). Therefore, we realize that edges that do not share a convex chain with any edge in the quadruplet are incapable of actually invading the incircle, and as a conservative heuristic, only apply the infinite line incircle invasion constraint to all other edges.
+
+\paragraph{5. Anti-Bowtie Clearance:}
 In some concave polygons, it is possible for a concave ``mouth'' vertex to clip through an edge on the opposite side of the polygon.
 
-For every reflex vertex $\vec{x}_c$ and a non-adjacent edge $(u, v)$ with normal $\hat{n}$ and tangent $\hat{t}$, we create three boolean variables based on the vertex's position relative to the edge: 
+For every reflex vertex $\vec{x}_c$ and a non-adjacent edge $(\vec{u}, \vec{v})$ with normal $\hat{n}$ and tangent $\hat{t}$, we create three boolean variables based on the vertex's position relative to the edge: 
 \begin{itemize}
-    \item $b_1$ = 1 if $\hat{n} \cdot (\vec{x}_c - \vec{x}_u) < 0$ (the vertex is behind the edge)
-    \item $b_2$ = 1 if $\hat{t} \cdot (\vec{x}_c - \vec{x}_u) > 0$ (the vertex is to the left of the edge)
-    \item $b_3$ = 1 if $\hat{t} \cdot (\vec{x}_c - \vec{x}_u) < 0$ (the vertex is to the right of the edge)
+    \item $b_1$ = 1 if $\hat{n} \cdot (\vec{x}_c - \vec{u}) < 0$ (the vertex is behind the edge)
+    \item $b_2$ = 1 if $\hat{t} \cdot (\vec{x}_c - \vec{u}) > 0$ (the vertex is to the left of the edge)
+    \item $b_3$ = 1 if $\hat{t} \cdot (\vec{x}_c - \vec{u}) < 0$ (the vertex is to the right of the edge)
 \end{itemize} 
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.6\textwidth]{figs/bowtie.pdf}
+    \caption{Left: an unconstrained polygon. Center: the polygon with a ``bowtie'' violation. Right: the three safe zones defined by $b_1,b_2,b_3$ and the danger zone (red) where the constraint is violated, defined by the edge's vectors $\hat{n},\hat{t}$ and minimum clearance size $\epsilon$.}
+\end{figure}
+
+
 We can enforce that the reflex vertex must reside in at least one safe sector by applying the constraint:
 \[b_1 + b_2 + b_3 \ge 1 \implies -b_1 - b_2 - b_3 \le -1\]
 The MILP solver gets to choose which of $b_1, b_2, b_3$ is true. Similar to the quadruplet toggles $z_k$, we can use big-M constraints to link these boolean variables to toggle which which safe zone the vertex is constrained to. For example, the corresponding constraint for $b_1$ would be:
 \begin{equation}
-    \vec{n} \cdot (\vec{p}_c - \vec{p}_u) \ge \epsilon - C(1 - b_1) \quad \implies \quad -\vec{n}^T \vec{p}_c + \vec{n}^T \vec{p}_u + C b_1 \le C - \epsilon
+    \hat{n} \cdot (\vec{x}_c - \vec{u}) \ge \epsilon - C(1 - b_1) \quad \implies \quad -\hat{n}^T \vec{x}_c + \hat{n}^T \vec{u} + C b_1 \le C - \epsilon
 \end{equation}
 Recall that these constraints are added for every pair of reflex vertex and non-adjacent edge. 
 
