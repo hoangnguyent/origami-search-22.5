@@ -1083,126 +1083,126 @@ def canonicalize_tiling_geometry(G, pos_solved_exact, N):
 # =============================================================================
 # 7. DEBUG & VISUALIZATION
 # =============================================================================
-import matplotlib.pyplot as plt
-import random
-import math
+# import matplotlib.pyplot as plt
+# import random
+# import math
 
-# def draw_tiling_solution(ax, G, pos_init, pos_solved_exact, title=""):
-#     """
-#     Renders a specific tiling solution onto a matplotlib axis.
-#     Plots the original topology in light gray and the exact solution in blue.
-#     """
-#     ax.set_title(title, fontsize=10)
+# # def draw_tiling_solution(ax, G, pos_init, pos_solved_exact, title=""):
+# #     """
+# #     Renders a specific tiling solution onto a matplotlib axis.
+# #     Plots the original topology in light gray and the exact solution in blue.
+# #     """
+# #     ax.set_title(title, fontsize=10)
     
-#     # 22.5 degree projection constants
-#     S2 = math.sqrt(2) / 2.0
+# #     # 22.5 degree projection constants
+# #     S2 = math.sqrt(2) / 2.0
     
-#     # Map exact 4D coordinates to Cartesian for visualization
-#     pos_float = {}
-#     for u, v_ex in pos_solved_exact.items():
-#         pos_float[u] = (
-#             float(v_ex.x) + S2 * (float(v_ex.y) - float(v_ex.w)),
-#             float(v_ex.z) + S2 * (float(v_ex.y) + float(v_ex.w)),
-#         )
+# #     # Map exact 4D coordinates to Cartesian for visualization
+# #     pos_float = {}
+# #     for u, v_ex in pos_solved_exact.items():
+# #         pos_float[u] = (
+# #             float(v_ex.x) + S2 * (float(v_ex.y) - float(v_ex.w)),
+# #             float(v_ex.z) + S2 * (float(v_ex.y) + float(v_ex.w)),
+# #         )
 
-#     # Draw underlying topology (lightly) for context
-#     for u, v in G.edges():
-#         ax.plot(
-#             [pos_init[u][0], pos_init[v][0]],
-#             [pos_init[u][1], pos_init[v][1]],
-#             "k-", lw=1, alpha=0.1, zorder=1
-#         )
+# #     # Draw underlying topology (lightly) for context
+# #     for u, v in G.edges():
+# #         ax.plot(
+# #             [pos_init[u][0], pos_init[v][0]],
+# #             [pos_init[u][1], pos_init[v][1]],
+# #             "k-", lw=1, alpha=0.1, zorder=1
+# #         )
 
-#     # Draw the solved Tiling geometry
-#     for u, v in G.edges():
-#         ax.plot(
-#             [pos_float[u][0], pos_float[v][0]],
-#             [pos_float[u][1], pos_float[v][1]],
-#             "b-", lw=1.5, alpha=0.8, zorder=2
-#         )
+# #     # Draw the solved Tiling geometry
+# #     for u, v in G.edges():
+# #         ax.plot(
+# #             [pos_float[u][0], pos_float[v][0]],
+# #             [pos_float[u][1], pos_float[v][1]],
+# #             "b-", lw=1.5, alpha=0.8, zorder=2
+# #         )
 
-#     # Plot vertices
-#     for u in G.nodes():
-#         ax.plot(pos_float[u][0], pos_float[u][1], "ko", markersize=3, zorder=3)
+# #     # Plot vertices
+# #     for u in G.nodes():
+# #         ax.plot(pos_float[u][0], pos_float[u][1], "ko", markersize=3, zorder=3)
 
-#     ax.set_aspect("equal")
-#     ax.axis("off")
-from src.engine.tiling2cp import draw_cp_ax, build_crease_pattern, load_frozen_blob
-def debug_plot_diverse_tilings(db_id=None, db_name="topologies_4_none.db", N=4, 
-                               symmetry="none", diversity_threshold=2, num_solutions=5):
-    """
-    Pick a topology, solve for multiple tilings, and plot them in a grid.
-    """
-    if db_id is None:
-        # Assuming a range based on your previous N=4 'none' runs
-        db_id = random.randint(1, 9000)
+# #     ax.set_aspect("equal")
+# #     ax.axis("off")
+# from src.engine.tiling2cp import draw_cp_ax, build_crease_pattern, load_frozen_blob
+# def debug_plot_diverse_tilings(db_id=None, db_name="topologies_4_none.db", N=4, 
+#                                symmetry="none", diversity_threshold=2, num_solutions=5):
+#     """
+#     Pick a topology, solve for multiple tilings, and plot them in a grid.
+#     """
+#     if db_id is None:
+#         # Assuming a range based on your previous N=4 'none' runs
+#         db_id = random.randint(1, 9000)
         
-    print(f"--- Debugging Topo ID: {db_id} (N={N}, Sym={symmetry}) ---")
+#     print(f"--- Debugging Topo ID: {db_id} (N={N}, Sym={symmetry}) ---")
     
-    # Extract the base topology from the database
-    G_raw = extract_topology(db_id, db_name=db_name, N=N)
-    if G_raw is None:
-        return
+#     # Extract the base topology from the database
+#     G_raw = extract_topology(db_id, db_name=db_name, N=N)
+#     if G_raw is None:
+#         return
 
-    # Solve with multi-solution requirements
-    # Note: solve_tiling now returns a list of (G, pos_init, pos_solved_exact, faces, n2i)
-    outputs = solve_tiling(
-        G_raw, 
-        symmetry=symmetry, 
-        N=N, 
-        verbose=True, 
-        time_limit=15, 
-        diversity_threshold=diversity_threshold, 
-        num_solutions=num_solutions
-    )
+#     # Solve with multi-solution requirements
+#     # Note: solve_tiling now returns a list of (G, pos_init, pos_solved_exact, faces, n2i)
+#     outputs = solve_tiling(
+#         G_raw, 
+#         symmetry=symmetry, 
+#         N=N, 
+#         verbose=True, 
+#         time_limit=15, 
+#         diversity_threshold=diversity_threshold, 
+#         num_solutions=num_solutions
+#     )
 
-    if not outputs:
-        print(f"No valid tilings found for Topo {db_id}.")
-        return
+#     if not outputs:
+#         print(f"No valid tilings found for Topo {db_id}.")
+#         return
 
-    num_found = len(outputs)
-    print(f"Found {num_found} diverse solutions.")
+#     num_found = len(outputs)
+#     print(f"Found {num_found} diverse solutions.")
 
-    # Setup plotting grid
-    cols = min(3, num_found)
-    rows = math.ceil(num_found / cols)
-    fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
+#     # Setup plotting grid
+#     cols = min(3, num_found)
+#     rows = math.ceil(num_found / cols)
+#     fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 5 * rows))
     
-    if num_found == 1:
-        axes_flat = [axes]
-    else:
-        axes_flat = axes.flatten()
+#     if num_found == 1:
+#         axes_flat = [axes]
+#     else:
+#         axes_flat = axes.flatten()
 
-    for i, out in enumerate(outputs):
-        G, pos_init, pos_solved_exact, faces, n2i = out
-        blob = export_frozen_blob(G, pos_solved_exact, n2i, faces)
+#     for i, out in enumerate(outputs):
+#         G, pos_init, pos_solved_exact, faces, n2i = out
+#         blob = export_frozen_blob(G, pos_solved_exact, n2i, faces)
 
-        loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
-        cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=4)
-        draw_cp_ax(
-            axes_flat[i],
-            cp,
-            title=f"Solution {i+1} (ID: {db_id})"
-        )
+#         loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
+#         cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=4)
+#         draw_cp_ax(
+#             axes_flat[i],
+#             cp,
+#             title=f"Solution {i+1} (ID: {db_id})"
+#         )
 
-    # Hide unused axes
-    for j in range(i + 1, len(axes_flat)):
-        axes_flat[j].axis('off')
+#     # Hide unused axes
+#     for j in range(i + 1, len(axes_flat)):
+#         axes_flat[j].axis('off')
 
-    plt.tight_layout()
-    plt.show()
+#     plt.tight_layout()
+#     plt.show()
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
   
-    # Example: solve for 5 diverse solutions with a threshold of 2 cuts
-    debug_plot_diverse_tilings(
-        db_id=13936, 
-        db_name="topologies_4_book.db", 
-        N=4, 
-        symmetry="book", 
-        diversity_threshold=4, 
-        num_solutions=6
-    )
+#     # Example: solve for 5 diverse solutions with a threshold of 2 cuts
+#     debug_plot_diverse_tilings(
+#         db_id=13936, 
+#         db_name="topologies_4_book.db", 
+#         N=4, 
+#         symmetry="book", 
+#         diversity_threshold=4, 
+#         num_solutions=6
+#     )
 
 
 """

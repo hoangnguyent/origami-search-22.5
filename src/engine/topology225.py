@@ -8,7 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 import itertools
-from z3 import BoolVal, Solver, Bool, And, Or, Not, If, sat, Implies
+from z3.z3 import BoolVal, Solver, Bool, And, Or, Not, If, sat, Implies
 import cProfile
 import pstats
 
