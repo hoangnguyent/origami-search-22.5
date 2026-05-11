@@ -49,14 +49,14 @@ class TreeDrawer:
 
         # --- SETUP UI ELEMENTS ---
         # Slider for t-parameter (Log space: 10^val)
-        self.ax_slider = plt.axes([0.25, 0.12, 0.5, 0.03])
-        self.t_slider = Slider(
-            ax=self.ax_slider,
-            label='simple <--> complex',
-            valmin=-5.0,
-            valmax=1.0,
-            valinit=-2.0
-        )
+        # self.ax_slider = plt.axes([0.25, 0.12, 0.5, 0.03])
+        # self.t_slider = Slider(
+        #     ax=self.ax_slider,
+        #     label='simple <--> complex',
+        #     valmin=-5.0,
+        #     valmax=1.0,
+        #     valinit=-2.0
+        # )
 
         # Buttons
         self.btn_run_ax = plt.axes([0.3, 0.03, 0.15, 0.06])
@@ -186,8 +186,8 @@ class TreeDrawer:
         """Converts the drawing to a NetworkX graph and triggers the FAISS pipeline."""
         
         # --- Grab and calculate the t-parameter from the slider ---
-        log_t = self.t_slider.val
-        t_val = 10 ** log_t
+        # log_t = self.t_slider.val
+        # t_val = 10 ** log_t
         # print(f"\nBuilding graph and extracting edge lengths...")
         # print(f"Executing query with t = {t_val:.6f} (log10 = {log_t:.2f})")
         
@@ -223,10 +223,10 @@ if __name__ == "__main__":
     # dbs_to_search = [(4, 'diag'), (4, 'none'), (3, 'none'), (3, 'diag')]
     dbs_to_search = [
         # (4, 'diag'), 
-        (3, 'diag'), 
+        # (3, 'diag'), 
+        # (3, 'none'),
         # (4, 'none'),
-        (3, 'none'),
-        # (5, 'diag')
+        (5, 'diag')
     ]
 
     app = TreeDrawer(db_configs = dbs_to_search, n_results=5)

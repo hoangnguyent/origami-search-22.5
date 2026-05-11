@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SEARCH-22.5 Remote Query</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <h1>Remote Query</h1>
+      <p class="hint">Draw a tree, pick databases, and query the backend.</p>
+
+      <label class="field">
+        <span>Interface token</span>
+        <input id="authToken" type="password" placeholder="Optional if server is open" />
+      </label>
+
+      <div class="panel">
+        <h2>Databases</h2>
+        <label><input type="checkbox" class="db-check" data-n="3" data-sym="diag" checked /> 3 diag</label>
+        <label><input type="checkbox" class="db-check" data-n="3" data-sym="none" checked /> 3 none</label>
+        <label><input type="checkbox" class="db-check" data-n="4" data-sym="diag" checked /> 4 diag</label>
+        <label><input type="checkbox" class="db-check" data-n="4" data-sym="none" checked /> 4 none</label>
+        <label><input type="checkbox" class="db-check" data-n="5" data-sym="diag" checked /> 5 diag</label>
+      </div>
+
+      <label class="field">
+        <span>Top results</span>
+        <input id="resultCount" type="number" min="1" max="25" value="5" />
+      </label>
+
+      <div class="actions">
+        <button id="runQuery">Run Query</button>
+        <button id="resetTree" class="secondary">Reset Tree</button>
+      </div>
+
+      <p id="status" class="status">Ready.</p>
+    </aside>
+
+    <main class="workspace">
+      <section class="editor-panel">
+        <div class="section-head">
+          <h2>Tree Editor</h2>
+          <span>Click to branch, drag nodes, Esc to deselect, Backspace to delete.</span>
+        </div>
+        <svg id="editorSvg" viewBox="0 0 800 560" role="img" aria-label="Interactive tree editor"></svg>
+      </section>
+
+      <section class="results-panel">
+        <div class="section-head">
+          <h2>Results</h2>
+          <span id="resultSummary">No query run yet.</span>
+        </div>
+        <div id="resultsGrid" class="results-grid"></div>
+      </section>
+
+      <section class="detail-panel">
+        <div class="section-head">
+          <h2>Detail View</h2>
+          <span id="detailSummary">Select a result.</span>
+        </div>
+        <div id="detailGrid" class="detail-grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

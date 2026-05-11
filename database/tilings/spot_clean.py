@@ -49,28 +49,12 @@ def remove_tiling(tiling_id, N, symmetry):
 if __name__ == "__main__":
 
     pass
-    # targets = [
-    #     (28461, 3, 'none'),
-    #     (31541, 3, 'none'),
-    #     (31543, 3, 'none'),
-    #     (49105, 3, 'none'),
-    #     (49118, 3, 'none'),
-
-    #     (42964, 4, 'diag'),
-    #     (54891, 4, 'diag'),
-    #     (65390, 4, 'diag'),
-    #     (80214, 4, 'diag'),
-    #     (88627, 4, 'diag'),
-    #     (93123, 4, 'diag'),
-    #     (107259, 4, 'diag'),
-    #     (114341, 4, 'diag'),
-    #     (139578, 4, 'diag'),
-    #     (139581, 4, 'diag'),
-    #     (146851, 4, 'diag'),
-
-    #     (201606, 4, 'diag'),
-    # ]
-    targets = []
+    targets = [
+        (2253, 4, 'diag'),
+        (19633, 4, 'diag'),
+        (2249, 4, 'diag'),
+        
+    ]
     for tiling_id, N, sym in targets:
         remove_tiling(tiling_id, N, sym)
     

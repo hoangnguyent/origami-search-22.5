@@ -160,28 +160,153 @@ def random_pull_from_db(N, symmetry, n=5):
         })
     return results
 
+# def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')], n=5):
+#     """
+#     Lightning fast federated search using cached PCA Whitening.
+#     Dynamically connects to SQLite only for the global top hits to reconstruct geometry.
+#     """
+#     # 1. Compute Base HKT Signature for the Query
+#     raw_query_eig = extract_eigenvalues(query_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
+#     base_hkt = compute_hkt_signature(raw_query_eig, dim=DIMENSION).astype('float32')
+    
+#     # FAISS expects 2D arrays
+#     base_hkt_2d = np.array([base_hkt])
+
+#     all_raw_hits = []
+    
+#     print(f"Federated Search across {len(db_configs)} databases...")
+    
+#     # 2. Federated Search (Pure FAISS, No SQLite)
+#     # 2. Federated Search (Pure FAISS, No SQLite)
+#     for N, sym in db_configs:
+#         prefix = f"database/tilings/faiss_cache/db_{N}_{sym}"
+#         try:
+#             # Load cached map and Z-score parameters
+#             with open(f"{prefix}_data.pkl", 'rb') as f:
+#                 cache_data = pickle.load(f)
+                
+#             faiss_map = cache_data['faiss_map']
+#             mu = cache_data['mu']
+#             sigma = cache_data['sigma']
+            
+#             index = faiss.read_index(f"{prefix}_l2.index")
+            
+#             if index.ntotal == 0:
+#                 continue
+
+#             # Apply THIS database's Z-Score to the user's query
+#             z_query = (base_hkt_2d - mu) / sigma
+#             z_query = z_query.astype(np.float32)
+            
+#             # Query the index
+#             D, I = index.search(z_query, n)
+            
+#             for dist, idx in zip(D[0], I[0]):
+#                 if idx != -1:
+#                     all_raw_hits.append({
+#                         'distance': float(dist),
+#                         'tiling_id': faiss_map[int(idx)],
+#                         'N': N,
+#                         'symmetry': sym
+#                     })
+#         except Exception as e:
+#             print(f"Warning: Failed to search FAISS cache for DB {N}_{sym}. Error: {e}")
+
+#     # 3. Sort Globally
+#     all_raw_hits.sort(key=lambda x: x['distance'])
+#     global_top_hits = all_raw_hits[:n]
+    
+#     print(f"Found Top {len(global_top_hits)} hits. Reconstructing geometry...")
+
+#     # 4. Late Reconstruction (Connect to SQLite ONLY for the winners)
+#     results = []
+#     active_sessions = {}
+#     try:
+#         for rank, hit in enumerate(global_top_hits):
+#             N, sym = hit['N'], hit['symmetry']
+#             t_id = hit['tiling_id']
+            
+#             # Open a connection to this specific DB if we haven't already
+#             if (N, sym) not in active_sessions:
+#                 db_uri = f'sqlite:///database/tilings/storage/tilings_{N}_{sym}.db'
+#                 engine = create_engine(db_uri)
+#                 active_sessions[(N, sym)] = sessionmaker(bind=engine)()
+                
+#             session = active_sessions[(N, sym)]
+            
+#             # Fetch the actual blob
+#             tiling = session.query(Tiling).filter_by(id=t_id).first()
+#             if not tiling:
+#                 continue
+                
+#             topo = session.query(Topology).filter_by(id=tiling.topology_id).first()
+            
+#             # Deserialize Blob
+#             blob = pickle.loads(tiling.tiling_blob)
+#             loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
+#             G_raw = nx.Graph()
+#             G_raw.add_edges_from(decompress_edges(topo.binary_state, N))
+#             nx.set_node_attributes(G_raw, {node: node for node in G_raw.nodes()}, 'pos')
+#             # Build CP
+#             try:
+#                 cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=N)
+#                 cp = add_hinges(cp)
+#                 cp_frozen = canonicalize(cp)
+#                 cp = unfreeze(cp_frozen)
+#             except Exception as e:
+#                 print(f"Error building crease pattern for tiling ID {t_id} in DB {N}_{sym}. Skipping this result.")
+#                 continue
+            
+#             # Fold and Extract Tree
+#             fold = cp_to_fold(cp)
+#             try:
+#                 res_tree = fold.get_tree_and_packing()[0]
+#             except:
+#                 print(f"Error extracting tree for tiling ID {t_id} in DB {N}_{sym}. Skipping this result.")
+#                 continue
+#             results.append({
+#                 'rank': rank + 1,
+#                 'distance': hit['distance'],
+#                 'N': N,
+#                 'symmetry': sym,
+#                 'topology_id': topo.id if topo else None,
+#                 'tiling_id': tiling.id,
+#                 'G_raw': G_raw,
+#                 'G_solved': loaded_G,
+#                 'pos_solved': loaded_pos,
+#                 'cp': cp,
+#                 'fold': fold,
+#                 'tree': res_tree
+#             })
+#     except Exception as e:
+#         print(f"Error during late reconstruction: {e}")
+
+#     finally:
+#         # Guarantee all database connections are cleanly closed
+#         for s in active_sessions.values():
+#             s.close()
+            
+#     return results
 def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')], n=5):
     """
-    Lightning fast federated search using cached PCA Whitening.
-    Dynamically connects to SQLite only for the global top hits to reconstruct geometry.
+    Lightning fast federated search using cached Z-Scores.
+    Dynamically connects to SQLite and filters for CP uniqueness.
     """
-    # 1. Compute Base HKT Signature for the Query
     raw_query_eig = extract_eigenvalues(query_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
-    base_hkt = compute_hkt_signature(raw_query_eig, dim=DIMENSION).astype('float32')
-    
-    # FAISS expects 2D arrays
+    base_hkt = compute_hkt_signature(raw_query_eig, dim = DIMENSION).astype('float32')
     base_hkt_2d = np.array([base_hkt])
 
     all_raw_hits = []
     
+    # We fetch significantly more hits from FAISS to act as a buffer 
+    # in case many top results are duplicate CPs across different databases.
+    search_buffer = n * 10 
+    
     print(f"Federated Search across {len(db_configs)} databases...")
     
-    # 2. Federated Search (Pure FAISS, No SQLite)
-    # 2. Federated Search (Pure FAISS, No SQLite)
     for N, sym in db_configs:
         prefix = f"database/tilings/faiss_cache/db_{N}_{sym}"
         try:
-            # Load cached map and Z-score parameters
             with open(f"{prefix}_data.pkl", 'rb') as f:
                 cache_data = pickle.load(f)
                 
@@ -190,16 +315,13 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
             sigma = cache_data['sigma']
             
             index = faiss.read_index(f"{prefix}_l2.index")
-            
             if index.ntotal == 0:
                 continue
 
-            # Apply THIS database's Z-Score to the user's query
-            z_query = (base_hkt_2d - mu) / sigma
-            z_query = z_query.astype(np.float32)
+            z_query = ((base_hkt_2d - mu) / sigma).astype(np.float32)
             
-            # Query the index
-            D, I = index.search(z_query, n)
+            # Fetch the buffered amount
+            D, I = index.search(z_query, search_buffer)
             
             for dist, idx in zip(D[0], I[0]):
                 if idx != -1:
@@ -212,60 +334,61 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
         except Exception as e:
             print(f"Warning: Failed to search FAISS cache for DB {N}_{sym}. Error: {e}")
 
-    # 3. Sort Globally
+    # Sort ALL hits globally across all databases
     all_raw_hits.sort(key=lambda x: x['distance'])
-    global_top_hits = all_raw_hits[:n]
     
-    print(f"Found Top {len(global_top_hits)} hits. Reconstructing geometry...")
+    print("Filtering top hits for unique Crease Patterns...")
 
-    # 4. Late Reconstruction (Connect to SQLite ONLY for the winners)
     results = []
+    seen_cps = set()
     active_sessions = {}
+    
     try:
-        for rank, hit in enumerate(global_top_hits):
+        for hit in all_raw_hits:
+            # Stop exactly when we have enough unique results
+            if len(results) >= n:
+                break
+                
             N, sym = hit['N'], hit['symmetry']
             t_id = hit['tiling_id']
             
-            # Open a connection to this specific DB if we haven't already
             if (N, sym) not in active_sessions:
+                from sqlalchemy import create_engine
+                from sqlalchemy.orm import sessionmaker
                 db_uri = f'sqlite:///database/tilings/storage/tilings_{N}_{sym}.db'
                 engine = create_engine(db_uri)
                 active_sessions[(N, sym)] = sessionmaker(bind=engine)()
                 
             session = active_sessions[(N, sym)]
             
-            # Fetch the actual blob
             tiling = session.query(Tiling).filter_by(id=t_id).first()
             if not tiling:
                 continue
                 
             topo = session.query(Topology).filter_by(id=tiling.topology_id).first()
             
-            # Deserialize Blob
             blob = pickle.loads(tiling.tiling_blob)
             loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
             G_raw = nx.Graph()
             G_raw.add_edges_from(decompress_edges(topo.binary_state, N))
             nx.set_node_attributes(G_raw, {node: node for node in G_raw.nodes()}, 'pos')
-            # Build CP
-            try:
-                cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=N)
-                cp = add_hinges(cp)
-                cp_frozen = canonicalize(cp)
-                cp = unfreeze(cp_frozen)
-            except Exception as e:
-                print(f"Error building crease pattern for tiling ID {t_id} in DB {N}_{sym}. Skipping this result.")
-                continue
+            cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=N)
+            cp = add_hinges(cp)
             
-            # Fold and Extract Tree
+            # --- THE UNIQUENESS FILTER ---
+            cp_frozen = canonicalize(cp)
+            if cp_frozen in seen_cps:
+                continue # Skip this hit, it's a duplicate CP!
+                
+            seen_cps.add(cp_frozen)
+            cp = unfreeze(cp_frozen)
+            # -----------------------------
+            
             fold = cp_to_fold(cp)
-            try:
-                res_tree = fold.get_tree_and_packing()[0]
-            except:
-                print(f"Error extracting tree for tiling ID {t_id} in DB {N}_{sym}. Skipping this result.")
-                continue
+            res_tree = fold.get_tree_and_packing()[0]
+            
             results.append({
-                'rank': rank + 1,
+                'rank': len(results) + 1,
                 'distance': hit['distance'],
                 'N': N,
                 'symmetry': sym,
@@ -278,16 +401,11 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
                 'fold': fold,
                 'tree': res_tree
             })
-    except Exception as e:
-        print(f"Error during late reconstruction: {e}")
-
     finally:
-        # Guarantee all database connections are cleanly closed
         for s in active_sessions.values():
             s.close()
             
     return results
-
 # =============================================================================
 # 4. VISUALIZATION & MEGAPLOT
 # =============================================================================

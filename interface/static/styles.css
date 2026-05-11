@@ -1,0 +1,64 @@
+:root {
+  color-scheme: dark;
+  --bg: #0b1020;
+  --panel: #11182d;
+  --panel-2: #0e1528;
+  --line: #26314f;
+  --text: #e8edf9;
+  --muted: #9daccc;
+  --accent: #7ad3ff;
+  --accent-2: #8cffc1;
+  --danger: #ff6b8a;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; background: radial-gradient(circle at top, #18233f 0%, #0b1020 55%, #070b14 100%); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif; }
+button, input { font: inherit; }
+
+.app-shell { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+.sidebar { padding: 20px; border-right: 1px solid var(--line); background: rgba(8, 12, 22, 0.72); backdrop-filter: blur(16px); }
+.sidebar h1 { margin: 0 0 8px; font-size: 24px; }
+.hint, .status, .section-head span { color: var(--muted); }
+.field, .panel { display: grid; gap: 8px; margin: 18px 0; }
+.field span, .panel h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .12em; color: var(--muted); }
+.field input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255,255,255,0.04); color: var(--text); }
+.panel label { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+button { border: 1px solid var(--line); border-radius: 12px; padding: 11px 14px; background: linear-gradient(180deg, rgba(122,211,255,0.22), rgba(122,211,255,0.08)); color: var(--text); cursor: pointer; }
+button.secondary { background: rgba(255,255,255,0.04); }
+button:hover { border-color: rgba(122,211,255,0.55); }
+
+.workspace { padding: 18px; display: grid; gap: 16px; }
+.editor-panel, .results-panel, .detail-panel { background: rgba(12, 18, 33, 0.80); border: 1px solid rgba(255,255,255,0.06); border-radius: 18px; padding: 14px; box-shadow: 0 12px 48px rgba(0,0,0,.24); }
+.section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.section-head h2 { margin: 0; font-size: 18px; }
+#editorSvg { width: 100%; height: 560px; display: block; border-radius: 14px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.05); }
+
+.results-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.result-card { padding: 10px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03); cursor: pointer; }
+.result-card.active { border-color: rgba(122,211,255,0.75); box-shadow: 0 0 0 1px rgba(122,211,255,0.12) inset; }
+.result-meta { margin-top: 8px; display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
+.thumb { width: 100%; aspect-ratio: 1 / 1; border-radius: 12px; background: rgba(0,0,0,0.24); border: 1px solid rgba(255,255,255,0.05); overflow: hidden; }
+
+.detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.detail-card { padding: 10px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.03); }
+.detail-card h3 { margin: 0 0 8px; font-size: 14px; color: var(--accent); text-transform: uppercase; letter-spacing: .08em; }
+.detail-svg { width: 100%; height: 240px; display: block; background: rgba(0,0,0,0.22); border-radius: 12px; }
+.detail-text { white-space: pre-wrap; line-height: 1.4; color: var(--text); font-size: 13px; }
+.detail-card.wide { grid-column: 1 / -1; }
+
+svg .edge { stroke: rgba(230,235,248,0.85); stroke-width: 3; stroke-linecap: round; }
+svg .node { stroke: rgba(255,255,255,0.88); stroke-width: 2; }
+svg .selected-node { fill: var(--danger); stroke: #ffd0d8; }
+svg .tree-node { fill: #9ed6ff; }
+/* svg .crease-h { stroke: rgba(255,255,255,0.78); }
+svg .crease-m { stroke: var(--accent-2); }
+svg .crease-v { stroke: var(--danger); }
+svg .crease-a, svg .crease-b { stroke: #b9c2d6; } */
+svg .gridline { stroke: rgba(255,255,255,0.08); stroke-width: 1; }
+svg text { font-family: inherit; }
+
+@media (max-width: 1100px) {
+  .app-shell { grid-template-columns: 1fr; }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+}
