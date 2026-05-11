@@ -2,51 +2,50 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 const state = {
   nodes: {
-    0: { id: 0, x: 300, y: 280 },
-    1: { id: 1, x: 500, y: 280 },
+    0: { id: 0, x: 400, y: 280 },
+    // 1: { id: 1, x: 500, y: 280 },
   },
-  edges: [{ u: 0, v: 1 }],
-  nextNodeId: 2,
-  selectedNode: 1,
+  edges: [],
+  nextNodeId: 1,
+  selectedNode: 0,
   draggingNode: null,
   queryResult: null,
-  activeResultIndex: null,
 };
-const red = "#ff6b6b";
-const blue = "#4dabf7";
-const grey = "#9aa8bf";
-const black = "#2b3a4a";
-const white = "#f0f3f7";
+
 const COLORS = {
-  rm: red,
-  rv: blue,
-  av: blue,
-  hm: red,
-  hv: blue,
-  h: grey,
-  v: blue,
-  m: red,
-  b: white,
+  rm: "#ff6b6b",
+  rv: "#4dabf7",
+  av: "#4dabf7",
+  hm: "#ff6b6b",
+  hv: "#4dabf7",
+  h: "#9aa8bf",
+  v: "#4dabf7",
+  m: "#ff6b6b",
+  b: "#f0f3f7",
 };
+
 const editorSvg = document.getElementById("editorSvg");
 const resultsGrid = document.getElementById("resultsGrid");
-const detailGrid = document.getElementById("detailGrid");
 const statusEl = document.getElementById("status");
 const resultSummary = document.getElementById("resultSummary");
-const detailSummary = document.getElementById("detailSummary");
-const tokenInput = document.getElementById("authToken");
+const detailModal = document.getElementById("detailModal");
+const modalGrid = document.getElementById("modalGrid");
+const modalTitle = document.getElementById("modalTitle");
 
-tokenInput.value = localStorage.getItem("search22_interface_token") || "";
-tokenInput.addEventListener("input", () => {
-  localStorage.setItem("search22_interface_token", tokenInput.value);
-});
-
+// Event Listeners
 document.getElementById("runQuery").addEventListener("click", runQuery);
 document.getElementById("resetTree").addEventListener("click", resetTree);
+document.getElementById("closeModal").addEventListener("click", () => detailModal.classList.add("hidden"));
 document.addEventListener("keydown", onKeyDown);
 editorSvg.addEventListener("mousedown", onEditorMouseDown);
 window.addEventListener("mousemove", onEditorMouseMove);
 window.addEventListener("mouseup", onEditorMouseUp);
+
+document.getElementById("downloadCpBtn").addEventListener("click", () => {
+  // Dummy logic for now. Will wire up to a blob export later.
+//   alert("CP Download functionality will be implemented here!");
+    console.log("download cp button clicked, but functionality is not implemented yet.");
+});
 
 renderEditor();
 
@@ -56,13 +55,10 @@ function setStatus(message, isError = false) {
 }
 
 function resetTree() {
-  state.nodes = {
-    0: { id: 0, x: 300, y: 280 },
-    1: { id: 1, x: 500, y: 280 },
-  };
-  state.edges = [{ u: 0, v: 1 }];
-  state.nextNodeId = 2;
-  state.selectedNode = 1;
+  state.nodes = { 0: { id: 0, x: 400, y: 280 } };
+  state.edges = [];
+  state.nextNodeId = 1;
+  state.selectedNode = 0;
   state.draggingNode = null;
   renderEditor();
   setStatus("Tree reset.");
@@ -70,6 +66,11 @@ function resetTree() {
 
 function onKeyDown(event) {
   if (event.key === "Escape") {
+    // Close modal on Escape
+    if (!detailModal.classList.contains("hidden")) {
+      detailModal.classList.add("hidden");
+      return;
+    }
     state.selectedNode = null;
     state.draggingNode = null;
     renderEditor();
@@ -90,11 +91,7 @@ function getSvgPoint(event) {
   point.x = event.clientX;
   point.y = event.clientY;
   const ctm = editorSvg.getScreenCTM();
-  if (!ctm) {
-    return { x: 0, y: 0 };
-  }
-  const local = point.matrixTransform(ctm.inverse());
-  return { x: local.x, y: local.y };
+  return ctm ? point.matrixTransform(ctm.inverse()) : { x: 0, y: 0 };
 }
 
 function getClosestNode(x, y, hitRadius = 18) {
@@ -114,6 +111,8 @@ function onEditorMouseDown(event) {
   if (event.button !== 0) return;
   const { x, y } = getSvgPoint(event);
   const hit = getClosestNode(x, y);
+  
+  // 1. If clicking an existing node, select and prepare to drag it
   if (hit) {
     state.selectedNode = hit.id;
     state.draggingNode = hit.id;
@@ -121,16 +120,22 @@ function onEditorMouseDown(event) {
     return;
   }
 
+  // 2. If clicking empty space with a node selected, branch off it
   if (state.selectedNode !== null) {
     const newNode = { id: state.nextNodeId, x, y };
     state.nodes[newNode.id] = newNode;
     state.edges.push({ u: state.selectedNode, v: newNode.id });
     state.nextNodeId += 1;
-    state.selectedNode = newNode.id;
+    
+    // THE FIX: If Shift is held down, do NOT advance the selection.
+    // This leaves the hub node selected so you can keep clicking to form a star.
+    if (!event.shiftKey) {
+      state.selectedNode = newNode.id;
+    }
+    
     renderEditor();
   }
 }
-
 function onEditorMouseMove(event) {
   if (state.draggingNode === null) return;
   const { x, y } = getSvgPoint(event);
@@ -155,21 +160,12 @@ function renderEditor() {
 
   for (const node of Object.values(state.nodes)) {
     editorSvg.appendChild(makeSvg("circle", {
-      cx: node.x,
-      cy: node.y,
-      r: 12,
+      cx: node.x, cy: node.y, r: 12,
       class: node.id === state.selectedNode ? "node selected-node" : "node tree-node",
     }));
-
-    const label = makeSvg("text", {
-      x: node.x,
-      y: node.y - 18,
-      fill: "#d6def0",
-      "font-size": 12,
-      "text-anchor": "middle",
-    });
-    label.textContent = String(node.id);
-    editorSvg.appendChild(label);
+    // const label = makeSvg("text", { x: node.x, y: node.y - 18, fill: "#d6def0", "font-size": 12, "text-anchor": "middle" });
+    // label.textContent = String(node.id);
+    // editorSvg.appendChild(label);
   }
 }
 
@@ -183,23 +179,36 @@ function makeSvg(tag, attrs = {}) {
 
 function serializeTree() {
   const nodes = Object.values(state.nodes)
-    .map((node) => ({ id: node.id, x: node.x, y: node.y }))
+    .map((n) => ({ id: n.id, x: n.x, y: n.y }))
     .sort((a, b) => a.id - b.id);
-
-  const edges = state.edges.map((edge) => {
-    const start = state.nodes[edge.u];
-    const end = state.nodes[edge.v];
+  const edges = state.edges.map((e) => {
+    const start = state.nodes[e.u];
+    const end = state.nodes[e.v];
     const length = Math.max(Math.hypot(start.x - end.x, start.y - end.y) / 60, 1e-5);
-    return { u: edge.u, v: edge.v, length };
+    return { u: e.u, v: e.v, length };
   });
-
   return { nodes, edges };
 }
 
 function selectedDbConfigs() {
-  return [...document.querySelectorAll(".db-check")]
-    .filter((input) => input.checked)
-    .map((input) => ({ N: Number(input.dataset.n), symmetry: input.dataset.sym }));
+  const isDiagOnly = document.getElementById("diagToggle").checked;
+  if (isDiagOnly) {
+    return [
+      { N: 3, symmetry: "diag" },
+      { N: 4, symmetry: "diag" },
+      { N: 5, symmetry: "diag" }
+    ];
+  } else {
+    // If not diag only, load everything
+    return [
+      { N: 3, symmetry: "diag" },
+      { N: 3, symmetry: "none" },
+      { N: 4, symmetry: "diag" },
+      { N: 4, symmetry: "none" },
+      { N: 4, symmetry: "book" },
+      { N: 5, symmetry: "diag" }
+    ];
+  }
 }
 
 async function runQuery() {
@@ -211,37 +220,23 @@ async function runQuery() {
       n: Number(document.getElementById("resultCount").value || 5),
     };
 
-    const headers = { "Content-Type": "application/json" };
-    if (tokenInput.value.trim()) {
-      headers["X-Interface-Token"] = tokenInput.value.trim();
-    }
-
     const response = await fetch("/api/query", {
       method: "POST",
-      headers,
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
 
     const rawText = await response.text();
     let data = {};
     if (rawText) {
-      try {
-        data = JSON.parse(rawText);
-      } catch {
-        data = { error: rawText.slice(0, 200) };
-      }
+      try { data = JSON.parse(rawText); } 
+      catch { data = { error: rawText.slice(0, 200) }; }
     }
-    if (!response.ok) {
-      throw new Error(data.error || "Query failed");
-    }
+    if (!response.ok) throw new Error(data.error || "Query failed");
 
     state.queryResult = data;
-    // store visual constants (colors, alpha) from server for exact parity
-    state.visual = data.visual_constants || { plot_colors: {}, alpha: 0.1 };
-    state.activeResultIndex = null;
     renderResults();
-    renderDetail(null);
-    resultSummary.textContent = `${data.results.length} result(s) loaded from ${data.db_configs.length} database(s).`;
+    resultSummary.textContent = `${data.results.length} result(s) loaded.`;
     setStatus("Query complete.");
   } catch (error) {
     setStatus(error.message, true);
@@ -254,25 +249,25 @@ function renderResults() {
 
   state.queryResult.results.forEach((result, index) => {
     const card = document.createElement("article");
-    card.className = "result-card" + (state.activeResultIndex === index ? " active" : "");
-    card.addEventListener("click", () => {
-      state.activeResultIndex = index;
-      renderResults();
-      renderDetail(result);
-    });
+    card.className = "result-card";
+    
+    // Clicking thumbnail opens the detail modal
+    card.addEventListener("click", () => renderDetail(result, index));
 
     const thumb = document.createElement("div");
     thumb.className = "thumb";
-    const svg = makeSvg("svg", { viewBox: "0 0 220 220", class: "detail-svg" });
+    
+    // FIX: Using the new thumb-svg class so it fills the 1:1 square
+    const svg = makeSvg("svg", { viewBox: "0 0 220 220", class: "thumb-svg" });
     renderCpSvg(svg, result.cp, 220, 220);
     thumb.appendChild(svg);
 
     const meta = document.createElement("div");
     meta.className = "result-meta";
     meta.innerHTML = `
-      <div><strong>Rank ${result.rank ?? index + 1}</strong> · dist ${Number(result.distance).toFixed(5)}</div>
+      <div><strong>Rank ${result.rank ?? index + 1}</strong></div>
+      <div>Distance: ${Number(result.distance).toFixed(4)}</div>
       <div>${result.N} ${result.symmetry}</div>
-      <div>tiling ${result.tiling_id} · topology ${result.topology_id}</div>
     `;
 
     card.appendChild(thumb);
@@ -280,41 +275,27 @@ function renderResults() {
     resultsGrid.appendChild(card);
   });
 }
+function renderDetail(result, index) {
+  modalGrid.replaceChildren();
+  if (!result) return;
 
-function renderDetail(result) {
-  detailGrid.replaceChildren();
-  if (!result) {
-    detailSummary.textContent = "Select a result.";
-    return;
-  }
+  modalTitle.textContent = `Rank ${result.rank ?? index + 1} Result (${result.N} ${result.symmetry}) — Distance: ${Number(result.distance).toFixed(5)}`;
 
-  detailSummary.textContent = `Rank ${result.rank ?? "?"} · dist ${Number(result.distance).toFixed(5)} · ${result.N} ${result.symmetry}`;
+  // Top Row
+  modalGrid.appendChild(panelSvg("Topology", result.topology, (svg) => renderGraphSvg(svg, result.topology, { nodeFill: "#a7c7ff" })));
+  modalGrid.appendChild(panelSvg("Solved Tiling", result.solved_tiling, (svg) => renderGraphSvg(svg, result.solved_tiling, { nodeFill: "#8cffc1" })));
+  modalGrid.appendChild(panelSvg("Crease Pattern", result.cp, (svg) => renderCpSvg(svg, result.cp, 420, 240)));
+  
+  // Bottom Row
+  modalGrid.appendChild(panelSvg("Folded State", result.fold, (svg) => renderFoldSvg(svg, result.fold)));
+  modalGrid.appendChild(panelSvg("Resulting Tree", result.tree, (svg) => renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1" })));
+  modalGrid.appendChild(panelSvg("Heat Profile", result.heat, (svg) => renderHeatSvg(svg, result.heat)));
 
-  detailGrid.appendChild(panelSvg("Topology", result.topology, (svg) => renderGraphSvg(svg, result.topology, { nodeFill: "#a7c7ff" })));
-  detailGrid.appendChild(panelSvg("Solved Tiling", result.solved_tiling, (svg) => renderGraphSvg(svg, result.solved_tiling, { nodeFill: "#8cffc1" })));
-  detailGrid.appendChild(panelSvg("Crease Pattern", result.cp, (svg) => renderCpSvg(svg, result.cp, 420, 240)));
-  detailGrid.appendChild(panelSvg("Folded State", result.fold, (svg) => renderFoldSvg(svg, result.fold)));
-  detailGrid.appendChild(panelSvg("Resulting Tree", result.tree, (svg) => renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1" })));
-  detailGrid.appendChild(panelSvg("Heat Profile", result.heat, (svg) => renderHeatSvg(svg, result.heat)));
-
-  const meta = document.createElement("section");
-  meta.className = "detail-card wide";
-  meta.innerHTML = `
-    <h3>Metadata</h3>
-    <div class="detail-text">${escapeHtml(JSON.stringify({
-      rank: result.rank,
-      distance: result.distance,
-      N: result.N,
-      symmetry: result.symmetry,
-      topology_id: result.topology_id,
-      tiling_id: result.tiling_id,
-    }, null, 2))}</div>
-  `;
-  detailGrid.appendChild(meta);
+  detailModal.classList.remove("hidden");
 }
 
 function panelSvg(title, payload, renderer) {
-  const card = document.createElement("section");
+  const card = document.createElement("div");
   card.className = "detail-card";
   const heading = document.createElement("h3");
   heading.textContent = title;
@@ -324,33 +305,28 @@ function panelSvg(title, payload, renderer) {
   card.appendChild(svg);
   return card;
 }
+
+// --------------------------------------------------------
+// Render Utilities (Retained from previous architecture)
+// --------------------------------------------------------
+
 function renderCpSvg(svg, cp, width, height) {
   const bounds = boundsFromSegments(cp.segments);
   const scale = fitScale(bounds, width, height);
-  
-  // FIX: Force the frontend to use YOUR dark-mode colors, ignoring the backend
-  const palette = COLORS; 
 
   function mapTypeToColor(rawType) {
     const t = (rawType == null) ? "" : String(rawType).trim().toLowerCase();
-    
-    if (palette[t]) return palette[t];
-    
-    // Common aliases
-    if (t === "ax" || t === "aux") return palette.av || "#4dabf7";
-    
-    // Clean waterfall heuristics
-    if (t.includes("m")) return palette.m; // Mountain (Red)
-    if (t.includes("v")) return palette.v; // Valley (Blue)
-    if (t.includes("b")) return palette.b; // Border (White)
-    if (t.includes("h")) return palette.h; // Hinge (Grey)
-    
-    return palette.h || "#9aa8bf"; // Default unknown
+    if (COLORS[t]) return COLORS[t];
+    if (t === "ax" || t === "aux") return COLORS.av;
+    if (t.includes("m")) return COLORS.m; 
+    if (t.includes("v")) return COLORS.v; 
+    if (t.includes("b")) return COLORS.b; 
+    if (t.includes("h")) return COLORS.h; 
+    return COLORS.h; 
   }
 
   for (const segment of cp.segments) {
     const stroke = mapTypeToColor(segment.type);
-    // Refined stroke-width logic for better visual hierarchy
     const isThin = segment.type === "h" || String(segment.type).toLowerCase().includes("h");
     
     svg.appendChild(makeSvg("line", {
@@ -370,20 +346,17 @@ function renderFoldSvg(svg, fold) {
   const faces = fold.faces || [];
   const bounds = boundsFromFaces(faces);
   const scale = fitScale(bounds, 420, 240);
-  
-  // FIX: Decouple alpha from the backend. Use a crisp dark-mode friendly base alpha.
   const BASE_ALPHA = 0.12; 
   
   faces.forEach((face, index) => {
     const mult = fold.multiplicities?.[index] || 1;
-    // Mathematically stack the alpha for overlapping faces
     const alphaVal = 1 - Math.pow(1 - BASE_ALPHA, mult);
     
     svg.appendChild(makeSvg("polygon", {
       points: face.map((point) => `${transformX(point[0], bounds, scale, 420)},${transformY(point[1], bounds, scale, 240)}`).join(" "),
       fill: `rgba(122, 211, 255, ${alphaVal})`,
-      stroke: "rgba(255,255,255,0.30)", // Subdued stroke for dark mode
-      "stroke-width": 0.5, // Added a slight stroke to define overlapping boundaries
+      stroke: "rgba(255,255,255,0.30)", 
+      "stroke-width": 0.5, 
     }));
   });
 }
@@ -407,49 +380,54 @@ function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff" } = {}) {
     svg.appendChild(makeSvg("circle", {
       cx: transformX(node.pos[0], bounds, scale, 420),
       cy: transformY(node.pos[1], bounds, scale, 240),
-      r: 4,
-      fill: nodeFill,
-      class: "node",
+      r: 4, fill: nodeFill, class: "node",
     }));
   }
 }
-
 function renderHeatSvg(svg, heat) {
-  const width = 420;
-  const height = 240;
-  const margin = 28;
-  const xValues = heat.t_scales || [];
-  const query = heat.query || [];
-  const result = heat.result || [];
-  if (!xValues.length || !query.length || !result.length) {
-    svg.appendChild(makeSvg("text", { x: 18, y: 32, fill: "#9daccc", "font-size": 14 })).textContent = "Heat profile unavailable.";
-    return;
-  }
-  const xMin = Math.min(...xValues);
-  const xMax = Math.max(...xValues);
+  const width = 420, height = 240, margin = 28;
+  const xValues = heat.t_scales || [], query = heat.query || [], result = heat.result || [];
+  if (!xValues.length || !query.length || !result.length) return;
+  
+  const xMin = Math.min(...xValues), xMax = Math.max(...xValues);
   const yValues = [...query, ...result];
-  const yMin = Math.min(...yValues);
-  const yMax = Math.max(...yValues);
+  const yMin = Math.min(...yValues), yMax = Math.max(...yValues);
 
   drawAxes(svg, width, height, margin);
-  // Draw semilog-x ticks and labels
   const safeMin = Math.max(xMin, 1e-12);
-  const logMin = Math.log10(safeMin);
-  const logMax = Math.log10(Math.max(xMax, safeMin * 10));
-  const powMin = Math.floor(logMin);
-  const powMax = Math.ceil(logMax);
-  for (let p = powMin; p <= powMax; p++) {
+  const logMin = Math.log10(safeMin), logMax = Math.log10(Math.max(xMax, safeMin * 10));
+  
+  for (let p = Math.floor(logMin); p <= Math.ceil(logMax); p++) {
     const val = Math.pow(10, p);
     if (val < safeMin || val > xMax) continue;
     const px = margin + ((Math.log10(val) - logMin) / (logMax - logMin)) * (width - margin * 2);
-    // Tick
     svg.appendChild(makeSvg("line", { x1: px, y1: height - margin, x2: px, y2: height - margin + 6, stroke: "#2b3a4a", "stroke-width": 1 }));
-    // Label
     svg.appendChild(makeSvg("text", { x: px + 4, y: height - margin + 18, fill: "#9daccc", "font-size": 11 })).textContent = `10^${p}`;
   }
 
-  svg.appendChild(makePolyline(xValues, query, xMin, xMax, yMin, yMax, width, height, margin, "#e6e8ef"));
-  svg.appendChild(makePolyline(xValues, result, xMin, xMax, yMin, yMax, 2*width, height, margin, "#7ad3ff"));
+  // Draw lines with two distinct blues
+  const colorQuery = "#5b7b9e"; // Muted slate blue
+  const colorResult = "#7ad3ff"; // Vibrant cyan
+  
+  svg.appendChild(makePolyline(xValues, query, xMin, xMax, yMin, yMax, width, height, margin, colorQuery));
+  svg.appendChild(makePolyline(xValues, result, xMin, xMax, yMin, yMax, width, height, margin, colorResult));
+
+  // Build the Legend
+  const legend = makeSvg("g", {});
+  
+  // Query Legend
+  legend.appendChild(makeSvg("line", { x1: width - 80, y1: 20, x2: width - 60, y2: 20, stroke: colorQuery, "stroke-width": 2.3 }));
+  const qText = makeSvg("text", { x: width - 55, y: 24, fill: "#9daccc", "font-size": 11 });
+  qText.textContent = "Query";
+  legend.appendChild(qText);
+  
+  // Result Legend
+  legend.appendChild(makeSvg("line", { x1: width - 80, y1: 36, x2: width - 60, y2: 36, stroke: colorResult, "stroke-width": 2.3 }));
+  const rText = makeSvg("text", { x: width - 55, y: 40, fill: "#e8edf9", "font-size": 11 });
+  rText.textContent = "Result";
+  legend.appendChild(rText);
+
+  svg.appendChild(legend);
 }
 
 function drawAxes(svg, width, height, margin) {
@@ -462,8 +440,7 @@ function makePolyline(xValues, yValues, xMin, xMax, yMin, yMax, width, height, m
   const logSpan = Math.max(Math.log10(Math.max(xMax, safeMin * 10)) - Math.log10(safeMin), 1e-9);
   const ySpan = Math.max(yMax - yMin, 1e-9);
   const points = xValues.map((x, index) => {
-    const safeX = Math.max(x, safeMin);
-    const px = margin + ((Math.log10(safeX) - Math.log10(safeMin)) / logSpan) * (width - margin * 2);
+    const px = margin + ((Math.log10(Math.max(x, safeMin)) - Math.log10(safeMin)) / logSpan) * (width - margin * 2);
     const py = height - margin - ((yValues[index] - yMin) / ySpan) * (height - margin * 2);
     return `${px},${py}`;
   }).join(" ");
@@ -471,76 +448,28 @@ function makePolyline(xValues, yValues, xMin, xMax, yMin, yMax, width, height, m
 }
 
 function boundsFromSegments(segments) {
-  const xs = [];
-  const ys = [];
-  for (const segment of segments) {
-    xs.push(segment.x1, segment.x2);
-    ys.push(segment.y1, segment.y2);
-  }
+  const xs = [], ys = [];
+  segments.forEach(s => { xs.push(s.x1, s.x2); ys.push(s.y1, s.y2); });
   return boundsFromArrays(xs, ys);
 }
-
 function boundsFromGraph(graph) {
-  const xs = [];
-  const ys = [];
-  for (const node of graph.nodes) {
-    if (node.pos) {
-      xs.push(node.pos[0]);
-      ys.push(node.pos[1]);
-    }
-  }
+  const xs = [], ys = [];
+  graph.nodes.forEach(n => { if (n.pos) { xs.push(n.pos[0]); ys.push(n.pos[1]); }});
   return boundsFromArrays(xs, ys);
 }
-
 function boundsFromFaces(faces) {
-  const xs = [];
-  const ys = [];
-  for (const face of faces) {
-    for (const point of face) {
-      xs.push(point[0]);
-      ys.push(point[1]);
-    }
-  }
+  const xs = [], ys = [];
+  faces.forEach(f => f.forEach(p => { xs.push(p[0]); ys.push(p[1]); }));
   return boundsFromArrays(xs, ys);
 }
-
 function boundsFromArrays(xs, ys) {
-  if (!xs.length || !ys.length) {
-    return { minX: 0, maxX: 1, minY: 0, maxY: 1 };
-  }
-  const minX = Math.min(...xs);
-  const maxX = Math.max(...xs);
-  const minY = Math.min(...ys);
-  const maxY = Math.max(...ys);
-  return { minX, maxX, minY, maxY };
+  if (!xs.length || !ys.length) return { minX: 0, maxX: 1, minY: 0, maxY: 1 };
+  return { minX: Math.min(...xs), maxX: Math.max(...xs), minY: Math.min(...ys), maxY: Math.max(...ys) };
 }
-
-function fitScale(bounds, width, height) {
-  const padding = 20;
-  const dx = Math.max(bounds.maxX - bounds.minX, 1e-6);
-  const dy = Math.max(bounds.maxY - bounds.minY, 1e-6);
-  return Math.min((width - padding * 2) / dx, (height - padding * 2) / dy);
+function fitScale(b, w, h) {
+  const pad = 20, dx = Math.max(b.maxX - b.minX, 1e-6), dy = Math.max(b.maxY - b.minY, 1e-6);
+  return Math.min((w - pad * 2) / dx, (h - pad * 2) / dy);
 }
-
-function transformX(x, bounds, scale, width) {
-  const padding = 20;
-  return padding + (x - bounds.minX) * scale + (width - 2 * padding - (bounds.maxX - bounds.minX) * scale) / 2;
-}
-
-function transformY(y, bounds, scale, height) {
-  const padding = 20;
-  return height - (padding + (y - bounds.minY) * scale + (height - 2 * padding - (bounds.maxY - bounds.minY) * scale) / 2);
-}
-
-function pointForNode(graph, nodeId) {
-  const found = graph.nodes.find((node) => node.id === nodeId);
-  return found && found.pos ? found.pos : [0, 0];
-}
-
-function escapeHtml(text) {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-}
+function transformX(x, b, s, w) { return 20 + (x - b.minX) * s + (w - 40 - (b.maxX - b.minX) * s) / 2; }
+function transformY(y, b, s, h) { return h - (20 + (y - b.minY) * s + (h - 40 - (b.maxY - b.minY) * s) / 2); }
+function pointForNode(g, id) { const f = g.nodes.find(n => n.id === id); return f && f.pos ? f.pos : [0, 0]; }
