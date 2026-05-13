@@ -212,26 +212,26 @@ def enumerate_graphs(N=3, symmetry='none'):
             all_paired = And([p[0] == p[1] for p in pairs])
             s.add(Implies(any_straight, all_paired))
 
-    # =========================================================================
-    # NATIVE ISOMORPHISM REJECTION (The Game Changer)
-    # =========================================================================
-    # Establish a strict canonical ordering of all internal edges
-    ordered_edges = sorted(list(edge_vars.keys()))
-    # base_vars = [edge_vars[e] for e in ordered_edges]
+    # # =========================================================================
+    # # NATIVE ISOMORPHISM REJECTION (The Game Changer)
+    # # =========================================================================
+    # # Establish a strict canonical ordering of all internal edges
+    # ordered_edges = sorted(list(edge_vars.keys()))
+    # # base_vars = [edge_vars[e] for e in ordered_edges]
 
-    # Apply the 7 non-identity transformations of the D4 group
-    for t_type in range(1, 8):
-        transformed_vars = []
-        for e in ordered_edges:
-            tu = apply_transform(e[0], N, t_type)
-            tv = apply_transform(e[1], N, t_type)
-            re = tuple(sorted((tu, tv)))
+    # # Apply the 7 non-identity transformations of the D4 group
+    # for t_type in range(1, 8):
+    #     transformed_vars = []
+    #     for e in ordered_edges:
+    #         tu = apply_transform(e[0], N, t_type)
+    #         tv = apply_transform(e[1], N, t_type)
+    #         re = tuple(sorted((tu, tv)))
             
-            if re in edge_vars:
-                transformed_vars.append(edge_vars[re])
-            else:
-                # Boundary edges are implicitly True
-                transformed_vars.append(BoolVal(True)) 
+    #         if re in edge_vars:
+    #             transformed_vars.append(edge_vars[re])
+    #         else:
+    #             # Boundary edges are implicitly True
+    #             transformed_vars.append(BoolVal(True)) 
                 
         # Force Z3 to only solve for the lexicographically smallest orientation
         # s.add(lex_le(base_vars, transformed_vars))

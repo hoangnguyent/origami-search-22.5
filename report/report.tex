@@ -9,6 +9,7 @@
 \usepackage{setspace}
 \usepackage{biblatex}
 \usepackage{arydshln}
+\usepackage{subcaption}
 \setstretch{1.15}
 \addbibresource{references.bib} %Import the bibliography file
 
@@ -21,111 +22,74 @@
 \maketitle
 
 \begin{abstract}
-This report presents SEARCH (Spectral Embedding Archive for Rational Crease Pattern Hyperspace), an inverted design methodology for computational generation of 22.5$^\circ$ crease patterns. Instead of solving a highly intractible nonlinear mixed-integer optimization problem for every user input, we precompute a massive database of millions of valid uniaxial 22.5$^\circ$ crease patterns. At runtime, the system then searches the database for the precomputed crease pattern whose uniaxial tree most closely matches the user's desired structure. The database uses laplacian eigenvalues of the uniaxial trees as embeddings to index structural similarity (\textit{spectral embedding archive}). Furthermore, floating point errors due to 22.5's inherent $\sqrt{2}$ computations are circumvented by projecting vertices onto a 4D rational basis (\textit{rational crease pattern hyperspace}). By shifting the computational burden to an exhaustive precomputation phase, user design is reduced to a FAISS query, which runs in constant time relative to input complexity. This report details the mathematical architecture of the database generation pipeline, which is divided into three phases: (I) Topology Enumeration, (II) Tiling optimization for foldability, and (III) Crease Pattern generation and tree extraction.
-
-
+This report presents SEARCH 22.5 (Spectral Embedding Archive for Rational Crease Pattern Hyperspace), an inverted design methodology for the computational generation of 22.5$^\circ$ origami crease patterns. Rather than solving a highly intractable nonlinear mixed-integer optimization problem for every novel user input, we shift the computational burden to an exhaustive precomputation phase. The pipeline enumerates valid grid topologies using Boolean Satisfiability (SAT) solvers, resolves geometric degrees of freedom via Mixed-Integer Linear Programming (MILP), and constructs exact 22.5$^\circ$ tilings utilizing a 4D rational coordinate basis to circumvent floating-point degradation. Folded states are mathematically sliced to extract their macroscopic uniaxial trees. By simulating discrete heat diffusion across these networks, the trees are embedded into 64-dimensional vectors using the Heat Kernel Trace (HKT) from spectral graph theory. At runtime, the inverse design problem is thus reduced to a FAISS (Facebook AI Similarity Search) nearest-neighbor query, allowing the system to instantly retrieve the precomputed crease pattern whose structural topology most closely matches the user's desired shape.
 \end{abstract}
 
-\section{Introduction}
+
+\section*{Introduction}
 
 One of the biggest unsolved problems in origami design is the ability to systematically design models in the 22.5$^\circ$ angle system, in which creases meet at angles of multiples of 22.5$^\circ$. Many of the oldest known traditional origami designs use this angle system (including the fish, crane, and frog), as do some of the most popular modern-day designs, yet there remain no known mathematical methods to systematically design models within these angle constraints. Instead, most 22.5$^\circ$ origami designers rely on trial and error combined with an experienced artist's intuition.
 
 In general, representational origami designs can be categorized into two categories: uniaxial and non-uniaxial. Uniaxial designs are those whose structure can be represented by a tree of flaps and rivers. Forward design with uniaxial methods, including circle packing, box pleating, and hex pleating, have been well-studied. In these systematic procedures, a tree is converted into a packing of circles, squares, or hexagons by formulating the problem an optimization problem defined by non-linear non-intersection constraints. Then, a crease pattern can be obtained from the packing by linear time deterministic procedures
 
-It is theoretically possible to inject rigid integer constraints into the nonlinear solver to enforce the angle constraints of the 22.5$^\circ$ system. However, even if this massive MINLP problem is solved and a valid packing is found, there is no known way to convert the packing into a flat foldable crease pattern due to a phenomenon known as ``dense bouncing''. Unlike box pleating or hex pleating with rational quantized lengths, 22.5$^\circ$ angles generate lengths involving $\sqrt{2}$, for which no amount of subdivision will ever perfectly line up with a rational length, effectively requiring an infinite number of creases to resolve the packing. And unlike circle packing which solves this by placing creases at specific angles, 22.5$^\circ$ crease patterns are by definition restricted to creases at multiples of 22.5$^\circ$. 
+It is theoretically possible to inject rigid integer constraints into the nonlinear solver to enforce the angle constraints of the 22.5$^\circ$ system. However, even if this massive mixed-integer nonlinear optimization problem is solved and a valid packing is found, there is no known way to convert the packing into a flat foldable crease pattern due to a phenomenon known as ``dense bouncing''. Unlike box pleating or hex pleating with rational quantized lengths, 22.5$^\circ$ angles generate lengths involving $\sqrt{2}$, for which no amount of subdivision will ever perfectly line up with a rational length, effectively requiring an infinite number of creases to resolve the packing. And unlike circle packing which solves this by placing creases at specific angles, 22.5$^\circ$ crease patterns are by definition restricted to creases at multiples of 22.5$^\circ$. 
 
+\begin{figure}
+    \centering
+    \includegraphics[width=0.7\textwidth]{figs/failed_packing.png}
+    \caption{An attempt to solve uniaxial 22.5$^\circ$ design by modifying the conventional circle packing algorithm into a mixed-integer octagon packing problem. Even without floating-point issues, there is no known way to then convert one of these packings into a flat foldable crease pattern.}\label{fig:failed_packing}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.7\textwidth]{figs/forward_tilings.png}
+    \caption{It is computationally straightforward to generate a flat foldable crease pattern from a 22.5$^\circ$ tiling layout. It is also straightforward to extract the underlying tree structure from the crease pattern. However, it is unknown how to solve the inverse problem.}\label{fig:forward_tilings} 
+\end{figure}
 Conversely, generating a flat foldable crease pattern from a predefined tiling of 22.5$^\circ$ molecules is computationally straightforward through the use of straight skeletons. However, the inverse design of a tiling to acheive a desired tree has no known solution---in fact, prior to this project, there were no known implementations of the forward computation of extracting a tree from a tiling.
 
-Therefore, we we exploit the computational tractibility of tilings to enumerate a massive database of valid 22.5$^\circ$ tilings, and then extract their underlying trees retroactively. By indexing the database using spectral embeddings of the uniaxial trees, we can approximate the user's inverse design problem (Tree $\to$ Crease Pattern) in constant time by simply searching for the closest spectral embedding in the database and returning its corresponding crease pattern.
 
-\subsection{Packing, Tiling, and Molecules}
-
-\subsection{Definitions and Nomenclature}
-To document the SEARCH 22.5 data pipeline, we define the following levels of abstraction across our architecture:
-\begin{itemize}
-    \item \textbf{Topology:} An unweighted planar graph representing the angles (multiples of 45$^\circ$) and connective relationships of axial creases, prior to assigning specific lengths.
-    \item \textbf{Tiling:} A metric realization of a topology, or in other words, a planar graph of axial creases with assigned lengths.
-    \item \textbf{Crease Pattern:} A planar graph of creases that includes the axial creases of the tiling, ridge creases formed by the straight skeleton of the tiling polygons, and any additional creases (hinges) required to fold the model flat.
-    % \item \textbf{Quadruplet:} A geometric configuration within a polygonal face where four boundary edges possess angular bisectors that converge at a single central point. 
-    \item \textbf{Fold/Folded form:} The folded state of a crease pattern, defined by an unordered set of faces and their connectivity in 2d space. In this report, we neglect layer ordering and self intersection.
-    \item \textbf{Uniaxial Tree:} The projection of the folded form onto some axis, resulting in a tree structure of flaps and rivers representing the stick figure of the folded form.
-    % \item \textbf{Hypercube Basis:} A 4-dimensional algebraic basis in $\mathbb{Q}^4$ mapped to the Euclidean $\mathbb{R}^2$ plane. A vector $\vec{v} = [x, y, z, w]^T$ represents the physical 2D coordinate $\vec{p}$ via the mapping: $\vec{p} = x \vec{b}_1 + y \vec{b}_2 + z \vec{b}_3 + w \vec{b}_4$, where the basis vectors are $\vec{b}_1 = [1,0]^T$, $\vec{b}_2 = [s,s]^T$, $\vec{b}_3 = [0,1]^T$, and $\vec{b}_4 = [-s,s]^T$ with $s = \sqrt{2}/2$.
-\end{itemize}
-
-\section{Vertex and Crease Level Architecture}
-
-The first major obstacle in the 22.5$^\circ$ system is representing vertices. In conventional crease pattern software, points are stored as floating-point Cartesian pairs. Because 22.5$^\circ$ triangles immediately generate irrational lengths, we encounter severe numerical precision issues during raycasting and intersection checking if we attempt to use this conventional data structure.
-
-We observe that all Cartesian coordinates in the 22.5$^\circ$ angle system can be represented analytically in the form $(A_x + B_x\sqrt{2} , A_y + B_y\sqrt{2})$, where $A_x, B_x, A_y, B_y$ are rational numbers. This suggests that we can represent points as a tuple of four fractions, avoiding numerical drift entirely by storing the vertex as a list of integers.
-
-\subsection{The 4D Hypercube Projection}
-It would be possible to directly convert the 2D Cartesian coordinate to the orthogonal 4D rational coordinate $(A_x, B_x, A_y, B_y)$. However, we elect to use a projection that spaces the basis vectors 45 degrees apart from one another, reminiscent of projecting a 4D hypercube in 2D space. Rational 4D coordinates project uniquely to the 2D plane, and 2D 22.5$^\circ$ vertices ``lift'' uniquely into 4D. 
-
-\textcolor{red}{[Figure Placeholder: A coordinate plane showing the 8-directional hypercube basis. The vertex (1,1,-1,1) is visually constructed by adding the basis vectors $\hat{x}, \hat{y}, -\hat{z}, \hat{w}$ tail-to-head.]}
-
-\subsection{Crease Intersections and Exact Fractions}
-To intersect creases formed by vertices $\vec{v}_a$ and $\vec{v}_b$ at angles $\alpha$ and $\beta$, we utilize precomputed rational tangents. The intersection vertex $\vec{v}_c$ is calculated as:
-\begin{align}
-    \Delta i & = (v_{b_x} - v_{a_x}) + (v_{b_y} - v_{a_y} - v_{b_w} + v_{a_w})\frac{\sqrt{2}}{2} \\
-    \Delta j & = (v_{b_z} - v_{a_z}) + (v_{b_y} - v_{a_y} + v_{b_w} - v_{a_w})\frac{\sqrt{2}}{2} \\
-    \beta_i & = \frac{\Delta j - \tan(\alpha)\Delta i}{\tan(\alpha) - \tan(\beta)}
-\end{align}
-To prevent exponential bit-depth growth during complex divisions, we implemented a custom, highly optimized C++ \texttt{Fraction} class exposed via Python bindings. This class strictly enforces immediate $\gcd$ simplification upon instantiation, ensuring the numerators and denominators remain safely within 64-bit integer limits across millions of operations.
+Therefore, we we exploit the computational tractibility of tilings. We first enumerate a massive database of valid 22.5$^\circ$ tilings (Sections~\ref{sec:topology_enumeration} and~\ref{sec:tiling_realization}), then extract their underlying trees retroactively (Section~\ref{sec:cp_generation}). Finally, by combining the physics of heat transfer with a sophisticated database lookup algorithm (Section~\ref{sec:hkt}), we can approximate the user's inverse design problem of tree $\to$ crease pattern in near-constant time by simply searching for the closest match in the database.
 
 
-% =================================
-% =================================
-% =================================
+\section{Database Generation Phase I: Topology Enumeration}\label{sec:topology_enumeration}
+First, we must enumerate the valid arrangement of axial creases that define the tilings. A \textbf{topology} defines the angles and connective relationships of axial creases, disregarding exact metric lengths. Recall that ridge creases run at angle bisectors of the axial creases, and that all creases (including ridges) must be multiples of 22.5$^\circ$. Therefore, all axial creases must run at multiples of 45$^\circ$. We then exhaustively enumerate every valid topology on an $N \times N$ integer grid by modeling the problem as a Boolean Satisfiability (SAT) problem.
 
+We embed a planar graph onto an $N \times N$ square grid. The boundary of the paper is fixed, comprising $4N$ predefined boundary segments. Inside the grid, every possible orthogonal and diagonal segment connecting adjacent integer coordinates is treated as a potential axial crease. We assign a boolean decision variable $e \in \{0, 1\}$ to every internal edge.
 
-\section{Database Generation Phase I: Topology Enumeration}
-
-To build an exhaustive database of 22.5$^\circ$ crease patterns, we must enumerate the valid arrangement of axial creases that define the tilings. A topology defines the angles and connective relationships of axial creases, disregarding exact metric lengths. We exhaustively enumerate every valid topology on an $N \times N$ integer grid by modeling the problem as a Boolean Satisfiability (SAT) problem.
-
-\subsection{Grid Formulation and Boolean Variables}
-We embed a planar graph onto an $N \times N$ square grid. The boundary of the paper is fixed, comprising $4N$ predefined boundary segments. 
-
-Inside the grid, every possible orthogonal and diagonal segment connecting adjacent integer coordinates is treated as a potential axial crease. We assign a boolean decision variable $e \in \{0, 1\}$ to every internal edge.
-% \begin{itemize}
-%     \item \textbf{Orthogonal Edges:} Horizontal segments $e\_h_{i,j}$ connecting $(i, j)$ to $(i+1, j)$, and vertical segments $e\_v_{j,i}$ connecting $(j, i)$ to $(j, i+1)$.
-%     \item \textbf{Diagonal Edges:} For every $1 \times 1$ cell with bottom-left coordinate $(x,y)$, two intersecting diagonals are defined: $d1_{x,y}$ connecting $(x,y)$ to $(x+1, y+1)$, and $d2_{x,y}$ connecting $(x+1,y)$ to $(x, y+1)$.
-% \end{itemize}
-The total number of internal boolean variables for an $N \times N$ grid is precisely $4N^2 - 2N$. The SAT solver's task is to sort through the $2^{4N^2 - 2N}$ possible assignments to find unique topologies that satisfy the following rules. In the following formulation, we use $\overline{z}$ to denote the logical negation, $\cdot$ for logical AND, and $+$ for logical OR.
+The total number of internal boolean variables for an $N \times N$ grid is precisely $4N^2 - 2N$. The SAT solver's task is to sort through the $2^{4N^2 - 2N}$ possible assignments to find unique topologies that satisfy the following rules. 
 
 \subsection{Local Z3 Geometric Constraints}
-To prune the inherently exponential search space, we restrict the Z3 solver using four core local constraints that physically validate the crease structure.
+To prune the inherently exponential search space, we restrict the Z3 solver using four core local constraints that physically validate the crease structure. These constraints are formulated in Conjunctive Normal Form (CNF)---a product of sums---using standard boolean algebra notation (where $\overline{x}$ is NOT, $+$ is OR, and multiplication is implicit AND).
 
-\subsubsection{Planarity Constraint}
-An axial topology must be planar. The two diagonals within any single $1 \times 1$ would cross if both were present. Therefore, they are mutually exclusive. For every cell $(x,y)$, we assert:
+\paragraph{Planarity Constraint}
+An axial topology must be planar. The two diagonals within any single $1 \times 1$ cell would cross if both were present. Therefore, they are mutually exclusive. For the two diagonal boolean variables $d_1$ and $d_2$ in every cell $(x,y)$, we assert the single CNF clause:
 \begin{equation}
     (\overline{d1_{x,y}} + \overline{d2_{x,y}})
 \end{equation}
 
-
-\subsubsection{No Dangling Edges Constraint}
-A crease cannot terminate abruptly in the middle of a sheet of paper. Define the \textit{degree} of a vertex as the number of active edges incident to it. Every internal vertex must have a degree either $=0$ (inactive) or $\geq 2$ (active). For every internal node, we assert that the sum of edges incident to it $\neq 1$.
-
-\subsubsection{No T-Junction Constraint}
-To prevent dense bouncing and other straight skeleton problems, we enforce a strict T-junction rule: a $180^\circ$ continuous line cannot exist unless it is perpendicularly crossed by another line.
-
-For every internal node $(x,y) \in [1, N-1]^2$, we evaluate its 8 potential neighbors in counter-clockwise order: Right ($R$), Up-Right ($UR$), Up ($U$), Up-Left ($UL$), Left ($L$), Down-Left ($DL$), Down ($D$), and Down-Right ($DR$). 
-
-We define four straight pairs: $(R, L), (U, D), (UR, DL), (UL, DR)$. The rule dictates that if \textit{any} straight pair is continuously active, then \textit{all} opposite pairs in that specific node must share identical boolean states to form a valid 4-way (or 8-way) crossing. In boolean logic, we assert:
+\paragraph{No Dangling Edges Constraint}
+A crease cannot terminate abruptly in the middle of a sheet of paper. Define the \textit{degree} of a vertex as the number of active edges incident to it. Because the boundary perimeter is pre-populated as constantly active edges (value $= 1$), every vertex in the grid must have a total degree either $=0$ (completely inactive internal node) or $\geq 2$ (active continuous crease). For every node $v$ and its set of incident edges $E_v$, we apply a cardinality constraint:
 \begin{equation}
-    \bigvee_{P \in \text{pairs}} (P_1 \land P_2) \implies \bigwedge_{P \in \text{pairs}} (P_1 = P_2)
-\end{equation}
-% TODO: come back to this
-
-\subsubsection{Optional Symmetry Constraint}
-We can optionally enforce symmetry. For a requested symmetry (e.g., book symmetry across the vertical axis $x = N/2$, or diagonal symmetry across $y = x$), we apply the corresponding coordinate transformation to identify symmetric edges. For every internal edge $e=(u,v)$ and its transformed counterpart $e_{sym} = (T(u), T(v))$, we enforce:
-\begin{equation}
-    e = e_{sym}
+    \sum_{e \in E_v} e \neq 1
 \end{equation}
 
+\paragraph{No T-Junction Constraint}
+To prevent dense bouncing and other straight skeleton artifacts, we enforce a strict T-junction rule: a $180^\circ$ continuous line cannot exist unless it is perpendicularly crossed by another line. 
+
+For every internal node $(x,y) \in [1, N-1]^2$, we evaluate its 8 potential neighbors, grouped into four opposite pairs: $P_1 = (R, L)$, $P_2 = (U, D)$, $P_3 = (UR, DL)$, and $P_4 = (UL, DR)$. Let the two boolean variables representing the edges of pair $k$ be $a_k$ and $b_k$. If \textit{any} pair $i$ is continuously active ($a_i b_i$), then \textit{all} pairs $j$ intersecting at that node must share identical boolean states ($a_j = b_j$). To express this in CNF, for every pair $i \in \{1..4\}$ and every pair $j \in \{1..4\}$, we assert:
+\begin{equation}
+    (\overline{a_i} + \overline{b_i} + a_j + \overline{b_j}) \cdot (\overline{a_i} + \overline{b_i} + \overline{a_j} + b_j)
+\end{equation}
+
+\paragraph{Optional Symmetry Constraint}
+We can optionally enforce global symmetry by identifying symmetric edges via a coordinate transformation $T$. For every internal edge $e$ and its transformed counterpart $e_{sym}$, we enforce equivalence ($e = e_{sym}$). In CNF, this expands to two clauses:
+\begin{equation}
+    (e + \overline{e_{sym}}) \cdot (\overline{e} + e_{sym})
+\end{equation}
 \begin{figure}
     \centering
     \includegraphics[width=\textwidth]{figs/topology_constraints.pdf}
-    \caption{Illustration of the 5 topology constraints (not including symmetry). From left to right: (1) Planarity, no crossing diagonals; (2) No dangling edges; (3) No T-junctions; (4) Full connectivity, no floating polygons; (5) All normals in a polygon must be unique}
+    \caption{Illustration of the 5 topology constraints (not including symmetry) being violated. From left to right: (1) Two crossing diagonals violate planarity; (2) A dangling degree-1 vertex; (3) A T-junction; (4) A disconnected graph, floating polygon; (5) A polygon with non-unique normals}
 \end{figure}
 
 
@@ -133,11 +97,11 @@ We can optionally enforce symmetry. For a requested symmetry (e.g., book symmetr
 Once Z3 yields a satisfying assignment based on local constraints, we extract the resulting graph $G=(V,E)$ and pass it through a Python-level global topology filter before accepting it into the database.
 
 
-\subsubsection{Connectivity Constraint}
+\paragraph{Connectivity Constraint}
 
 First, we require the graph to be a single connected component. Disconnected components represent polygons floating in space within other polygons, which causes severe problems during crease pattern generation. This is easily filtered using NetworkX's built-in connectivity check.
 
-\subsubsection{Unique Normals Constraint}
+\paragraph{Unique Normals Constraint}
 
 Second, we validate the internal faces. We utilize a Doubly-Connected Edge List (DCEL) half-edge traversal to extract all faces of the graph: for every vertex $v$, its incident neighbors are sorted angularly using a standard $\text{atan2}(dy, dx)$ function. Walking counter-clockwise around the leftmost turns allows us to systematically extract the closed loops that define the internal polygonal faces.
 
@@ -147,24 +111,30 @@ of every boundary segment. We strictly enforce that a valid topological face mus
 
 With these local boolean constraints and global topology filters, the SAT solver is able to enumerate all valid topologies.
 
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{figs/4diag_topologies.png}
+    \caption{A sample of the 100,000+ valid 4$\times$4 topologies with diagonal symmetry.}\label{fig:4diag_topologies}
+\end{figure}
+
 
 % =================================
 % =================================
 % =================================
 
 
-\section{Database Generation Phase II: Metric Tiling Realization}
+\section{Database Generation Phase II: Tiling Realization}\label{sec:tiling_realization}
 
-The output of the topology enumeration phase is an unweighted planar graph. Although the vertices are temporarily built on an integer grid to guarantee 45$^\circ$ angled edges, the actual locations of the vertices need to be fully constrained to optimize for human-foldability of the crease pattern. This is, after all, the original purpose of 22.5$^\circ$ crease patterns over ``easier'' design methods.
+The output of the topology enumeration phase is an unweighted planar graph with vertices only temporarily placed on an integer grid. We now seek to convert each topology into a \textbf{tiling}, where the axial polygons are fully constrained and defined by 22.5$^\circ$ references. This process must optimize for human-foldability of the crease pattern. This is, after all, the original purpose of 22.5$^\circ$ crease patterns over ``easier'' design methods.
 
 If a topology contains $n$ nodes, we theoretically possess $2n$ degrees of freedom in the Euclidean plane (moving each node in $x$ and $y$). Our objective is to apply constraints until all degrees of freedom are removed, and the tiling is fully locked into a single crease pattern with fully defined references.
 
 \subsection{Basic Geometric Constraints}\label{sec:basic_constraints}
-We begin by establishing the absolute requirements of the tiling. We first remove redundant degree-2 vertices from the topology. 
+We begin by establishing the absolute requirements of the tiling. 
 
 \subsubsection{Angle preservation constraints}
 Every edge in the initial grid topology is aligned to a multiple of 45$^\circ$. As the vertices move to form the exact tiling, these edges must remain parallel to their original orientations. Let $\vec{u}$ and $\vec{v}$ be the position of two vertices connected by an edge, and $\hat{n} = (n_x, n_y)$ be the known normal vector of that edge. We enforce the following angular constraint for every edge:
-\begin{equation}
+\begin{equation}\label{eq:edge_angle}
     (\vec{v}-\vec{u}) \perp \hat{n}\implies {\hat{n} \cdot (\vec{v} - \vec{u})} = 0 \implies n_x v_x - n_x u_x + n_y v_y - n_y u_y = 0
 \end{equation}
 Note that this constraint is linear and homogeneous.
@@ -316,12 +286,12 @@ By expanding the inner dot products $\hat{n}_i \cdot \vec{v}_i = n_{ix}x_i + n_{
 \begin{equation}\label{eq:quadruplet_constraint}
     \sum_{i=1}^{4} \left( (w_i n_{ix}) x_i + (w_i n_{iy}) y_i \right) = 0
 \end{equation}
-Note that this is a strictly linear, homogeneous constraint acting entirely on the node positions $x_i$ and $y_i$, which can also be expressed as a row in the constraint matrix $A$ without ever solving for the position or radius of the incircle. For example, to add a quadruplet constraint to matrix expanded in Equation~\ref{eq:Axb}, we would append the following row to $A$ and $b$ based on the normals of the rectangle:
+Note that this is a strictly linear, homogeneous constraint acting entirely on the node positions $x_i$ and $y_i$, which can also be expressed as a row in the constraint matrix $A$ without ever solving for the position or radius of the incircle. For example, to add a quadruplet constraint to matrix expanded in Equation~(\ref{eq:Axb}), we would append the following row to $A$ and $b$ based on the normals of the rectangle:
 
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.5\textwidth]{figs/rectangle_quadruplet.pdf}
-    \caption{A rectangular quadruplet constrained to a single equidistant point by Equation~\ref{eq:quadruplet_example}. Note that the constraint in this example is equivalent to asserting that $x_3 - x_1 = y_3 - y_1$, or in other words, the aspect ratio of the rectangle is square.}
+    \caption{A rectangular quadruplet constrained to a single equidistant point by Equation~(\ref{eq:quadruplet_example}). Note that the constraint in this example is equivalent to asserting that $x_3 - x_1 = y_3 - y_1$, or in other words, the aspect ratio of the rectangle is square.}
 \end{figure}
 
 \begin{equation}\label{eq:quadruplet_example}
@@ -349,11 +319,27 @@ In general, constraining a quadruplet (that contains at least one unconstrained 
 
 But more importantly, it is possible for a quadruplet constraint to be satisfied but not actually reduce the number of vertices in the straight skeleton. This is because a vertex only appears in the straight skeleton if and only if it is strictly closer to its constituent edges than to any other edge in the polygon. Therefore, if another edge ``invades'' the incircle, the quadruplet constraint is effectively useless. 
 
-Even worse, it is possible for the enforcing of a quadruplet constraint to cause an edge to collapse to 0 or negative length, violating the planarity of the tiling. These two effects are defined by inequalities. Therefore, we must resort to a Mixed-Integer Linear Programming (MILP) formulation to strategically select the optimal set of quadruplets that maximize the number of collapsed straight skeleton vertices while ensuring the physical foldability of the tiling.
+Even worse, it is possible for the enforcing of a quadruplet constraint to cause an edge to collapse to 0 or negative length, violating the planarity of the tiling. Or, the mouth of a concave polygon might clip through the other end, forming an invalid ``bowtie'' shape. These effects are defined by inequalities. Therefore, we must resort to a Mixed-Integer Linear Programming (MILP) formulation to strategically select the optimal set of quadruplets that maximize the number of collapsed straight skeleton vertices while ensuring the physical foldability of the tiling.
+
+\begin{figure}
+    \centering
+    \begin{subfigure}{0.45\textwidth}
+        \centering
+        \includegraphics[width=\textwidth, keepaspectratio]{figs/edge_flip.png} 
+        \caption{A quadruplet (red) causes edges invalidates the planarity of the tiling by flipping some edges to negative length and leaving the square.}
+    \end{subfigure}
+    \hfill 
+    \begin{subfigure}{0.49\textwidth}
+        \centering
+        \includegraphics[width=\textwidth, keepaspectratio]{figs/invasion_and_bowtie.png}
+        \caption{A quadruplet causes a bowtie clip-through in the bottom right of the tiling. Also, two quadruplets (green and center blue) are effectively useless because their incircles are invaded by other edges.}
+    \end{subfigure}
+    \caption{Examples where naive quadruplet selection results in invalid tilings.}
+\end{figure}
 
 
-\subsection{Quadruplet Harvesting and the MILP Formulator}
-To evaluate the physical consequences of activating different quadruplets, the solver must be able to solve the linear system (Equation~\ref{eq:Axb}) for any possible combination of quadruplets, and evaluate the validity of the resulting geometry. Therefore, let the state vector $\vec{X}$ be an augmented version of the vertex coordinate vector $\vec{x}$:
+\subsection{Optimal Quadruplet Selection}
+To evaluate the physical consequences of activating different quadruplets, the solver must be able to solve the linear system from Equation~(\ref{eq:Axb}) for any possible combination of quadruplets, and evaluate the validity of the resulting geometry. Therefore, let the state vector $\vec{X}$ be an augmented version of the vertex coordinate vector $\vec{x}$:
 \begin{equation}
     \vec{X} = \left[ \, \vec{x}, \; \vec{z}_{quads}, \; \vec{p}_{incircles}, \; \vec{r}_{incircles}, \; \vec{b}_{bowtie} \, \right]^T
 \end{equation}
@@ -401,7 +387,7 @@ Recall that a vertex only appears in the straight skeleton if and only if it is 
 \begin{equation}
     -\vec{n}_i^T \vec{p}_k + \vec{n}_i^T \vec{x}_i - r_k + C z_k \le C
 \end{equation}
-The addition of this constraint is why the MILP formulation requires $\vec{p}_k, r_k$ as state variables, while Equation~\ref{eq:quadruplet_constraint} did not.
+The addition of this constraint is why the MILP formulation requires $\vec{p}_k, r_k$ as state variables, while Equation~(\ref{eq:quadruplet_constraint}) did not.
 
 \begin{figure}[h]
     \centering
@@ -423,7 +409,7 @@ For every reflex vertex $\vec{x}_c$ and a non-adjacent edge $(\vec{u}, \vec{v})$
 
 \begin{figure}[h]
     \centering
-    \includegraphics[width=0.6\textwidth]{figs/bowtie.pdf}
+    \includegraphics[width=0.8\textwidth]{figs/bowtie.pdf}
     \caption{Left: an unconstrained polygon. Center: the polygon with a ``bowtie'' violation. Right: the three safe zones defined by $b_1,b_2,b_3$ and the danger zone (red) where the constraint is violated, defined by the edge's vectors $\hat{n},\hat{t}$ and minimum clearance size $\epsilon$.}
 \end{figure}
 
@@ -502,210 +488,352 @@ Where:
 \end{itemize}
 In total, $M$ and $\vec{B}$ are composed of pre-computable constants for each topology. The problem in this form can be passed into a MILP solver like PuLP to constrain the maximum number of quadruplets while maintaining the geometric validity of the tiling.
 
-\subsubsection{Iterative Integer Cuts for Database Diversity}
+\subsubsection{Diversity Threshold for Multiple Solutions}
 A single topology can often be tiled in several geometrically distinct ways. To populate the database with diverse layouts from the same root topology, we loop the MILP solver. Upon finding an optimal set of active quadruplets $\mathcal{A}$, we log the configuration and inject a strict integer cut back into the solver:
 \begin{equation}
     \sum_{i \in \mathcal{A}} z_i \le |\mathcal{A}| - d_{threshold}
 \end{equation}
 where $d_{threshold}$ is a hyperparameter defining the minimum diversity difference between solutions. This bans the previous solution and forces the MILP to swap at least $d_{threshold}$ quadruplets, nudging it to discover alternative geometric variations---though it is not guaranteed that the resulting tilings will be unique, even if the sets of selected quadruplets are different.
 
-%% TODO in the section above: be consistent between v and x. probably use v for vertex coordinates
-
-\subsection{Quadruplet harvesting}
+\subsubsection{Quadruplet Harvesting}
 
 The solution to the MILP comes with a set of vertex positions that is guaranteed to be physically realizable (satisfying the constraints applied to $M$). However, it cannot guarantee that the tiling is fully locked. This is because it is computationally prohibitive to feed every possible quadruplet into the MILP (consider the fact that an $n$-gon contains $\binom{n}{4}$ possible quadruplets), so we initialize it with a heuristic ``harvest'' of quadruplets that are either contiguous or are the nearest edges to a concave pair of edges. As a result, the MILP might overlook a key quadruplet needed to fully constrain the tiling.
 
-Before performing the expensive Gauss-Jordan elimination, we check the algebraic rank of the constraint matrix $M$. To do this instantaneously, we perform Gaussian Elimination over a finite field $Z_p$ using a large prime (e.g., $P = 1000000007$). 
-
-If the matrix is rank-deficient, the $Z_p$ elimination identifies exactly which columns (variables) lack pivots. We map these free variables back to their physical nodes, identifying the "sliding nodes." We then initialize a \textbf{Directed Depth-First Search (DFS) Scavenger}. The DFS explores the pool of unused, exhaustive quadruplet candidates, specifically filtering for quadruplets that involve the identified sliding nodes. It tentatively adds their 4D nullspace equations to $M$ and re-evaluates the rank. Once the matrix achieves full rank (exactly $4n$), the DFS terminates.
-
-Finally, the full-rank constraint matrix is passed to our custom C++ \texttt{Fraction} class routines, which execute exact Gauss-Jordan elimination to solve for the absolute 4D coordinates of the metric tiling.
+We can quickly check the rank of $A$ with the current selection of quadruplets by performing Gaussian elimination over a finite field $\mathbb{Z}_p$ with a large prime~\cite{rankcheck}. If the matrix is rank-deficient, the $Z_p$ elimination identifies exactly which columns (variables) lack pivots. We map these free variables back to their physical nodes. The missing quadruplets will likely involve these unconstrained nodes. We then initialize a depth-first search scavenger that will explore the exhaustive pool of unused quadruplet candidates, specifically filtering for quadruplets that involve the identified sliding nodes. It tentatively applies each quadruplet constraint and keeps ones that increase the rank until full rank is reached. Only then are the constraints actually applied and solved for the exact tiling geometry. 
 
 
-This process is thorough, albeit roundabout. First we use heuristics to choose which quadruplets to consider first. Then we use MILP to select which of those quadruplets are the best, by applying constraints to the constraints themselves. If it turns out that the MILP selection is not sufficient, we have to go back and scavenge through the unconsidered quadruplets to find which quadruplets would make $A$ full rank. Only then do we actually apply the quadruplet constraints and solve for the vertex coordinates.
+\subsection{Rational 4D basis}\label{sec:4D}
 
+Let us take a detour. Before solving the linear system to compute the final tiling node positions, we need to address the representation of vertices in the 22.5 angle system. In conventional crease pattern softwares, points are represented as Cartesian coordinates stored as a pair of floats. However, because 22.5 triangles immediately generate irrational lengths, we will encounter numerical precision issues if we attempt to represent vertices using this conventional data structure.
 
-\subsection{The Exact Linear Solver and the Two-Row Formulation}
-The MILP provides a guaranteed-safe set of geometric intents, but floating-point MILP coordinates are too noisy for strict origami raycasting. We must lock these intents into an exact fractional matrix in the 4D Hypercube basis $\mathbb{Q}^4$. 
+We first observe that all Cartesian coordinates in the 22.5 angle system can be represented analytically in the form $(A_x + B_x\sqrt{2} , A_y + B_y\sqrt{2})$, where $A_x, B_x, A_y, B_y$ are rational numbers \cite{degenerative-coordinates-22.5}. This suggests that we can represent points in the 22.5 angle system as a tuple of four fractions, which can avoid numerical precision issues by storing the vertex as a list of 8 integers.\footnote{It can be stored in as few as 5 integers by using a common denominator, but the 8 integer form is easier for operations and provides information about reference-finding for the vertex.} 
 
-Consider a standard angular constraint requiring the edge between node $u$ and node $v$ to remain parallel to a known 22.5$^\circ$ directional vector $\vec{d} = (d_x, d_y)$. The 2D cross product must be exactly zero:
+It would be possible to directly convert the 2D Cartesian coordinate $(A_x + B_x\sqrt{2} , A_y + B_y\sqrt{2})$ to the 4D rational coordinate $(A_x, B_x, A_y, B_y)$. This is essentially a 4D vector space where the 4 basis vectors project to the 2D plane as $\hat{\imath}, \sqrt{2}\hat{\imath}, \hat{\jmath}, \sqrt{2}\hat{\jmath}$, respectively. An example of a few vertices represented in this orthogonal basis is shown in Figure \ref{fig:orthogonal-basis}.
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.5\textwidth]{figs/orthogonal_coords.pdf}
+    \caption{A few example vertices represented in the orthogonal 4D basis projection.}\label{fig:orthogonal-basis}
+\end{figure}
+
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figs/hypercube_coords.pdf}
+    \caption{A few example vertices represented in the hypercube 4D basis projection. The vertex $(1,1,-1,1)$ can be understood intuitively as the sum of the basis vectors $\hat{x}, \hat{y},$ a negative $-\hat{z}$ and a $\hat{w}$.}\label{fig:hypercube-basis}
+\end{figure}
+
+An alternative projection would be to project the 4D basis vectors to be uniform in length, but spaced 45 degrees apart from one another. This is reminiscent of the projection commonly used to represent a 4D hypercube in 2D space, and was initially proposed for representing 22.5 crease patterns by Lang et. al. in \cite{hyper-cps}. It was shown by Lang et. al. that rational 4D coordinates project uniquely to the 2D plane, and 2D 22.5 vertices "lift" uniquely into 4D. An example of a few vertices represented in this hypercube basis is shown in Figure \ref{fig:hypercube-basis}. Note that this basis is not fundamentally different than the orthogonal basis: instead of having a basis vector for the $\sqrt{2}$ length in either direction, $\sqrt{2}\hat{\imath}$ is represented as $\hat{y} - \hat{w}$ and $\sqrt{2}\hat{\jmath}$ is represented as $\hat{y} + \hat{w}$. Either projection scheme would work for the rest of our 22.5 architecture. For the rest of this paper, we will choose the hypercube projection. 
+
+\subsection{Exact Precision Linear Solve}
+During the MILP solve, the tiling constraints were formulated using floating-point arithmetic for fast linear algebra. This is sufficient for finding approximate solutions in order to select quadruplets. However, the final tiling must be solved with rational arithmetic to guarantee exact precision downstream. To accommodate the irrational $\sqrt{2}$ nature of the 22.5$^\circ$ system (which enters the system primarily through the normal vectors $\hat{n}$), we transition the system $A\vec{x} = \vec{b}$ into the 4D hypercube basis discussed in Section~\ref{sec:4D}.
+
+For example, recall the angular constraint from Equation~(\ref{eq:edge_angle}), requiring the edge between node $\vec{u}$ and node $\vec{v}$ to remain orthogonal to the edge's fixed normal vector $\hat{n} = (n_x, n_y)$:
 \begin{equation}
-    (v_x - u_x)d_y - (v_y - u_y)d_x = 0
+    n_x(v_x - u_x) + n_y(v_y - u_y) = 0
 \end{equation}
-In our 4D basis, the physical 2D coordinates are derived from the 4D rational coordinates: $u = [x_1, y_1, z_1, w_1]^T$ and $v = [x_2, y_2, z_2, w_2]^T$. Substituting the hypercube projection mapping:
+In our 4D basis, the physical 2D coordinates of the nodes are derived from their 4D rational coordinates: $\vec{u}^{(4D)} = [x_u, y_u, z_u, w_u]^T$ and $\vec{v}^{(4D)} = {[x_v, y_v, z_v, w_v]}^T$. Substituting the hypercube projection mapping for the edge vector components gives:
 \begin{align}
-    \Delta X &= (x_2 - x_1) + \frac{\sqrt{2}}{2}((y_2-y_1) - (w_2-w_1)) = A_x + B_x \sqrt{2} \\
-    \Delta Y &= (z_2 - z_1) + \frac{\sqrt{2}}{2}((y_2-y_1) + (w_2-w_1)) = A_y + B_y \sqrt{2}
+    v_x - u_x &= (x_v - x_u) + \frac{1}{2}((y_v-y_u) - (w_v-w_u))\sqrt{2} \equiv A_x + B_x \sqrt{2} \\
+    v_y - u_y &= (z_v - z_u) + \frac{1}{2}((y_v-y_u) + (w_v-w_u))\sqrt{2} \equiv A_y + B_y \sqrt{2}
 \end{align}
-The directional vector $\vec{d}$ is similarly defined as $d_x = a_x + b_x \sqrt{2}$ and $d_y = a_y + b_y \sqrt{2}$. Substituting these components into the cross product yields a polynomial expansion:
+The normal vector $\hat{n}$ is similarly defined by its rational and irrational components as $n_x = a_x + b_x \sqrt{2}$ and $n_y = a_y + b_y \sqrt{2}$. Substituting these components into the dot product yields a polynomial expansion:
 \begin{equation}
-    (A_x + B_x \sqrt{2})(a_y + b_y \sqrt{2}) - (A_y + B_y \sqrt{2})(a_x + b_x \sqrt{2}) = 0
+    (a_x + b_x \sqrt{2})(A_x + B_x \sqrt{2}) + (a_y + b_y \sqrt{2})(A_y + B_y \sqrt{2}) = 0
 \end{equation}
 When the algebra is expanded and simplified, the variables naturally separate into two groups: those multiplied by 1, and those multiplied by $\sqrt{2}$. It takes the form:
 \begin{equation}
     C_{rational} + C_{irrational} \sqrt{2} = 0
 \end{equation}
-Crucially, because $\sqrt{2}$ is an irrational number, it is impossible for a non-zero rational number to cancel out a non-zero irrational number. Therefore, for the physical angle to be exactly zero, \textbf{both coefficients must independently evaluate to exactly zero}. 
-
-This is the core insight of the SEARCH 22.5 exact solver architecture: \textbf{Every single physical 2D geometric constraint generates exactly two independent rows in the 4D algebraic constraint matrix.}
+Crucially, because $\sqrt{2}$ is an irrational number, it is impossible for a non-zero rational number to cancel out a non-zero irrational number. Therefore, for the dot product to be exactly zero, both coefficients must independently evaluate to zero. This transforms our single 2D constraint into two separate linear equations over the rationals:
 \begin{align}
-    \text{Row 1:} \quad & C_{rational}(x_1, y_1, z_1, w_1, x_2, y_2, z_2, w_2) = 0 \\
-    \text{Row 2:} \quad & C_{irrational}(x_1, y_1, z_1, w_1, x_2, y_2, z_2, w_2) = 0
+    C_{rational} &= A_x a_x + 2 B_x b_x + A_y a_y + 2 B_y b_y = 0 \\
+    C_{irrational} &= A_x b_x + B_x a_x + A_y b_y + B_y a_y = 0
 \end{align}
+By applying this transformation to every row in the system, we can convert the entire problem into a rational linear system (with twice as many unknowns and twice as many rows), which can be solved using a custom Gauss-Jordan elimination solver. The resulting rational coordinates are guaranteed to prevent numerical instability or floating-point errors propagating into the crease pattern.
 
-\textcolor{red}{[Figure Placeholder: A visual matrix diagram showing the $Ax=b$ formulation. On the left, display a graph with a single highlighted edge. On the right, display the constraint matrix, explicitly showing how the $x, y, z, w$ columns of nodes $u$ and $v$ populate two distinct rows for that single physical edge.]}
 
+\section{Database Generation Phase III: Crease Patterns and Trees}\label{sec:cp_generation}
 
-\section{Database Generation Phase III: Crease Patterns and Folding}
+The exact tiling fully constrains the axial creases of the crease pattern. Next, the rest of the crease pattern (CP) must be constructed by filling in the polygons with straight skeletons and enforcing flat-foldability. Then, the crease pattern must be folded into a flat state, in order to then extract the tree structure of the folded state. Note that the CP only needs to satisfy Kawasaki's theorem (which is a geometric constraint); the topological constraints relating to mountain-valley assignment or layer self-intersection have no effect on the tree extraction results.
 
-The exact tiling establishes a flawless 4D geometric foundation, locking the perimeter and the major structural nodes of the base. However, this abstract metric graph must now be routed into a physically flat-foldable Crease Pattern (CP) and subsequently folded into a layered 2D state to extract its structural tree.
+\subsection{Straight Skeleton Generation}
+To route the interior creases of the faces defined by the tiling, we utilize a straight skeleton algorithm. Rather than implementing a custom straight skeleton algorithm (which is notoriously prone to complicated edge cases) that operates directly on the exact rational coordinates, we adopt a hybrid floating-point approach. This allows us to leverage existing optimized libraries while still ensuring the final output is perfectly rational. 
 
-\subsection{The Float-to-Exact Straight Skeleton}
-To route the interior creases of the faces defined by the tiling, we utilize a straight skeleton algorithm. Because native exact-fraction straight skeleton algorithms are computationally prohibitive, we implement a hybrid "Float-to-Exact" mapping architecture. 
+First, we project the exact 4D vertices of a face into 2D Cartesian floats. However, standard geometric algorithms---such as the sweep-line methods commonly used for straight skeletons---are notoriously fragile when handling IEEE-754 floating-point arithmetic. Because these algorithms rely on strict spatial sorting, an error of even a fraction of a bit during intersection calculations can cause the algorithm to make inconsistent topological decisions, leading to catastrophic program failures or ``singularities'' \cite{kettner2008classroom}. 
 
-First, we project the 4D exact vertices of a face into 2D floating-point Cartesian coordinates. To bypass the well-documented IEEE-754 singularity failures inherent to standard floating-point sweep-line algorithms, we apply an aggressive quantization filter, truncating coordinates to a fixed precision (\texttt{QUANTIZATION\_DECIMALS = 3}) and deduplicating antiparallel spikes created by the MILP's vertex collapsing.
+To bypass these well-documented robustness issues, we apply an aggressive quantization filter. By truncating the floating-point coordinates to a fixed precision (empirically determined to be 3 decimal places), we force near-degenerate points to snap to a rigid grid, effectively eliminating the microscopic floating-point fuzz. Additionally, we deduplicate any antiparallel ``spikes'' (infinitely thin, zero-area artifacts created by the MILP solver's vertex collapsing) which would otherwise choke the boolean operations.
 
-We feed this sanitized floating-point polygon into an off-the-shelf straight skeleton library to extract the \textit{topological connectivity} of the interior creases. To reclaim exact mathematical precision, we map these floating-point nodes back to the $\mathbb{Q}^4$ hypercube grid. 
-For boundary nodes, we search the exact 4D coordinate dictionary using a tight capture radius (\texttt{SNAP\_TOLERANCE = 1e-3}). For internal nodes, we iteratively look at their resolved neighbors, extract the 22.5$^\circ$ directional angles of the incident creases, and perform an exact 4D algebraic intersection. This hybrid approach grants us the extreme speed of floating-point topological algorithms while guaranteeing the 100\% rational geometric perfection of the final vertices.
+We feed this sanitized floating-point polygon into an off-the-shelf library to extract the topological connectivity of the interior creases. To reclaim the exact precision of these internal nodes, we iteratively look at their resolved neighbors (starting from the polygon boundary, whose exact 4D coordinates are known), extract the 22.5$^\circ$ routing angles dictated by the floating-point straight skeleton, and perform an exact 4D algebraic intersection using Equation~(\ref{eq:4D_intersection}).
 
 \subsection{Kawasaki Propagation and Hinge Routing}
-The resulting straight skeleton routes the paper efficiently, but it makes no guarantees regarding flat-foldability. In origami, Kawasaki's Theorem mandates that for a vertex to fold flat, the alternating sum of the angles between its incident creases must equal exactly $180^\circ$ (or an alternating sum of 8, in our 22.5$^\circ$ integer units).
+The resulting straight skeletons are generally not flat-foldable on their own. Kawasaki's Theorem mandates that for an interior vertex to fold flat, the alternating sum of the angles between its incident creases must equal exactly $180^\circ$. This implies that any odd-degree vertex (excluding those on the outer paper boundary) are not flat-foldable, and can be resolved by adding or removing a single crease.
 
-We observe that the straight skeleton inherently creates degree-3 vertices (which trivially violate Kawasaki's theorem) and other odd-degree intersections. To enforce flat-foldability, we developed a greedy Kawasaki-fixing algorithm utilizing recursive 4D raycasting.
+To enforce flat-foldability, we use a greedy Kawasaki-fixing algorithm utilizing recursive raycasting. The algorithm filters for odd-degree vertices that violate Kawasaki. All hinge creases are at 45$^\circ$ angles---therefore, for a target vertex, it checks each of the 8 directions for a potential direction that would satisfy Kawasaki's theorem if a hinge crease were added. For each direction, it tentatively raycasts a hinge in that direction and counts how many creases are propagated before the hinge collides with a boundary or another vertex. To minimize the number of added creases, the algorithm then commits the hinge direction that satisfies Kawasaki's theorem while introducing the fewest number of new creases.
 
-The algorithm filters for odd-degree vertices that violate Kawasaki. For a target vertex, it evaluates two primary strategies:
-\begin{enumerate}
-    \item \textbf{Hinge Addition:} It tentatively casts an auxiliary "hinge" ray outward along all 8 valid 22.5$^\circ$ directions. 
-    \item \textbf{Hinge Removal:} It tentatively removes an existing hinge and recursively collapses any adjacent degree-3 vertices that are subsequently rendered redundant.
-\end{enumerate}
-When a hinge ray is cast into a polygonal face, physical logic dictates it can only intersect the bounding edges of that specific face. We calculate the exact 4D intersection; if the ray strikes a boundary crease, it splits the edge, generates a new vertex, and reflects perfectly across the crease to propagate into the adjacent face.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figs/recursive_raycast.pdf}
+    \caption{An example of a Kawasaki-preserving raycast operation recursively generating multiple creases to preserve flat foldability. This operation introduces 4 new creases.}\label{fig:recursive-raycasting}
+\end{figure}
 
-Because one added hinge can cascade across the entire paper, we execute these tests on ultra-fast, shallow-copied clones of the CP. We evaluate each transformation using a strict cost metric: \texttt{(Remaining Odd Kawasaki Errors, Total Operations/Hinges Added)}. The algorithm permanently commits the transformation that resolves the local angular defect while minimizing the addition of new, cluttering creases. 
-
-\textcolor{red}{[Figure Placeholder: A sequential diagram of Kawasaki Propagation. Frame 1: A degree-3 vertex in a straight skeleton. Frame 2: An auxiliary hinge ray is cast, splitting a neighboring edge. Frame 3: The ray reflects and propagates until it terminates at a boundary, leaving a fully valid, even-degree crease mesh.]}
 
 \subsection{The Stacked Folded State Architecture}
-Once the CP is strictly valid, we algorithmically fold it into a mathematically flat 2D state. The CP explicitly tracks topological faces via Doubly-Connected Edge List (DCEL) logic, sorting half-edges counter-clockwise and discarding the infinite outer face using signed-area calculations . 
+To calculate the 2D folded coordinates, we construct a spanning tree of the faces\footnote{The CP, which is a planar graph, explicitly tracks topological faces using a standard Doubly-Connected Edge List (DCEL) algorithm, sorting half-edges counter-clockwise and discarding the infinite outer face using signed-area calculations.} of the crease pattern via a Kinematics Breadth-First Search (BFS). Starting from an arbitrary root face, we span the adjacency graph, recursively reflecting the exact 4D vertices of child faces across their connecting hinge edges.
 
-To calculate the 2D folded coordinates, we construct a spanning tree of the faces via a Kinematics Breadth-First Search (BFS). Starting from an arbitrary root face, we walk the adjacency graph, recursively reflecting the exact 4D vertices of child faces across their connecting hinge edges.
-
-However, calculating coordinates alone is insufficient; we must track the physical layering of the paper. We define a highly specialized data structure, \texttt{Fold225}, which separates abstract topological faces from physical paper layers (\textit{instances}):
+However, calculating coordinate geometry alone is insufficient; we must also explicitly track the connectivity of the overlapping paper layers. To achieve this, we define a specialized data structure, \texttt{Fold225}, which separates the abstract 2D topology from the physical paper layers (\textit{instances}):
 \begin{itemize}
-    \item \texttt{vertices}, \texttt{edges}, \texttt{faces}: The core geometric definitions in the folded 2D plane.
-    \item \texttt{instances}: A list of stacks. Stack $f$ corresponds to face $f$. If a face folds back onto itself multiple times, its stack will contain multiple \textit{instances}.
+    \item \texttt{vertices}: A globally unique list of exact 4D coordinates present in the folded state.
+    \item \texttt{edges}: A globally unique list of line segments, defined as pairs of vertex indices.
+    \item \texttt{faces}: A globally unique list of topological polygons, defined by an ordered cycle of edge indices. The relative order of the edges represents the continuous boundary of the face.
+    \item \texttt{instances}: The physical paper layers. Each unique topological face $f$ corresponds to a stack of one or more physical instances. An instance is represented as an array of connection pointers, where the $k$-th pointer corresponds to the $k$-th edge of face $f$. Each pointer stores the address $(f_{other}, i_{other})$ of the neighboring instance across that specific edge, or \texttt{None} if the edge is a paper boundary.
 \end{itemize}
-Every instance possesses an implied address $(f, i)$, where $f$ is the face index and $i$ is its depth in the stack. Within the stack, an instance is represented solely by its connections to other instances across its perimeter edges. For example, if instance $(f_1, i_1)$ connects across edge $e$ to instance $(f_2, i_2)$, that address is logged in its connection array. Boundary edges simply terminate in a \texttt{Null} pointer. This pointer-based architecture completely models the non-manifold, layered reality of folded paper.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=\textwidth]{figs/fold_structure.pdf}
+    \caption{A visualization of the folded state data structure for a waterbomb base. (a) The coordinate geometry defining unique edges and vertices. (b) The three unique faces defined by edges. (c) The instances of those faces and their connectivity.}\label{fig:fold-structure}
+\end{figure}
 
 \subsection{Orthogonal Slicing and Tree Extraction}
-With the paper successfully folded into a layered stack of 2D polygons, we must extract its uniaxial "Stick Figure" (the macroscopic tree). Because all layers overlap, we execute an orthogonal slicing algorithm---conceptually identical to a medical CT scan---to isolate the connected appendages.
+With the paper successfully folded into a layered stack of 2D polygons, we must extract its uniaxial stick figure (the macroscopic tree). We execute an orthogonal slicing algorithm---conceptually analogous to a medical CT scan---to isolate the connected appendages. The mental model for this process is projecting the folded model onto a horizontal axis and sweeping vertical slice lines across it to reveal its cross-sectional connectivity.
 
-First, we determine the optimal projection axis $\vec{a}$ by evaluating the bounding box width along the primary orthogonal and diagonal vectors, selecting the axis that yields the maximum span. Every vertex $\vec{v}_i$ in the folded state projects a critical height onto this axis: $h_i = \vec{v}_i \cdot \vec{a}$. We isolate and sort the unique critical heights generated by the vertices .
+First, we determine the optimal projection axis $\vec{a}$ by evaluating the primary 22.5$^\circ$ grid directions and selecting the axis that yields the maximum projected bounding box width. We project all vertices of the folded state onto $\vec{a}$, filter for unique values, and sort them to identify the critical hinge points ($h$) along the axis of the model.
 
-We mathematically sweep a 1D slice line $\mathcal{L}(h)$ perpendicular to $\vec{a}$. Between any two adjacent critical heights $(h_i, h_{i+1})$, the topology of the folded layers is entirely immutable. Therefore, we sample the structure precisely at these critical heights.
-
-When a slice intersects the folded state, it severs the topological faces. We utilize a highly optimized C++ routine (\texttt{split\_and\_rebuild\_cpp}) to bifurcate the affected faces and instantly remap the multi-layered instance pointers to the newly severed geometry. 
-
-To extract the tree, we build an adjacency graph of the instances. Crucially, \textbf{we ignore any connections that occur across edges parallel to the slicing hinge} . By filtering these out, the instances cluster into discrete Connected Components, representing the physical "flaps" or "rivers" of the origami base flowing between the critical height slices. 
-
-Every connected component spanning between two slices forms an \textbf{Edge} in our macroscopic tree, with its length directly proportional to the physical axial distance $h_{i+1} - h_i$. Where these components converge and physically interact at a critical height slice, they form a \textbf{Node} in the tree. By collapsing and merging intermediate degree-2 nodes, the microscopic complexity of overlapping paper layers is flawlessly distilled into an abstract, undirected graph representing the physical appendages of the origami model  .
-
-\textcolor{red}{[Figure Placeholder: The Slicing Algorithm. Show a folded base on the left with a 1D projection axis. In the center, show exploded views of the physical instance layers at three different slice heights. On the right, show the final extracted graph tree, visually mapping edges of the graph to the connected components (flaps) of the layers.]}
-\section{Database Architecture and Infrastructure}
-To manage the generation of millions of crease patterns and their high-dimensional representations, SEARCH 22.5 implements a decoupled, highly parallelized database architecture utilizing SQLite, SQLAlchemy, and Python's \texttt{multiprocessing} library. The generation pipeline is strictly separated into two independent databases: the Topologies database and the Tilings database.
-
-\subsection{Phase I Storage: Topology Database}
-The Topology database (\texttt{topologies\_N\_symmetry.db}) acts as the initial repository for the Z3 SAT solver outputs. To manage the parallel workload efficiently, a \texttt{Prefix} table acts as a task queue, tracking which binary prefixes have been fully exhausted by the worker processes.
-
-When a worker discovers a valid topology, the configuration of its internal edges is serialized into a highly compressed bit-string. To ensure uniqueness and provide a rapid indexing mechanism, this bit-string is hashed into a 64-bit integer using MurmurHash3 (\texttt{mmh3}). The topology is saved to the \texttt{State} table using a native \texttt{INSERT ... ON CONFLICT DO NOTHING} command. By shifting the deduplication burden down to the SQLite C-engine via the \texttt{hashed\_state} index, the Python worker processes can asynchronously write thousands of states per second without encountering race conditions or requiring expensive cross-process locking locks.
-
-\subsection{Phase II Storage: Tiling Database}
-The Tiling database (\texttt{tilings\_N\_symmetry.db}) is populated by an orchestrator script that pulls pending topologies from Phase I. Because the MILP quadruplet solver can generate multiple geometrically distinct tilings from a single topology via our diversity integer cuts, the Tiling database implements a one-to-many schema .
-
-For each valid metric tiling successfully generated, canonicalized, and flat-folded, three key data structures are stored:
+We mathematically sweep a 1D slice line $\mathcal{L}(h)$ perpendicular to $\vec{a}$, executing a slice at every critical hinge projection. When a slice intersects the folded state, it splits a single face into two faces joined at an unfolded crease. Because reindexing the connectivity map of the folded state's instances is a severe bottleneck, we utilize an optimized C++ routine (\texttt{split\_and\_rebuild\_cpp}) to handle the topological bifurcation. The C++ engine performs the following operations:
 \begin{enumerate}
-    \item \texttt{hashed\_tiling}: A 64-bit MurmurHash3 integer derived from the canonicalized exact 4D coordinate geometry. This prevents identically routed straight skeletons (which can occasionally emerge from different MILP branches) from duplicating in the database.
-    \item \texttt{tiling\_blob}: A fully serialized (Pickled) dictionary containing the exact $\mathbb{Q}^4$ vertices, the exact edge connectivity, and the topological faces, allowing the crease pattern to be perfectly reconstructed downstream.
-    \item \texttt{embedding}: A dense 32-dimensional NumPy array (\texttt{float32} bytes) representing the tree's spectral fingerprint, optimizing the memory footprint for machine learning similarity searches.
+    \item \textbf{Edge Splitting:} Intersected edges are split at the intersection point, registering new sub-segments into a global edge map to prevent duplicates.
+    \item \textbf{Face Bifurcation:} The vertex loop of each face is analyzed. If a face contains vertices strictly on both sides of the slice line, it is bifurcated into a left chain and a right chain. A new internal crease edge is generated to seal the two new topological faces.
+    \item \textbf{Pointer Resolution:} The engine duplicates the old physical instances into the new bifurcated faces. It maps the newly created internal creases to point to each other, seamlessly sewing the severed halves together. For external connections, it checks the split geometry of the neighboring instance to ensure the pointer is routed to the correct geometric half of the neighbor.
 \end{enumerate}
 
-\section{Spectral Graph Theory and Tree Embedding}
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.9\textwidth]{figs/tree_slicing.pdf}
+    \caption{The tree extraction slicing process. (a) The crease pattern. (b) The folded state with axis and orthogonal slices through vertex projections. (c) The sliced crease pattern (i.e., the packing). (d) Disconnected components of the crease pattern as a result of slicing. (e) The final extracted tree based on the connectivity between hinge sets and the face components. Not shown: degree-2 vertices are removed from the tree.}\label{fig:tree-slicing}
+\end{figure}
 
-To map the extracted uniaxial stick-figure trees into a searchable continuous vector space, SEARCH 22.5 leverages Spectral Graph Theory. 
+With the model completely sliced at every critical hinge location, we extract the tree by analyzing the connectivity of the face instances. We build an adjacency graph of all instances, except we explicitly ignore connections across hinge-parallel (that is, axis-perpendicular) edges. By filtering out these specific connections, the instances naturally decouple into discrete connected components, which physically represent flaps and rivers spanning between the hinge slices.
 
-\subsection{Literature Review: The Graph Laplacian}
-Spectral graph theory analyzes the properties of a graph in relationship to the characteristic polynomial, eigenvalues, and eigenvectors of matrices associated with the graph, most notably the Adjacency matrix $A$ and the Laplacian matrix $L$ \cite{chung1997spectral}. The Laplacian is defined as $L = D - A$, where $D$ is the diagonal degree matrix.
+The topological tree is then constructed by analyzing how these components interact at the hinge locations:
+\begin{enumerate}
+    \item \textbf{Edges:} Every connected component spans between a minimum and maximum hinge value ($h_{start}$ and $h_{end}$). Each component forms an \textbf{Edge} in our macroscopic tree (not to be confused with the edges of the folded state or the crease pattern) with its metric weight derived from the axial length $h_{end} - h_{start}$. 
+    \item \textbf{Nodes:} At each hinge location $h$, we must determine how the incident components converge to form structural nodes. Crucially, we do not simply merge all components that share the same projected hinge coordinate. Instead, we construct a local adjacency graph: two components are connected if and only if they share a physical paper connection across a hinge-parallel edge located \textit{exactly} at $h$. Each connected cluster within this local graph becomes a distinct \textbf{Node} in the tree. This rigorous clustering ensures that independent branches overlapping in the 2D projection remain topologically separate unless physically joined.
+    \item \textbf{Simplification:} Finally, the raw tree is simplified by collapsing and merging intermediate degree-2 nodes. This distills the microscopic complexity of the sliced layers into the final abstract, undirected metric graph representing the structural appendages of the origami model.
+\end{enumerate}
 
-The Laplacian matrix has been shown to hold immense representational power for graph topologies. Because $L$ is a symmetric, positive semi-definite matrix, its eigenvalues are real and non-negative: $0 = \lambda_1 \le \lambda_2 \le \dots \le \lambda_n$. The multiplicity of the zero eigenvalue corresponds exactly to the number of connected components in the graph. For a connected graph (like an origami tree), $\lambda_1 = 0$ and $\lambda_2 > 0$. 
+\section{Spectral Shape Analysis and the Heat Kernel Trace}\label{sec:hkt}
 
-This second smallest eigenvalue, $\lambda_2$, is famously known as the \textit{algebraic connectivity} or the \textit{Fiedler value}, introduced by Miroslav Fiedler in 1973 \cite{fiedler1973algebraic}. The Fiedler value dictates the global connectivity and structural bottlenecks of the network. Furthermore, eigendecompositions of the Laplacian have been extensively and successfully utilized in computer vision and geometric hashing for graph-matching problems, as isomorphic graphs are strictly cospectral (sharing identical eigenvalues), while the Laplacian spectrum provides robust, graded continuous distances for non-isomorphic but structurally similar shapes \cite{de2007old}. 
+To mathematically quantify the shape of an origami uniaxial tree, we utilize a concept from spectral graph theory known as the Heat Kernel Trace (HKT). The physical intuition behind this approach is straightforward: if we treat the tree as a network of physical, thermally conductive rods, the geometric shape of the network dictates how heat diffuses through it. Similar trees will distribute and dissipate heat in a similar pattern. By simulating the flow of heat over time, we can extract an embedding vector uniquely describing the tree's shape. The following is a crash course derivation for readers unfamiliar with spectral graph theory.
 
-\subsection{The 32-Dimensional Fingerprint}
-Following this theoretical precedent, we compute the eigenvalues of the Laplacian matrix $L$ for every extracted origami tree. The edge lengths of the tree (derived from the orthogonal slicing heights) are mapped to graph weights $w_{uv} = 1 / L_{uv}$, such that short, tight flaps exhibit stronger algebraic connectivity bounds than long, sweeping branches  .
-
-The eigenvalues are calculated via standard numerical linear algebra (\texttt{np.linalg.eigvalsh}). Because all valid origami bases exist as a single connected component, the trivial $\lambda_1 = 0$ eigenvalue is systematically discarded. The remaining non-zero eigenvalues are sorted in ascending order. To ensure the database maintains a uniform mathematical dimensionality regardless of the complexity of the origami base, the sequence is either truncated or padded with trailing zeros to exactly 32 dimensions (\texttt{DIMENSION = 32})  . This 32-dimensional continuous vector serves as the immutable geometric fingerprint for the database.
-
-\section{Database Querying and Retrieval}
-The ultimate objective of SEARCH 22.5 is to allow a user to retrieve a complex, exact-fraction crease pattern in constant time. This is achieved via our Query Pipeline and the interactive graphical interface.
-
-\subsection{Ephemeral FAISS Indexing and NumPy Caching}
-A standard SQLite database is highly inefficient for high-dimensional vector similarity searches. Furthermore, standard indexing structures are rigid; altering the geometric importance of certain graph features would traditionally require mutating and re-saving the entire multi-gigabyte database.
-
-To bypass this, we maintain a raw \texttt{.npy} (NumPy) cache of the database embeddings alongside an ordered mapping array . Loading a dense matrix directly into RAM from a binary \texttt{.npy} file is over 100 times faster than iterating through SQLite blobs. At query time, the system loads this matrix and constructs an ephemeral FAISS (Facebook AI Similarity Search) \texttt{IndexFlatL2} index entirely in memory. This allows the search algorithm to instantly scan millions of 32-dimensional vectors and retrieve the nearest L2 (Euclidean) matches in mere milliseconds.
-
-\subsection{Eigenvalue Weighting and Tuning}
-Raw Euclidean distance across the Laplacian spectrum is flawed for origami design. High eigenvalues ($\lambda \ge 2.0$) correspond to localized, high-frequency structures within the graph, such as minor topological forks or tiny flaps at the tips. Conversely, low eigenvalues ($\lambda \le 0.5$) govern the global, macroscopic branches (the spine, the major appendages). In origami design, matching the global proportions of the base is vastly more important than precisely mirroring the microscopic flaps.
-
-Because our FAISS index is ephemeral, we can apply dynamic scaling weights to both the query vector and the entire database matrix instantaneously at query time . We implemented three distinct weighting architectures:
-\begin{itemize}
-    \item \textbf{Value Decay:} Weights drop exponentially as the eigenvalue itself increases: $w_i = e^{-t \cdot \lambda_i}$.
-    \item \textbf{Index Decay:} Weights drop strictly based on the dimensional sequence order: $w_i = e^{-t \cdot i}$.
-    \item \textbf{Inverse:} An aggressive, physics-inspired harmonic penalty: $w_i = 1 / (\lambda_i + \epsilon)$.
-\end{itemize}
-Empirical testing on thousands of interactive queries demonstrated that \textbf{Value Decay} with a parameter of $t \approx 0.03$ perfectly balances structural fidelity and local flexibility, heavily penalizing mismatches in the global Fiedler values while remaining highly tolerant of extra flaps at the tips of the branches.
-
-\subsection{Interactive GUI}
-To bridge the gap between human design and the hyperspace index, we built an interactive Matplotlib GUI. The user is presented with a blank canvas and can click and drag to draw a completely custom uniaxial stick figure . 
-
-The spatial coordinates of the drawn nodes define the Euclidean lengths of the physical flaps. When the query is executed, the GUI constructs a NetworkX graph, normalizes the edge lengths, extracts the Laplacian eigenvalues, applies the $t=0.03$ value decay, and pings the FAISS engine. The result is a unified Megaplot that instantaneously presents the user with the mathematically perfect 22.5$^\circ$ crease patterns whose internal folded skeletons most closely map to their hand-drawn intent.
-\section{Computational Scaling and Architecture}
-The combinatorial explosion of valid grid topologies represents the primary computational bottleneck. Exhaustive profiling reveals the total number of states $\mathcal{N}(N)$ scales with the area of the grid:
+\subsection{The Continuous Heat Equation}
+We begin with the classical 1D heat equation, which describes how the temperature $u(x, t)$ at position $x$ changes over time $t$:
 \begin{equation}
-    \mathcal{N}(N) \sim \mathcal{O}(\gamma^{N^2})
+    \frac{\partial u}{\partial t} = \alpha \frac{\partial^2 u}{\partial x^2}
 \end{equation}
-Empirical data establishes $\gamma \approx 5.5$. Utilizing Python multiprocessing paired with C++ \texttt{pybind11} bindings, a single state traverses the entire pipeline in approximately 0.4 seconds, requiring 0.04 KB of SQLite storage. While databases up to $N=5$ synthesize effectively on standard workstation clusters, pushing the architecture to $N=6$ and beyond moves directly into the domain of dedicated supercomputing.
+where $\alpha$ is the thermal diffusivity of the material. To understand why the second derivative governs heat transfer, consider its discrete approximation using a step size $\Delta x$:
+\begin{equation}\label{eq:second_derivative}
+    \frac{\partial^2 u}{\partial x^2} \approx \frac{1}{\Delta x} \left( \frac{u(x+\Delta x) - u(x)}{\Delta x} + \frac{u(x-\Delta x) - u(x)}{\Delta x} \right)
+\end{equation}
+Notice that this equation simply sums the temperature differences between a point and its immediate neighbors, divided by the step size (the spatial gradients). This makes intuitive sense: if a spot $u(x)$ is colder than both its left and right neighbors, the second derivative will be positive, meaning the cold spot will heat up. 
+
+We can extend this logic to higher dimensions. Instead of the second derivative, we generalize using the Laplacian operator $\nabla^2$. For example, in a continuous 2D domain, the Laplacian is defined as:
+\begin{equation}
+    \nabla^2 u(x,y) = \frac{\partial^2 u}{\partial x^2} + \frac{\partial^2 u}{\partial y^2}
+\end{equation}
+Again, the continuous Laplacian simply measures how much the temperature at a specific point deviates from the average temperature of its immediate surroundings.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{figs/heat_equation.pdf}
+    \caption{(a) The continuous 1D heat equation: a point $x$ will heat or cool depending on its temperature relative to its neighbors. (b) The heat equation for a discrete graph: similarly, the rate of change of temperature at each node is determined by the sum of differences in temperature with its neighbors.}\label{fig:heat-equation}
+\end{figure}
+
+\subsection{The Graph Laplacian}
+We can transition this continuous physical model to our discrete origami tree graph. Let $u_i$ be the temperature at node $i$. Following the logic of the continuous case, the rate at which heat enters node $i$ is simply the sum of the heat fluxes from all adjacent nodes $j$. According to Fourier's law of conduction, the flux from $j$ to $i$ is proportional to the temperature gradient $\frac{u_j - u_i}{L_{ij}}$, where $L_{ij}$ is the physical edge length between the nodes. Thus, neglecting the material constant $\alpha$, the heat flow into node $i$ is:
+\begin{equation}\label{eq:discrete_heat}
+    \frac{du_i}{dt} = \sum_{j \sim i} \frac{u_j - u_i}{L_{ij}}
+\end{equation}
+where $j\sim i$ means ``for all nodes $j$ connected to node $i$''. The right-hand side of this equation resembles Equation~(\ref{eq:second_derivative}), the sum of temperature differences between a node and its neighbors, weighted by the inverse of the edge lengths. This makes intuitive sense: if node $i$ is colder than its neighbors, it will heat up; if it's hotter, it will cool down. However, recall that the derivative of a continuous function like in Equation~(\ref{eq:second_derivative}) increases in accuracy as $\Delta x$ approaches zero. Therefore, we force $L_{ij}$ to be small by subdividing large edges of our origami tree, ensuring that our discrete graph model faithfully approximates the continuous physics analogy.
+
+A careful observer might ask: in the 1D continuous approximation (Equation 2), the $\Delta x$ terms multiply to form a $\Delta x^2$ in the denominator. Why do we only use $1/L_{ij}$ for our graph, rather than $1/L_{ij}^2$? The answer lies in the distinction between a continuous space and a metric graph. The first division by length defines the thermal gradient (the driving force of the heat). In a continuous system, the second division by length accounts for the infinitesimally small \textit{mass} (or control volume) of the point being heated. In standard spectral graph theory, nodes are treated as abstract points with uniform mass, so the edge weight simply represents thermal conductance ($w_{ij} = 1/L_{ij}$). 
+
+Because this standard graph formulation drops the spatial volume term, a standard graph Laplacian is only a true approximation of the continuous continuous Laplacian when all edge lengths $L_{ij}$ are uniform lengths. This further motivates our decision to pre-process trees with edge subdivision, ensuring that edge lengths are not only small, but uniformly small.
+
+\subsection{Matrix Formulation}
+In the continuous heat equation, the Laplacian $\nabla^2$ is a negative semi-definite operator (heat diffuses from hot to cold). By convention in spectral graph theory, we flip the sign of the operator so that its eigenvalues are non-negative. Thus, we define the Graph Laplacian $L$ such that the heat transfer equation becomes:
+\begin{equation}\label{eq:matrix ode}
+    \frac{d\vec{u}}{dt} = -L \vec{u}
+\end{equation}
+where $\vec{u}(t) = {[u_1(t), u_2(t), \dots, u_N(t)]}^T$ is the vector of temperatures at all $N$ nodes. The graph Laplacian $L$ has the same effect as the continuous Laplacian $\nabla^2$, but in matrix form (acts on a vector of node temperatures rather than a continuous temperature function).
+
+To satisfy Equation~(\ref{eq:discrete_heat}) under this flipped sign convention, the $i$-th row of the matrix multiplication $L\vec{u}$ must equal $\sum_{j \sim i} \frac{1}{L_{ij}} (u_i - u_j)$. We can explicitly construct the matrix $L$ to achieve this:
+\begin{enumerate}
+    \item For the off-diagonal entries (representing the $-u_j$ terms), we set $L_{ij} = -\frac{1}{L_{ij}}$ if nodes $i$ and $j$ are connected, and $0$ otherwise. This is exactly the negative weighted Adjacency matrix, $-A$.
+    \item For the diagonal entries (representing the $+u_i$ terms), node $i$ must be multiplied by the sum of the conductances of all its connected edges. We set $L_{ii} = \sum_{j \sim i} \frac{1}{L_{ij}}$. This is exactly the weighted Degree matrix, $D$.
+\end{enumerate}
+Therefore, the Graph Laplacian takes the elegant matrix form:
+\begin{equation}
+    L = D - A
+\end{equation}
+
+\subsection{The Heat Kernel and Matrix Exponential}
+Equation~(\ref{eq:matrix ode}) is a system of linear, first-order ordinary differential equations. Because $L$ is a matrix of constants, the solution to this differential equation takes the form of a matrix exponential:
+\begin{equation}
+    \vec{u}(t) = e^{-tL} \vec{u}(0)
+\end{equation}
+We define this exponential matrix as the \textbf{Heat Kernel}, $H(t) = e^{-tL}$. 
+
+Physically, $H(t)$ defines the complete thermal distribution of the graph at time $t$, for any initial condition. The entry $H_{ij}(t)$ represents the exact amount of heat that will have diffused from node $i$ to node $j$ if a single, unit-mass of heat was injected at node $i$ at $t=0$. The diagonal entries $H_{ii}(t)$ represent the amount of heat \textit{remaining} at the source node $i$. At $t=0$, none of the initial heat has had time to diffuse, so $H_{ii}(0) = 1$. As $t \to \infty$, the heat completely disperses through the network until it's evenly distributed across all nodes: $H_{ii}(\infty) = 1/N$.
+
+\subsection{Eigendecomposition}
+Because $L$ is real and symmetric, the Spectral Theorem guarantees that it can be diagonalized into an orthonormal basis:
+\begin{equation}
+    L = \Phi \Lambda \Phi^T
+\end{equation}
+where $\Phi$ is an matrix of eigenvectors $[\phi_1, \phi_2, \dots, \phi_N]$ (which is orthogonal, so $\Phi^T  = \Phi^{-1}$), and $\Lambda$ is a diagonal matrix containing the corresponding eigenvalues $\lambda_1, \lambda_2, \dots, \lambda_N$. Recall that an eigenvalue and an eigenvector satisfy the equation $L\phi_i = \lambda_i \phi_i$. 
+
+By definition, the matrix exponential is a Taylor series: $e^{-tL} = I - tL + \frac{t^2}{2!}L^2 - \frac{t^3}{3!}L^3 + \dots$ 
+When we raise $L$ to a power, the internal orthogonal matrices gracefully cancel out (e.g., $L^2 = (\Phi \Lambda \Phi^T)(\Phi \Lambda \Phi^T) = \Phi \Lambda (\Phi^T \Phi) \Lambda \Phi^T = \Phi \Lambda^2 \Phi^T$). This cancellation holds for every term in the Taylor series, allowing us to factor the eigenvectors completely out of the exponential:
+\begin{equation}
+    e^{-tL} = \Phi e^{-t\Lambda} \Phi^T = H(t)
+\end{equation}
+
+\subsection{The Heat Kernel Trace $Z(t)$}
+Rather than dealing with the full $N \times N$ matrix $H(t)$, we can compress the graph's global thermal profile into a single scalar function of time by taking the trace of the Heat Kernel:
+\begin{equation}
+    Z(t) = \text{tr}(H(t)) = \sum_{i=1}^N H_{ii}(t)
+\end{equation}
+Recall that $H_{ii}(t)$ is the amount of heat remaining at node $i$ at time $t$, assuming node $i$ alone was injected with a unit of heat For each node, $H_{ii}(t)$ takes the form of an exponential decay $e^{-t\lambda_i}$. Thus, $Z(t)$ is the sum of these decaying exponentials. We can prove this using the cyclic invariance of the trace operator, or in other words, the fact that $\text{tr}(ABC) = \text{tr}(BCA)$:
+\begin{align}
+    Z(t) &= \text{tr}(\Phi e^{-t\Lambda} \Phi^T) = \text{tr}(\Phi^T \Phi e^{-t\Lambda}) = \text{tr}(I e^{-t\Lambda}) = \text{tr}(e^{-t\Lambda}) \\
+    Z(t) &= \sum_{i=1}^N e^{-t\lambda_i}
+\end{align}
+This formulation can be computed quickly. By computing the eigenvalues of $L$ and applying the exponential decay for some values of $t$, we can extract a compact embedding vector that captures the global shape of the tree. In the implementation, we compute the first 32 eigenvalues and apply the decay at 64 values of $t$ from $t=0.00001$ to $t=10$ along a logarithmic scale, resulting in a 64-dimensional embedding vector for each tree.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.8\textwidth]{figs/hkt_examples.pdf}
+    \caption{(a) The heat kernel trace $Z(t)$ over some time range will uniquely describe the shape of a tree. A round ``star-shaped'' tree will distribute heat much quicker than a linear ``fishbone-shaped'' tree.}\label{fig:star_vs_fishbone}
+\end{figure}
+\begin{figure}[p!]
+    \centering
+    \includegraphics[width=\textwidth]{figs/heat_decay.png}
+    \label{fig:heat_decay}
+    \caption{The Heat Kernel Trace $Z(t)$ profile for 200 random trees, plotted on a semilog plot and normalized by $N$. Although the curves vary from tree to tree, they all follow the same overall exponential decay pattern.}
+\end{figure}
+\begin{figure}[p!]
+    \centering
+    \includegraphics[width=\textwidth]{figs/normalized_decay.png}
+    \caption{The Heat Kernel Trace $Z(t)$ profile for 200 random trees, with each $Z(t)$ normalized along a normal distribution based on the global mean and standard deviation for that value of $t$ across the entire database. This normalization process amplifies the relative differences between trees, allowing for a more sensitive comparison.}\label{fig:normalized_decay}
+\end{figure}
+
+\subsection{Accelerated Similarity Search via FAISS}
+The database contains hundreds of thousands of exact rational tilings. Comparing a user's drawn tree against every database entry in real-time using raw graph matching or full eigenvalue extraction would be too slow. Instead, we employ Meta's FAISS (Facebook AI Similarity Search) library, utilizing a highly optimized C++ \texttt{IndexFlatL2} index.
+
+During database generation, the exact tree for every tiling is extracted and stored in the database. At the end of the generation process, the FAISS cache is initialized by converting the trees into 64-dimensional HKT signatures. Because certain dimensions of the HKT vector exhibit much higher absolute variance than others, we apply Z-score normalization across the entire database. For each time step, we compute the database mean $\mu$ and standard deviation $\sigma$ across all signatures at that time, and normalize the dataset. This ensures the Euclidean (L2) distance metric weights all dimensions of the signature equally (see Figure \ref{fig:normalized_decay} compared to Figure \ref{fig:heat_decay}). The resulting matrix is loaded into the FAISS index and saved to disk alongside a mapping dictionary that links FAISS array indices back to the original SQLite primary keys.
+
+At query time, the user's drawn tree is processed through the same HKT pipeline and normalization steps to produce a query signature. This signature is passed into the FAISS index, which performs a nearest neighbor search to retrieve the closest matching (L2 norm) tree signatures. The corresponding tiling entries are fetched from the database and returned to reconstruct the crease patterns, folded states, and trees for visualization in the frontend interface.
+
+\section*{Conclusion}
+The SEARCH 22.5 pipeline circumvents the historically intractable problem of forward 22.5$^\circ$ origami design through exhaustive precomputation and spectral indexing. The pipeline successfully bridges multiple discrete phases of computation. First, the exponentially vast $O(2^{4N^2})$ geometric search space is rigorously pruned using Z3 Boolean Satisfiability (SAT) to isolate valid planar topologies. Next, Mixed-Integer Linear Programming (MILP) is deployed to strategically assign quadruplet equidistance constraints via Big-M inequalities, eliminating degrees of freedom and locking the topology into a rigid metric tiling that optimizes the neatness and foldability of the crease pattern. To guarantee exact precision without quadratic field extensions or floating-point degradation, the linear system is solved over a 4D rational basis. Straight skeleton generation enhanced by discrete quantization and recursive Kawasaki raycasting is used to construct the flat-foldable crease pattern. The physical paper layers are then mathematically folded and subjected to an orthogonal sweep-line slicing algorithm, which distills the local layer connectivity into a macroscopic uniaxial tree. Finally, the Laplacian eigendecomposition of this structural tree is used to calculate the Heat Kernel Trace (HKT), projecting the crease pattern's topological shape into an $\mathbb{R}^{64}$ vector space. This allows the user's inverse design query to be resolved in sub-millisecond time via FAISS nearest-neighbor matching.
+
+\begin{figure}[p!]
+    \centering
+    \includegraphics[width=\textwidth]{figs/interface1.png}
+    \caption{The user interface for drawing and querying 22.5$^\circ$ crease patterns from the database.}\label{fig:interface1} 
+\end{figure}
+\begin{figure}[p!]
+    \centering
+    \includegraphics[width=\textwidth]{figs/interface2.png}
+    \caption{The interface's detailed view of the query results, showing the topology, solved tiling, crease pattern, folded state, tree, and HKT signature match with the query.}\label{fig:interface2}  
+\end{figure} 
+
+\subsection{Results}
+Screenshots of the final interface are shown in Figures \ref{fig:interface1} and \ref{fig:interface2}. The user draws a tree on the left, which is processed through the HKT pipeline to produce a query signature. The FAISS index retrieves the closest matching trees from the database, and the corresponding tilings are used to reconstruct the crease patterns and folded states, which are visualized on the right. The retrieved designs are previewed as crease patterns but can be expanded to show the full pipeline process from topology to HKT signature match.
+
+It is acceptable that the tree lengths of the retrieved designs do not perfectly match the query tree. The nature of 22.5 is that flap lengths are quantized in the form of $A + B\sqrt{2}$, which is unlike box pleating (where users can specify integer lengths) or circle packing (where users can specify any real length). If a user wants one flap roughly twice as long as another, they do not know whether it is exactly $\times 2$ or if it is actually $\times (-5 + 5\sqrt{2})$, when in fact one may lead to a much more elegant solution than the other. Similarly, it is also acceptable that there are short stub lengths present or missing from the retrieved trees. As long as the paper length (or in HKT terms, the thermal mass) is in the right general distribution, the artist can then use techniques like point splitting or mush to turn a long flap into a shorter flap with details. This ``handwaviness'' is the reason the user is not allowed to provide numerical input for tree lengths, but only a visual sketch.
+
+Empirically, from a database of around 300k tilings, the query returns useful crease patterns for trees representing simple quadrapeds, such as the giraffe shown in Figures \ref{fig:interface1} and \ref{fig:interface2}. More complex queries with more branches and deeper hierarchies (e.g., a dragon) will return more distant matches, but the returned designs can still serve as a useful starting point for artists to iterate towards their desired design.
 
 
+\subsection{Limitations and Future Work}
+While SEARCH 22.5 provides a robust framework for algorithmic design, the methodology currently exhibits several notable limitations. Foremost, the database remains relatively sparse. The current archive of approximately 300,000 tilings represents a minuscule fraction of the infinite 22.5$^\circ$ design space. Relying on brute-force enumeration and constraint solving poses severe scalability limits for larger grid dimensions ($N > 5$) necessary for more complex designs. Future research must pivot toward establishing an analytical mapping between desired tree metrics and optimal constraint selection to bypass the need for exhaustive generation entirely. 
 
-\subsection{Parallelization via Prefix Pruning}
-As grid area expands, the search space $O(2^{4N^2})$ rapidly exceeds the capacity of a single SAT solver instance. To solve this, we implemented a massive multiprocessing architecture utilizing \textit{prefix seeding}.
+Furthermore, the current pipeline is strictly confined to uniaxial bases. Non-uniaxial 22.5$^\circ$ design entails profoundly more complex kinematic dependencies and remains an open mathematical challenge; for the foreseeable future, this design process will solely rely on human intuition. It must also be emphasized that even within the uniaxial domain, SEARCH 22.5 functions as an assistive computational tool rather than an autonomous designer. The database serves to return the nearest structural approximation to a user's query, which invariably necessitates extensive artistic tweaking and iterative refinement to arrive at a final origami design. Additionally, the formulation of the input tree itself requires significant domain expertise and artistic vision.
 
-The internal edges are given a strict, deterministic ordering. We can divide the search space by hardcoding the first $k$ edges to a specific binary prefix (e.g., `10110...`), leaving the solver to find valid configurations for the remaining $(4N^2 - 2N) - k$ edges. 
+\subsection{Final Remarks}
+The computational design of origami is an inherently interdisciplinary endeavor. The success of SEARCH 22.5 relies on seamlessly integrating concepts from a wide array of seemingly unrelated mathematical and computational fields. The pipeline relies on Boolean Satisfiability from formal logic; Mixed-Integer Linear Programming from operations research; Gaussian elimination over finite fields and 4D rational bases from abstract algebra; and straight skeleton generation from computational geometry. The ultimate indexing of these structures relies on Spectral Graph Theory and the physics of discrete heat diffusion to quantify abstract shapes, utilizing FAISS---the same vector-search technology powering YouTube's video recommendation system. By strapping together results from these diverse disciplines, SEARCH 22.5 demonstrates that the historically intuitive art of 22.5$^\circ$ design can be computationally conquered towards a more complete understanding of origami.
 
-However, naively generating all $2^k$ prefixes results in millions of "dead" prefixes that inherently violate the planarity or degree constraints within their first few bits. To solve this efficiently, we execute a \textit{Pre-Pruning Phase}. We spin up a miniature Z3 instance containing only the base geometric rules, and constrain its search exclusively to the first $k$ variables. We iteratively extract valid models, blocking previously found prefixes by adding the logical negation of their exact bit-state back to the solver:
+\newpage
+\printbibliography
+
+\appendix 
+
+\section{Appendix: 4D geometry details}
+
+\subsection{Crease Intersections in 4D}
+To intersect creases formed by vertices $\vec{v}_a$ and $\vec{v}_b$ at angles $\alpha$ and $\beta$, we utilize precomputed rational tangents. The intersection vertex $\vec{v}_c$ is calculated as:
+\begin{align} \label{eq:4D_intersection}
+    \Delta i & = (v_{b_x} - v_{a_x}) + (v_{b_y} - v_{a_y} - v_{b_w} + v_{a_w})\frac{\sqrt{2}}{2} \\
+    \Delta j & = (v_{b_z} - v_{a_z}) + (v_{b_y} - v_{a_y} + v_{b_w} - v_{a_w})\frac{\sqrt{2}}{2} \\
+    \beta_i & = \frac{\Delta j - \tan(\alpha)\Delta i}{\tan(\alpha) - \tan(\beta)}
+\end{align}
+To prevent exponential bit-depth growth during complex divisions, we implemented a custom, highly optimized C++ \texttt{Fraction} class exposed via Python bindings. This class strictly enforces immediate $\gcd$ simplification upon instantiation, ensuring the numerators and denominators remain safely within 64-bit integer limits across millions of operations.
+
+\subsubsection{Recursive ray casting and unfolding}
+Ray casting begins with a vertex and an angle, and extends until the first crease or vertex it intersects. The nearest intersection can be found quickly without checking all edges because the nearest intersection must be along an edge that shares a face with the starting vertex. A visualization of this fact can be seen in figure \ref{fig:raycasting}. Although computing the face connectivity is $O(n)$ and checking intersections with all edges is also $O(n)$, precomputing the face connectivity only needs to be done once to make all ray casting efficient for that crease pattern. If the ray intersects an existing crease, we can preserve Kawasaki flat foldability by recursively reflecting the ray from the intersection vertex along the reflected angle, as demonstrated in figure \ref{fig:recursive-raycasting}. If the ray intersects a boundary edge or a higher degree vertex, the ray casting ends.
+\begin{figure}[h]
+    \centering
+    \includegraphics[width=0.3\textwidth]{figs/raycasting.pdf}
+    \caption{An arbitrary ray cast from an arbitrary vertex can only intersect with edges that share a face with the starting vertex.}\label{fig:raycasting}
+\end{figure}
+
+\section{Appendix: Database Architecture and Infrastructure}
+To manage the generation of millions of crease patterns and their high-dimensional representations, SEARCH 22.5 implements a highly parallelized, decoupled database architecture. The generation pipeline is separated into two independent phases—Topologies and Tilings—designed to minimize inter-process communication and bypass disk I/O bottlenecks.
+
+\subsection{Phase I: Search Space Pruning and Topology Generation}
+As the origami grid area expands, the combinatorial search space $O(2^{4N^2})$ rapidly exceeds the capacity of a single SAT solver instance. To solve this, we implemented a massive multiprocessing architecture utilizing \textit{prefix seeding}.
+
+We divide the global search tree by hardcoding the first $k$ edges to a specific binary prefix (e.g., a 16-bit sequence like \texttt{10110...}), leaving the solver to find valid configurations for the remaining edges. However, naively generating all $2^k$ prefixes results in millions of ``dead'' paths that inherently violate planarity or degree constraints within their first few bits. 
+
+To solve this, we execute a \textit{Pre-Pruning Phase}. A miniature Z3 instance, constrained exclusively to the first $k$ variables, iteratively extracts valid models. Previously found prefixes are blocked by adding the logical negation of their exact bit-state back to the solver:
 \begin{equation}
     \text{Block Clause} = \bigvee_{i=1}^k (v_i \neq b_i)
 \end{equation}
-This drastically shrinks the search tree. For example, an 18-bit prefix sequence natively contains 262,144 combinations, but Z3 dynamically pre-prunes this down to merely $\sim$40,000 viable prefixes.
+This dynamically shrinks the search tree. For example, a 16-bit prefix sequence natively contains 65,536 combinations, but Z3 pre-prunes this down to a much smaller subset of viable, mathematically possible roots.
 
-These viable prefixes are stored in a centralized SQLite database queue. Parallel worker processes fetch a prefix, initialize a fresh Z3 solver with the prefix hardcoded as absolute truth, and exhaustively discover every valid topology that exists down that specific branch of the combinatorial tree. 
+Parallel worker processes fetch these viable prefixes, initialize a fresh Z3 solver with the prefix hardcoded as absolute truth, and exhaustively discover every valid topology down that specific branch. Because the SAT solver inherently generates isomorphic duplicates (rotations or reflections), we canonicalize the geometries before saving. We apply all 8 rigid transformations of the $D_4$ group, strictly sort the edges, and select the lexicographically smallest edge tuple as the absolute representation. 
 
-\subsection{Canonicalization and Database Storage}
-Because the SAT solver inherently generates isomorphically identical graphs rotated or reflected across the paper, we canonicalize the geometries before saving. 
+To minimize storage overhead, this canonical edge list is compressed into a contiguous binary byte-string and hashed into a 64-bit MurmurHash3 (\texttt{mmh3}) integer. Workers flush these states to SQLite utilizing a native \texttt{INSERT ... ON CONFLICT DO NOTHING} statement bound to the hash index. By shifting the deduplication burden down to the SQLite C-engine, the Python workers can asynchronously write thousands of states per second without expensive cross-process locks.
 
-We apply all 8 rigid transformations of the $D_4$ group to the active edge set. The edges are strictly sorted, and the transformation that yields the lexicographically smallest edge tuple is selected as the canonical absolute representation of that topology. 
+\subsection{Phase II: Tiling Generation and Smart Auditing}
+The Tiling database is populated by an orchestrator that pulls pending topologies from Phase I. Because the MILP quadruplet solver can generate multiple geometrically distinct tilings from a single topology via diversity integer cuts, this database implements a one-to-many schema.
 
-To minimize disk I/O and storage overhead, the canonical edge list is compressed into a contiguous binary byte-string, representing the truth states of the ordered edges. A 64-bit MurmurHash3 (\texttt{mmh3}) integer is generated from this byte-string. The worker flushes these states in batches of 50 to an SQLite writer process, which utilizes a native `INSERT ... ON CONFLICT DO NOTHING` statement bound to the 64-bit hash index. This pushes the deduplication burden down to the C-level of the database engine, rendering it lightning-fast, immune to uncommitted batch duplicates, and highly resilient to process interruptions.
+Each tiling entry requires roughly 2--4 kB of storage and contains:
+\begin{enumerate}
+    \item \texttt{hashed\_tiling}: A 64-bit hash of the canonicalized exact 4D coordinate geometry, preventing identical straight skeletons generated from different MILP branches from duplicating.
+    \item \texttt{tiling\_blob}: A Pickled dictionary containing the exact $\mathbb{Q}^4$ vertices and topological faces.
+    \item \texttt{embedding}: A serialized \texttt{NetworkX} graph of the resulting macroscopic tree.
+\end{enumerate}
 
+\textbf{Data Integrity and Smart Migration:} Over the course of the project, schema updates (such as shifting from raw \texttt{float32} numpy embeddings to full \texttt{NetworkX} tree representations) introduced legacy data fragmentation. Rather than executing days-long full database recomputes, the pipeline employs a ``lazy-loader'' smart auditing script. Utilizing Python duck-typing and targeted \texttt{pickle.loads()} \texttt{try/except} blocks, the pipeline rapidly sweeps the database in the main thread, instantly skipping healthy tree objects and pushing only corrupted or legacy byte-strings to the multiprocessing pool for full geometric reconstruction. 
 
-\section{Conclusion}
-SEARCH 22.5 fundamentally reframes the computational origami design flow. By shifting the computational burden of integer programming and exact Gaussian elimination to an exhaustive precomputation phase, we enable instantaneous, constant-time design retrieval. The utilization of the 4D Hypercube basis natively prevents floating-point inaccuracies, while our orthogonal slicing and spectral embedding techniques establish a robust bridge between abstract user intent (trees) and exact physical realizations (tiled crease patterns).
+\subsection{Accelerated Similarity Search via FAISS}
+Comparing a user's drawn tree against hundreds of thousands of database entries in real-time requires bypassing the SQLite database entirely during the initial search. Unpickling complex geometric blobs from disk introduces unacceptable latency. 
 
+To achieve instant results, we utilize Meta's FAISS (Facebook AI Similarity Search) library.
+\begin{enumerate}
+    \item \textbf{Offline Precomputation:} A caching script extracts the eigenvalues from the stored trees, computes their Heat Kernel Trace (HKT) signatures, and normalizes them via Z-scores (to ensure all dimensions of the trace are weighted equally regardless of variance). These signatures are loaded into a FAISS \texttt{IndexFlatL2} index and saved to disk alongside a lightweight mapping dictionary linking the FAISS array indices back to the original SQLite primary keys.
+    
+    \item \textbf{Federated Querying:} When a user submits a query, the input tree is immediately converted to an HKT signature, normalized using the cached $\mu$ and $\sigma$ parameters, and simultaneously searched across multiple active database configurations (e.g., $N=4$ none, $N=5$ diag).
+    
+    \item \textbf{The Uniqueness Filter:} A critical edge case in origami design is that geometrically distinct raw tilings can occasionally fold into visually identical Crease Patterns (CPs). If the pipeline simply requested the top $n$ nearest neighbors, the user might receive identical results. Instead, the pipeline deliberately requests a massive buffer from FAISS (10$\times$ the target result count). It sorts these candidate hits globally by L2 distance, dynamically reconstructing their CPs and canonicalizing them. If a CP has already been seen in the current query batch, it is discarded. The algorithm halts exactly when $n$ geometrically unique CPs have been found.
+\end{enumerate}
 
-database scaling: how big of a database is necessary for good results, and how much training time and database memory size is required
+\subsection{Client-Server Decoupling and Serialization}
+To ensure the heavy geometric processing does not block the user interface, the frontend drawing application and the backend mathematical engine are strictly decoupled. 
 
-quality of results
+The frontend is a lightweight JavaScript canvas where users draw standard graphs. The backend server translates this drawing into an abstract mathematical tree. Once the backend identifies the best matches via FAISS, it must transmit the results back to the browser. However, web browsers cannot process the exact rational algebra ($\mathbb{Q}^4$) objects or \texttt{NetworkX} graphs used by the geometric engine. 
 
-\printbibliography
-
+The backend employs a dedicated serialization pipeline to bridge this gap. Crease pattern segments and folded state layers are systematically stripped of their high-precision rational data types, resolved into standard 2D floating-point arrays, and bundled into a pure-data JSON payload. This allows the frontend to rapidly iterate over basic numeric arrays to draw standard SVG polygons and lines, completely abstracting the complex topological mathematics away from the UI.
 
 \end{document}
