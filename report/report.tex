@@ -22,7 +22,7 @@
 \maketitle
 
 \begin{abstract}
-This report presents SEARCH 22.5 (Spectral Embedding Archive for Rational Crease Pattern Hyperspace), an inverted design methodology for the computational generation of 22.5$^\circ$ origami crease patterns. Rather than solving a highly intractable nonlinear mixed-integer optimization problem for every novel user input, we shift the computational burden to an exhaustive precomputation phase. The pipeline enumerates valid grid topologies using Boolean Satisfiability (SAT) solvers, resolves geometric degrees of freedom via Mixed-Integer Linear Programming (MILP), and constructs exact 22.5$^\circ$ tilings utilizing a 4D rational coordinate basis to circumvent floating-point degradation. Folded states are mathematically sliced to extract their macroscopic uniaxial trees. By simulating discrete heat diffusion across these networks, the trees are embedded into 64-dimensional vectors using the Heat Kernel Trace (HKT) from spectral graph theory. At runtime, the inverse design problem is thus reduced to a FAISS (Facebook AI Similarity Search) nearest-neighbor query, allowing the system to instantly retrieve the precomputed crease pattern whose structural topology most closely matches the user's desired shape.
+This report presents SEARCH 22.5 (Spectral Embedding Archive for Rational Crease Pattern Hyperspace), an inverted design methodology for the computational generation of uniaxial 22.5$^\circ$ origami crease patterns. Rather than solving a highly intractable nonlinear mixed-integer optimization problem for every novel user input, we shift the computational burden to an exhaustive precomputation phase. The pipeline enumerates valid topologies of axial creases using Boolean Satisfiability (SAT) solvers, constrains geometric degrees of freedom via Mixed-Integer Linear Programming (MILP) to optimize for crease pattern neatness, and constructs the crease pattern using a 4D rational coordinate basis to circumvent floating-point degradation. The resulting folded states then are mathematically sliced to extract their macroscopic uniaxial trees. By simulating discrete heat diffusion across these networks, the trees are embedded into 64-dimensional vectors using the Heat Kernel Trace (HKT) from spectral graph theory. At runtime, the inverse design problem is thus reduced to a FAISS (Facebook AI Similarity Search) nearest-neighbor query, allowing the system to instantly retrieve the precomputed crease pattern whose structural topology most closely matches the user's desired shape. This report serves as a comprehensive technical overview of the SEARCH 22.5 pipeline, detailing the algorithms, mathematical formulations, and implementation strategies employed at each stage of the process.
 \end{abstract}
 
 
@@ -43,12 +43,12 @@ It is theoretically possible to inject rigid integer constraints into the nonlin
 \begin{figure}
     \centering
     \includegraphics[width=0.7\textwidth]{figs/forward_tilings.png}
-    \caption{It is computationally straightforward to generate a flat foldable crease pattern from a 22.5$^\circ$ tiling layout. It is also straightforward to extract the underlying tree structure from the crease pattern. However, it is unknown how to solve the inverse problem.}\label{fig:forward_tilings} 
+    \caption{It is computationally straightforward to convert a 22.5$^\circ$ tiling into a flat foldable crease pattern using straight skeletons. It is also straightforward to fold the crease pattern and extract the overall tree structure. However, it is unknown how to solve the inverse problem.}\label{fig:forward_tilings} 
 \end{figure}
 Conversely, generating a flat foldable crease pattern from a predefined tiling of 22.5$^\circ$ molecules is computationally straightforward through the use of straight skeletons. However, the inverse design of a tiling to acheive a desired tree has no known solution---in fact, prior to this project, there were no known implementations of the forward computation of extracting a tree from a tiling.
 
 
-Therefore, we we exploit the computational tractibility of tilings. We first enumerate a massive database of valid 22.5$^\circ$ tilings (Sections~\ref{sec:topology_enumeration} and~\ref{sec:tiling_realization}), then extract their underlying trees retroactively (Section~\ref{sec:cp_generation}). Finally, by combining the physics of heat transfer with a sophisticated database lookup algorithm (Section~\ref{sec:hkt}), we can approximate the user's inverse design problem of tree $\to$ crease pattern in near-constant time by simply searching for the closest match in the database.
+Therefore, we we exploit the computational tractibility of tilings. We first enumerate a massive database of valid 22.5$^\circ$ crease patterns based on axial tilings (Sections~\ref{sec:topology_enumeration} and~\ref{sec:tiling_realization}), then extract their underlying trees retroactively (Section~\ref{sec:cp_generation}). Finally, by combining the physics of heat transfer with a sophisticated database lookup algorithm (Section~\ref{sec:hkt}), we can approximate the user's inverse design problem of tree $\to$ crease pattern in near-constant time by simply searching for the closest match in the database.
 
 
 \section{Database Generation Phase I: Topology Enumeration}\label{sec:topology_enumeration}
@@ -74,9 +74,7 @@ A crease cannot terminate abruptly in the middle of a sheet of paper. Define the
 \end{equation}
 
 \paragraph{No T-Junction Constraint}
-To prevent dense bouncing and other straight skeleton artifacts, we enforce a strict T-junction rule: a $180^\circ$ continuous line cannot exist unless it is perpendicularly crossed by another line. 
-
-For every internal node $(x,y) \in [1, N-1]^2$, we evaluate its 8 potential neighbors, grouped into four opposite pairs: $P_1 = (R, L)$, $P_2 = (U, D)$, $P_3 = (UR, DL)$, and $P_4 = (UL, DR)$. Let the two boolean variables representing the edges of pair $k$ be $a_k$ and $b_k$. If \textit{any} pair $i$ is continuously active ($a_i b_i$), then \textit{all} pairs $j$ intersecting at that node must share identical boolean states ($a_j = b_j$). To express this in CNF, for every pair $i \in \{1..4\}$ and every pair $j \in \{1..4\}$, we assert:
+To prevent dense bouncing and other straight skeleton complications, we enforce a strict T-junction rule. For every internal node $(x,y) \in [1, N-1]^2$, we evaluate its 8 potential neighbors, grouped into four opposite pairs: $P_1 = (R, L)$, $P_2 = (U, D)$, $P_3 = (UR, DL)$, and $P_4 = (UL, DR)$. Let the two boolean variables representing the edges of pair $k$ be $a_k$ and $b_k$. If \textit{any} pair $i$ is continuously active ($a_i b_i$), then \textit{all} pairs $j$ intersecting at that node must share identical boolean states ($a_j = b_j$). To express this in CNF, for every pair $i \in \{1..4\}$ and every pair $j \in \{1..4\}$, we assert:
 \begin{equation}
     (\overline{a_i} + \overline{b_i} + a_j + \overline{b_j}) \cdot (\overline{a_i} + \overline{b_i} + \overline{a_j} + b_j)
 \end{equation}
@@ -227,7 +225,7 @@ To visualize this system, take for example the constraints imposed on the empty 
 The crease pattern is fully defined if and only if the matrix $A$ has full rank, $\text{rank}(A) = 2n$. If the matrix is rank-deficient, then there are still degrees of freedom for vertices in the tiling to move without violating constraints. These motions are described by columns of the null space. To resolve these degrees of freedom, we need to inject additional constraints.
 
 \subsection{Quadruplet equidistance constraints}
-While only the basic geometric constraints are absolutely necessary, we can ``spend'' the remaining degrees of freedom to constrain the tiling into a crease pattern that is as ``nice'' as possible. It is difficult to quantify how ``nice'' a crease pattern is, but a good heuristic is to minimize the number of internal vertices generated by the straight skeletons of the polygons. This is because internal vertices of a straight skeleton are generally not flat foldable, so each internal vertex forces a propagation of creases that make the crease pattern increasingly messier.
+While only the basic geometric constraints are absolutely necessary, we can ``spend'' the remaining degrees of freedom to constrain the tiling into a crease pattern that is as ``nice'' as possible. It is difficult to quantify how ``nice'' a crease pattern is, but a good heuristic is to minimize the number of internal vertices generated by the straight skeletons of the polygons. This is because internal vertices of a straight skeleton are generally not flat foldable, so each internal vertex forces a propagation of creases that make the crease pattern increasingly messier. More internal vertices result in more hinge creases.
 
 Internal vertices in a straight skeleton appear where 3 or more edges are equidistant from a common point. We can ``collapse'' internal vertices together by forcing $> 3$ sides to be equidistant from a common point. Therefore, we define a \textbf{quadruplet} as a set of 4 edges (not necessarily contiguous) on a polygon, which we can constraint to be equidistant from a shared incircle.
 
@@ -315,11 +313,9 @@ Note that this is a strictly linear, homogeneous constraint acting entirely on t
 \end{equation}
 
 
-In general, constraining a quadruplet (that contains at least one unconstrained edge) will remove one degree of freedom. However, due to internal symmetries across the tiling, it is possible for a single quadruplet constraint to collapse multiple straight skeleton vertices at once, while still only spending one degree of freedom. Therefore, we want to strategically select quadruplets that maximize the number of straight skeleton vertices they collapse. 
+In general, constraining a quadruplet (that contains at least one unconstrained edge) will remove one degree of freedom. However, due to internal symmetries across the tiling, it is possible for a single quadruplet constraint to collapse multiple straight skeleton vertices at once, while still only spending one degree of freedom. Therefore, we want to strategically select quadruplets that maximize the number of straight skeleton vertices they collapse. More importantly, it is possible for a quadruplet constraint to be satisfied but not actually reduce the number of vertices in the straight skeleton. This is because a vertex only appears in the straight skeleton if and only if it is strictly closer to its constituent edges than to any other edge in the polygon. If another edge ``invades'' the incircle, the quadruplet constraint is effectively useless. 
 
-But more importantly, it is possible for a quadruplet constraint to be satisfied but not actually reduce the number of vertices in the straight skeleton. This is because a vertex only appears in the straight skeleton if and only if it is strictly closer to its constituent edges than to any other edge in the polygon. Therefore, if another edge ``invades'' the incircle, the quadruplet constraint is effectively useless. 
-
-Even worse, it is possible for the enforcing of a quadruplet constraint to cause an edge to collapse to 0 or negative length, violating the planarity of the tiling. Or, the mouth of a concave polygon might clip through the other end, forming an invalid ``bowtie'' shape. These effects are defined by inequalities. Therefore, we must resort to a Mixed-Integer Linear Programming (MILP) formulation to strategically select the optimal set of quadruplets that maximize the number of collapsed straight skeleton vertices while ensuring the physical foldability of the tiling.
+Even worse, it is possible for a quadruplet constraint to cause an edge to collapse to 0 or negative length, violating the planarity of the tiling. Or, the mouth of a concave polygon might clip through the other end, forming an invalid ``bowtie'' shape. These effects are defined by inequalities. Therefore, we must resort to a Mixed-Integer Linear Programming (MILP) formulation to strategically select the optimal set of quadruplets that maximize the number of collapsed straight skeleton vertices while ensuring the physical foldability of the tiling.
 
 \begin{figure}
     \centering
@@ -339,7 +335,7 @@ Even worse, it is possible for the enforcing of a quadruplet constraint to cause
 
 
 \subsection{Optimal Quadruplet Selection}
-To evaluate the physical consequences of activating different quadruplets, the solver must be able to solve the linear system from Equation~(\ref{eq:Axb}) for any possible combination of quadruplets, and evaluate the validity of the resulting geometry. Therefore, let the state vector $\vec{X}$ be an augmented version of the vertex coordinate vector $\vec{x}$:
+To evaluate the physical consequences of activating different quadruplets, the solver must be able to solve the linear system from Equation~(\ref{eq:Axb}) for any possible combination of quadruplets, and evaluate the validity of the resulting geometry. Let the state vector $\vec{X}$ be an augmented vector of the vertex coordinate vector $\vec{x}$:
 \begin{equation}
     \vec{X} = \left[ \, \vec{x}, \; \vec{z}_{quads}, \; \vec{p}_{incircles}, \; \vec{r}_{incircles}, \; \vec{b}_{bowtie} \, \right]^T
 \end{equation}
@@ -360,19 +356,19 @@ Now recall that the standard form of a MILP problem is:
 where $\vec{c}$ is the objective function as reward weights on the elements of $\vec{X}$, $M$ is the constraint matrix that encodes all of the linear equalities and inequalities, and $\vec{B}$ stores the constants on the right-hand side of each constraints.
 
 
-Our objective is to maximize the number of quadruplets that can be activated without violating geometric constraints. Therefore, $\vec{c}$ contains non-zero weights only for the decision variables $\vec{z}_{quads}$. We heavily reward resolving concave (reflex) vertices because they create disproportionately messier crease patterns if not collapsed into a clean internal vertex. Therefore, quadruplets involving reflex vertices are assigned a priority weight ($c_k = 10.0$), while standard convex quadruplets receive a base weight ($c_k = 1.0$).
+Our objective is to maximize the number of quadruplets that can be activated without violating geometric constraints. Therefore, $\vec{c}$ contains non-zero weights only for the decision variables $\vec{z}_{quads}$. We heavily reward resolving concave (reflex) vertices because they create disproportionately messier crease patterns if not collapsed into a clean internal vertex. Accordingly, quadruplets involving reflex vertices are assigned a priority weight ($c_k = 10.0$), while standard convex quadruplets receive a base weight ($c_k = 1.0$).
 
 \subsubsection{Formulating the Constraint Rows}
 
 \paragraph{1. Basic geometric constraints}
-First, the same basic geometric constraints described in Section~\ref{sec:basic_constraints} are applied to the vertex coordinates. These constraints only depend on the vertex coordinates $\vec{x}$. These are the only equality constraints (which can be expressed as two inequalities, or sometimes written as a separate matrix).
+First, the same basic geometric constraints described in Section~\ref{sec:basic_constraints} are applied to the vertex coordinates. These constraints only depend on the vertex coordinates $\vec{x}$. These are the only equality constraints in this problem formulation.
 
 \paragraph{2. Edge Integrity:}
-To prevent edges from collapsing to zero or negative length (inversion), we enforce a minimum feature size, $\epsilon$. Let $\hat{t}$ be the unit tangent vector of an edge. For any directed edge from vertex $\vec{u}$ to vertex $\vec{v}$, the projected distance must remain at least $\epsilon$:
+To prevent edges from collapsing to zero or negative length (inversion), we enforce a minimum feature size, $\epsilon>0$. Let $\hat{t}$ be the unit tangent vector of an edge. For any directed edge from vertex $\vec{u}$ to vertex $\vec{v}$, the projected distance must remain at least $\epsilon$:
 \begin{equation}
     \hat{t} \cdot (\vec{v}-\vec{u}) \ge \epsilon \quad \implies \quad - \hat{t}^T \vec{v} + \hat{t}^T \vec{u} \le -\epsilon
 \end{equation}
-Note that $\epsilon$ is not for numerical stability, but another metric of crease patern ``niceness''. If $\epsilon$ is too small, the resulting crease pattern may contain tiny creases that are unpleasant to fold. If $\epsilon$ is too large, the solver may not be able to find any valid solutions. We empirically set $\epsilon = \frac{1}{4N}$, where $N$ is the grid size of the original topology.
+Note that $\epsilon$ is not for numerical stability, but another metric of crease patern ``niceness''. If $\epsilon$ is too small, the resulting crease pattern may contain tiny creases that are possible but unpleasant to fold. If $\epsilon$ is too large, the solver may not be able to find any valid solutions. We empirically set $\epsilon = \frac{1}{4N}$, where $N$ is the grid size of the original topology.
 
 \paragraph{3. Quadruplet Activation (Big-M Method):}
 If $z_k = 1$, quadruplet $k$ must be constrained such that the distance from the incircle center $\vec{P}_k$ to the boundary edge originating at vertex $\vec{u}$ with inward normal $\hat{n}$ must exactly equal the radius $r_k$. However, if $z_k = 0$, we need the constraint to be relaxed. To encode this as linear rows in $M$, we choose a large constant $C\approx 3N$ and apply the following inequalities to a vertex $\vec{u}$ on each edge in the quadruplet:
@@ -382,7 +378,7 @@ If $z_k = 1$, quadruplet $k$ must be constrained such that the distance from the
 \end{align}
 
 \paragraph{4. Incircle invasion:}
-Recall that a vertex only appears in the straight skeleton if and only if it is strictly closer to its constituent edges than to any other edge in the polygon. Therefore, if another edge ``invades'' the incircle, the quadruplet constraint is effectively useless. To prevent this, we must ensure that any invader edge $i$ maintains a normal projection distance from the incircle center $\vec{P}_k$ that is at least $r_k$:
+Recall that a vertex only appears in the straight skeleton if and only if it is strictly closer to its constituent edges than to any other edge in the polygon, so if another edge ``invades'' the incircle, the quadruplet constraint is effectively useless. To prevent this, we must ensure that any invader edge $i$ maintains a normal projection distance from the incircle center $\vec{P}_k$ that is at least $r_k$:
 
 \begin{equation}
     -\vec{n}_i^T \vec{p}_k + \vec{n}_i^T \vec{x}_i - r_k + C z_k \le C
@@ -395,10 +391,10 @@ The addition of this constraint is why the MILP formulation requires $\vec{p}_k,
     \caption{From left to right: (1) An unconstrained polygon and its messy straight skeleton. (2) Applying an incircle constraint to a quadruplet collapses two interior points into one. (3) If an edge from the same convex chain invades the incircle, the constraint is useless and the straight skeleton is broken. (4) An edge from a different convex chain (separated by a concave vertex) has a normal projection that invades the incircle, but without breaking the straight skeleton.}
 \end{figure}
 
-However, this equation treats every side of the polygon as an infinite line, while incircle invasion only occurs if the actual line segment invades the circle. Formulating this stronger constraint woould introduce a quadratic term (Euclidean distance from the incircle center). Therefore, we realize that edges that do not share a convex chain with any edge in the quadruplet are incapable of actually invading the incircle, and as a conservative heuristic, only apply the infinite line incircle invasion constraint to all other edges.
+However, this equation treats every side of the polygon as an infinite line, while incircle invasion only occurs if the actual line segment invades the circle. Formulating this stronger constraint woould introduce a quadratic term (Euclidean distance from the incircle center). Instead, we realize that edges that do not share a convex chain with any edge in the quadruplet are incapable of actually invading the incircle, and as a conservative heuristic, only apply the infinite line incircle invasion constraint to all other edges.
 
 \paragraph{5. Anti-Bowtie Clearance:}
-In some concave polygons, it is possible for a concave ``mouth'' vertex to clip through an edge on the opposite side of the polygon.
+In some concave polygons, it is possible for a concave ``mouth'' vertex to clip through an edge on the opposite side of the polygon, as illustrated in Figure~\ref{fig:bowtie}. To prevent this, we can enforce that every reflex vertex must reside in at least one of the three safe zones defined by the edge's normal and tangent vectors.
 
 For every reflex vertex $\vec{x}_c$ and a non-adjacent edge $(\vec{u}, \vec{v})$ with normal $\hat{n}$ and tangent $\hat{t}$, we create three boolean variables based on the vertex's position relative to the edge: 
 \begin{itemize}
@@ -410,7 +406,7 @@ For every reflex vertex $\vec{x}_c$ and a non-adjacent edge $(\vec{u}, \vec{v})$
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.8\textwidth]{figs/bowtie.pdf}
-    \caption{Left: an unconstrained polygon. Center: the polygon with a ``bowtie'' violation. Right: the three safe zones defined by $b_1,b_2,b_3$ and the danger zone (red) where the constraint is violated, defined by the edge's vectors $\hat{n},\hat{t}$ and minimum clearance size $\epsilon$.}
+    \caption{Left: an unconstrained polygon. Center: the polygon with a ``bowtie'' violation. Right: the three safe zones defined by $b_1,b_2,b_3$ and the danger zone (red) where the constraint is violated, defined by the edge's vectors $\hat{n},\hat{t}$ and minimum clearance size $\epsilon$.}\label{fig:bowtie}
 \end{figure}
 
 
@@ -420,10 +416,10 @@ The MILP solver gets to choose which of $b_1, b_2, b_3$ is true. Similar to the 
 \begin{equation}
     \hat{n} \cdot (\vec{x}_c - \vec{u}) \ge \epsilon - C(1 - b_1) \quad \implies \quad -\hat{n}^T \vec{x}_c + \hat{n}^T \vec{u} + C b_1 \le C - \epsilon
 \end{equation}
-Recall that these constraints are added for every pair of reflex vertex and non-adjacent edge. 
+In total, four constraint inequalities are added to the system for every pair of reflex vertex and non-adjacent edge. 
 
 \subsubsection{The Compound Matrix Inequality}
-By concatenating these varied constraints, we construct the master MILP matrix equation. The inequality system $M \vec{X} \le \vec{B}$ takes the following block matrix structure:\footnote{Technically, the basic geometric constraints should be in a separate matrix because they represent equalities rather than inequalities, though for the sake of visual compactness we can handwave that each equality can be represented as a pair of inequalities.}
+By concatenating these varied constraints, we construct the master MILP matrix equation. The inequality system $M \vec{X} \le \vec{B}$ takes the following block matrix structure:\footnote{Technically, the basic geometric constraints should be in a separate matrix because they represent equalities rather than inequalities, though for the sake of visual compactness we can handwave that each equality can be represented as a pair of inequalities. In practice, all the constraints are handed off to \texttt{PuLP} as a black box to deal with internally.}
 
 \begin{equation}\label{eq:milp}
 \begin{array}{l}
@@ -497,14 +493,14 @@ where $d_{threshold}$ is a hyperparameter defining the minimum diversity differe
 
 \subsubsection{Quadruplet Harvesting}
 
-The solution to the MILP comes with a set of vertex positions that is guaranteed to be physically realizable (satisfying the constraints applied to $M$). However, it cannot guarantee that the tiling is fully locked. This is because it is computationally prohibitive to feed every possible quadruplet into the MILP (consider the fact that an $n$-gon contains $\binom{n}{4}$ possible quadruplets), so we initialize it with a heuristic ``harvest'' of quadruplets that are either contiguous or are the nearest edges to a concave pair of edges. As a result, the MILP might overlook a key quadruplet needed to fully constrain the tiling.
+The solution to the MILP comes with a set of vertex positions that is guaranteed to be physically realizable (satisfying the constraints applied to $M$). However, it cannot guarantee that the tiling is fully locked. This is because it is computationally prohibitive to feed every possible quadruplet into the MILP (consider the fact that an $n$-gon contains $\binom{n}{4}$ possible quadruplets), so we initialize it with a heuristic ``harvest'' of quadruplets that are either contiguous or are the nearest edges to a concave pair of edges. As a result, the MILP might not have had access to a key quadruplet needed to fully constrain the tiling.
 
 We can quickly check the rank of $A$ with the current selection of quadruplets by performing Gaussian elimination over a finite field $\mathbb{Z}_p$ with a large prime~\cite{rankcheck}. If the matrix is rank-deficient, the $Z_p$ elimination identifies exactly which columns (variables) lack pivots. We map these free variables back to their physical nodes. The missing quadruplets will likely involve these unconstrained nodes. We then initialize a depth-first search scavenger that will explore the exhaustive pool of unused quadruplet candidates, specifically filtering for quadruplets that involve the identified sliding nodes. It tentatively applies each quadruplet constraint and keeps ones that increase the rank until full rank is reached. Only then are the constraints actually applied and solved for the exact tiling geometry. 
 
 
 \subsection{Rational 4D basis}\label{sec:4D}
 
-Let us take a detour. Before solving the linear system to compute the final tiling node positions, we need to address the representation of vertices in the 22.5 angle system. In conventional crease pattern softwares, points are represented as Cartesian coordinates stored as a pair of floats. However, because 22.5 triangles immediately generate irrational lengths, we will encounter numerical precision issues if we attempt to represent vertices using this conventional data structure.
+Let us take a detour. Before solving the linear system to compute the final tiling node positions, we need to address the representation of vertices in the 22.5 angle system. In conventional crease pattern softwares, points are represented as Cartesian coordinates stored as a pair of floats. However, 22.5 triangles immediately generate irrational lengths, which in the $Ax=b$ formulation are introduced through $\sqrt{2}$ terms in the normal vectors of 45$^\circ$ creases. We will encounter numerical precision issues if we attempt to represent vertices using this conventional data structure. 
 
 We first observe that all Cartesian coordinates in the 22.5 angle system can be represented analytically in the form $(A_x + B_x\sqrt{2} , A_y + B_y\sqrt{2})$, where $A_x, B_x, A_y, B_y$ are rational numbers \cite{degenerative-coordinates-22.5}. This suggests that we can represent points in the 22.5 angle system as a tuple of four fractions, which can avoid numerical precision issues by storing the vertex as a list of 8 integers.\footnote{It can be stored in as few as 5 integers by using a common denominator, but the 8 integer form is easier for operations and provides information about reference-finding for the vertex.} 
 
@@ -525,7 +521,7 @@ It would be possible to directly convert the 2D Cartesian coordinate $(A_x + B_x
 An alternative projection would be to project the 4D basis vectors to be uniform in length, but spaced 45 degrees apart from one another. This is reminiscent of the projection commonly used to represent a 4D hypercube in 2D space, and was initially proposed for representing 22.5 crease patterns by Lang et. al. in \cite{hyper-cps}. It was shown by Lang et. al. that rational 4D coordinates project uniquely to the 2D plane, and 2D 22.5 vertices "lift" uniquely into 4D. An example of a few vertices represented in this hypercube basis is shown in Figure \ref{fig:hypercube-basis}. Note that this basis is not fundamentally different than the orthogonal basis: instead of having a basis vector for the $\sqrt{2}$ length in either direction, $\sqrt{2}\hat{\imath}$ is represented as $\hat{y} - \hat{w}$ and $\sqrt{2}\hat{\jmath}$ is represented as $\hat{y} + \hat{w}$. Either projection scheme would work for the rest of our 22.5 architecture. For the rest of this paper, we will choose the hypercube projection. 
 
 \subsection{Exact Precision Linear Solve}
-During the MILP solve, the tiling constraints were formulated using floating-point arithmetic for fast linear algebra. This is sufficient for finding approximate solutions in order to select quadruplets. However, the final tiling must be solved with rational arithmetic to guarantee exact precision downstream. To accommodate the irrational $\sqrt{2}$ nature of the 22.5$^\circ$ system (which enters the system primarily through the normal vectors $\hat{n}$), we transition the system $A\vec{x} = \vec{b}$ into the 4D hypercube basis discussed in Section~\ref{sec:4D}.
+During the MILP solve, the tiling constraints were formulated using floating-point arithmetic for fast linear algebra. This is sufficient for finding approximate solutions in order to select quadruplets. However, the final tiling must be solved with rational arithmetic to guarantee exact precision downstream. We now transition the system $A\vec{x} = \vec{b}$ into the 4D hypercube basis discussed in Section~\ref{sec:4D}.
 
 For example, recall the angular constraint from Equation~(\ref{eq:edge_angle}), requiring the edge between node $\vec{u}$ and node $\vec{v}$ to remain orthogonal to the edge's fixed normal vector $\hat{n} = (n_x, n_y)$:
 \begin{equation}
@@ -557,13 +553,13 @@ By applying this transformation to every row in the system, we can convert the e
 The exact tiling fully constrains the axial creases of the crease pattern. Next, the rest of the crease pattern (CP) must be constructed by filling in the polygons with straight skeletons and enforcing flat-foldability. Then, the crease pattern must be folded into a flat state, in order to then extract the tree structure of the folded state. Note that the CP only needs to satisfy Kawasaki's theorem (which is a geometric constraint); the topological constraints relating to mountain-valley assignment or layer self-intersection have no effect on the tree extraction results.
 
 \subsection{Straight Skeleton Generation}
-To route the interior creases of the faces defined by the tiling, we utilize a straight skeleton algorithm. Rather than implementing a custom straight skeleton algorithm (which is notoriously prone to complicated edge cases) that operates directly on the exact rational coordinates, we adopt a hybrid floating-point approach. This allows us to leverage existing optimized libraries while still ensuring the final output is perfectly rational. 
+To route the interior creases of the faces defined by the tiling, we utilize a straight skeleton algorithm. Rather than implementing a custom straight skeleton algorithm (which is prone to complicated edge cases) that operates directly on the exact rational coordinates, we adopt a hybrid floating-point approach. This allows us to leverage existing optimized libraries while still ensuring the final output is perfectly rational. 
 
 First, we project the exact 4D vertices of a face into 2D Cartesian floats. However, standard geometric algorithms---such as the sweep-line methods commonly used for straight skeletons---are notoriously fragile when handling IEEE-754 floating-point arithmetic. Because these algorithms rely on strict spatial sorting, an error of even a fraction of a bit during intersection calculations can cause the algorithm to make inconsistent topological decisions, leading to catastrophic program failures or ``singularities'' \cite{kettner2008classroom}. 
 
-To bypass these well-documented robustness issues, we apply an aggressive quantization filter. By truncating the floating-point coordinates to a fixed precision (empirically determined to be 3 decimal places), we force near-degenerate points to snap to a rigid grid, effectively eliminating the microscopic floating-point fuzz. Additionally, we deduplicate any antiparallel ``spikes'' (infinitely thin, zero-area artifacts created by the MILP solver's vertex collapsing) which would otherwise choke the boolean operations.
+To bypass these well-documented robustness issues, we apply an aggressive quantization filter. By truncating the floating-point coordinates to a fixed precision (empirically determined to be 3 decimal places), we force near-degenerate points to snap to a rigid grid.
 
-We feed this sanitized floating-point polygon into an off-the-shelf library to extract the topological connectivity of the interior creases. To reclaim the exact precision of these internal nodes, we iteratively look at their resolved neighbors (starting from the polygon boundary, whose exact 4D coordinates are known), extract the 22.5$^\circ$ routing angles dictated by the floating-point straight skeleton, and perform an exact 4D algebraic intersection using Equation~(\ref{eq:4D_intersection}).
+We feed this sanitized floating-point polygon into an off-the-shelf library to extract the topological connectivity of the interior creases. To reclaim the exact precision of these internal nodes, we iteratively look at their resolved neighbors (starting from the polygon boundary, whose exact 4D coordinates are known), extract the 22.5$^\circ$ routing angles dictated by the floating-point straight skeleton, and compute the intersection of creases using Equation~(\ref{eq:4D_intersection}).
 
 \subsection{Kawasaki Propagation and Hinge Routing}
 The resulting straight skeletons are generally not flat-foldable on their own. Kawasaki's Theorem mandates that for an interior vertex to fold flat, the alternating sum of the angles between its incident creases must equal exactly $180^\circ$. This implies that any odd-degree vertex (excluding those on the outer paper boundary) are not flat-foldable, and can be resolved by adding or removing a single crease.
@@ -634,7 +630,7 @@ where $\alpha$ is the thermal diffusivity of the material. To understand why the
 \begin{equation}\label{eq:second_derivative}
     \frac{\partial^2 u}{\partial x^2} \approx \frac{1}{\Delta x} \left( \frac{u(x+\Delta x) - u(x)}{\Delta x} + \frac{u(x-\Delta x) - u(x)}{\Delta x} \right)
 \end{equation}
-Notice that this equation simply sums the temperature differences between a point and its immediate neighbors, divided by the step size (the spatial gradients). This makes intuitive sense: if a spot $u(x)$ is colder than both its left and right neighbors, the second derivative will be positive, meaning the cold spot will heat up. 
+Notice that this equation simply sums the temperature differences between a point and its immediate neighbors, divided by the step size (the spatial gradients). This makes intuitive sense: if a spot $u(x)$ is warmer than both its left and right neighbors, the second derivative will be negative, meaning the cold spot will cool down. 
 
 We can extend this logic to higher dimensions. Instead of the second derivative, we generalize using the Laplacian operator $\nabla^2$. For example, in a continuous 2D domain, the Laplacian is defined as:
 \begin{equation}
@@ -655,7 +651,7 @@ We can transition this continuous physical model to our discrete origami tree gr
 \end{equation}
 where $j\sim i$ means ``for all nodes $j$ connected to node $i$''. The right-hand side of this equation resembles Equation~(\ref{eq:second_derivative}), the sum of temperature differences between a node and its neighbors, weighted by the inverse of the edge lengths. This makes intuitive sense: if node $i$ is colder than its neighbors, it will heat up; if it's hotter, it will cool down. However, recall that the derivative of a continuous function like in Equation~(\ref{eq:second_derivative}) increases in accuracy as $\Delta x$ approaches zero. Therefore, we force $L_{ij}$ to be small by subdividing large edges of our origami tree, ensuring that our discrete graph model faithfully approximates the continuous physics analogy.
 
-A careful observer might ask: in the 1D continuous approximation (Equation 2), the $\Delta x$ terms multiply to form a $\Delta x^2$ in the denominator. Why do we only use $1/L_{ij}$ for our graph, rather than $1/L_{ij}^2$? The answer lies in the distinction between a continuous space and a metric graph. The first division by length defines the thermal gradient (the driving force of the heat). In a continuous system, the second division by length accounts for the infinitesimally small \textit{mass} (or control volume) of the point being heated. In standard spectral graph theory, nodes are treated as abstract points with uniform mass, so the edge weight simply represents thermal conductance ($w_{ij} = 1/L_{ij}$). 
+A careful observer might ask: in the 1D continuous approximation (Equation 2), the $\Delta x$ terms multiply to form a $\Delta x^2$ in the denominator. Why do we only use $1/L_{ij}$ for our graph, rather than $1/L_{ij}^2$? The answer lies in the distinction between a continuous space and a discrete graph. The first division by length defines the thermal gradient (the driving force of the heat). In a continuous system, the second division by length accounts for the infinitesimally small \textit{mass} (or control volume) of the point being heated. In standard spectral graph theory, nodes are treated as abstract points with uniform mass, so the edge weight simply represents thermal conductance ($w_{ij} = 1/L_{ij}$). 
 
 Because this standard graph formulation drops the spatial volume term, a standard graph Laplacian is only a true approximation of the continuous continuous Laplacian when all edge lengths $L_{ij}$ are uniform lengths. This further motivates our decision to pre-process trees with edge subdivision, ensuring that edge lengths are not only small, but uniformly small.
 
@@ -712,13 +708,12 @@ This formulation can be computed quickly. By computing the eigenvalues of $L$ an
 \begin{figure}[h]
     \centering
     \includegraphics[width=0.8\textwidth]{figs/hkt_examples.pdf}
-    \caption{(a) The heat kernel trace $Z(t)$ over some time range will uniquely describe the shape of a tree. A round ``star-shaped'' tree will distribute heat much quicker than a linear ``fishbone-shaped'' tree.}\label{fig:star_vs_fishbone}
+    \caption{(a) The heat kernel trace $Z(t)$ over some time range will uniquely describe the shape of a tree. A round ``star-shaped'' tree will diffuse heat much quicker than a linear ``fishbone-shaped'' tree.}\label{fig:star_vs_fishbone}
 \end{figure}
 \begin{figure}[p!]
     \centering
     \includegraphics[width=\textwidth]{figs/heat_decay.png}
-    \label{fig:heat_decay}
-    \caption{The Heat Kernel Trace $Z(t)$ profile for 200 random trees, plotted on a semilog plot and normalized by $N$. Although the curves vary from tree to tree, they all follow the same overall exponential decay pattern.}
+    \caption{The Heat Kernel Trace $Z(t)$ profile for 200 random trees, plotted on a semilog plot and normalized by $N$. Although the curves vary from tree to tree, they all follow the same overall exponential decay pattern.}    \label{fig:heat_decay}
 \end{figure}
 \begin{figure}[p!]
     \centering
@@ -750,9 +745,9 @@ The SEARCH 22.5 pipeline circumvents the historically intractable problem of for
 \subsection{Results}
 Screenshots of the final interface are shown in Figures \ref{fig:interface1} and \ref{fig:interface2}. The user draws a tree on the left, which is processed through the HKT pipeline to produce a query signature. The FAISS index retrieves the closest matching trees from the database, and the corresponding tilings are used to reconstruct the crease patterns and folded states, which are visualized on the right. The retrieved designs are previewed as crease patterns but can be expanded to show the full pipeline process from topology to HKT signature match.
 
-It is acceptable that the tree lengths of the retrieved designs do not perfectly match the query tree. The nature of 22.5 is that flap lengths are quantized in the form of $A + B\sqrt{2}$, which is unlike box pleating (where users can specify integer lengths) or circle packing (where users can specify any real length). If a user wants one flap roughly twice as long as another, they do not know whether it is exactly $\times 2$ or if it is actually $\times (-5 + 5\sqrt{2})$, when in fact one may lead to a much more elegant solution than the other. Similarly, it is also acceptable that there are short stub lengths present or missing from the retrieved trees. As long as the paper length (or in HKT terms, the thermal mass) is in the right general distribution, the artist can then use techniques like point splitting or mush to turn a long flap into a shorter flap with details. This ``handwaviness'' is the reason the user is not allowed to provide numerical input for tree lengths, but only a visual sketch.
+It is acceptable that the tree lengths of the retrieved designs do not perfectly match the query tree. The nature of 22.5 is that flap lengths are quantized in the form of $A + B\sqrt{2}$, which is unlike box pleating (where users can specify integer lengths) or circle packing (where users can specify any real length). If a user wants one flap roughly twice as long as another, they do not know whether it is better to set $\times 2$ or $\times (-5 + 5\sqrt{2})$, when in fact one may lead to a much more elegant solution than the other. Similarly, it is also acceptable that there are short stub lengths present or missing from the retrieved trees. As long as the paper length (or in HKT terms, the thermal mass) is in the right general distribution, the artist can then use techniques like point splitting or mush to turn a long flap into a shorter flap with details. This ``handwaviness'' is the reason the user is not allowed to provide numerical input for tree lengths, but only a visual sketch.
 
-Empirically, from a database of around 300k tilings, the query returns useful crease patterns for trees representing simple quadrapeds, such as the giraffe shown in Figures \ref{fig:interface1} and \ref{fig:interface2}. More complex queries with more branches and deeper hierarchies (e.g., a dragon) will return more distant matches, but the returned designs can still serve as a useful starting point for artists to iterate towards their desired design.
+Empirically, from a database of around 300k tilings, the query returns close matches for trees representing simple quadrapeds, such as the giraffe shown in Figures \ref{fig:interface1} and \ref{fig:interface2}. More complex queries with more branches and deeper hierarchies (e.g., a dragon) will return more distant matches, but the returned designs can still serve as a useful starting point for artists to iterate towards their desired design.
 
 
 \subsection{Limitations and Future Work}
@@ -771,13 +766,14 @@ The computational design of origami is an inherently interdisciplinary endeavor.
 \section{Appendix: 4D geometry details}
 
 \subsection{Crease Intersections in 4D}
-To intersect creases formed by vertices $\vec{v}_a$ and $\vec{v}_b$ at angles $\alpha$ and $\beta$, we utilize precomputed rational tangents. The intersection vertex $\vec{v}_c$ is calculated as:
-\begin{align} \label{eq:4D_intersection}
+To intersect creases formed by lines originating from $\vec{v}_a$ and $\vec{v}_b$ at angles $\alpha$ and $\beta$, we don't solve using a system of equations---instead, it is faster to solve this problem geometrically. 
+\begin{align}\label{eq:4D_intersection}
     \Delta i & = (v_{b_x} - v_{a_x}) + (v_{b_y} - v_{a_y} - v_{b_w} + v_{a_w})\frac{\sqrt{2}}{2} \\
     \Delta j & = (v_{b_z} - v_{a_z}) + (v_{b_y} - v_{a_y} + v_{b_w} - v_{a_w})\frac{\sqrt{2}}{2} \\
-    \beta_i & = \frac{\Delta j - \tan(\alpha)\Delta i}{\tan(\alpha) - \tan(\beta)}
+    \beta_i & = \frac{\Delta j - \tan(\alpha)\Delta i}{\tan(\alpha) - \tan(\beta)} \\
+    \beta_j & = \tan(\beta)\beta_i \\
+    v_c & = v_b + \beta_i \begin{bmatrix} 1 \\ 0 \\ 0 \\ 0 \end{bmatrix} + \beta_j \begin{bmatrix} 0 \\ 0 \\ 1 \\ 0 \end{bmatrix} \\
 \end{align}
-To prevent exponential bit-depth growth during complex divisions, we implemented a custom, highly optimized C++ \texttt{Fraction} class exposed via Python bindings. This class strictly enforces immediate $\gcd$ simplification upon instantiation, ensuring the numerators and denominators remain safely within 64-bit integer limits across millions of operations.
 
 \subsubsection{Recursive ray casting and unfolding}
 Ray casting begins with a vertex and an angle, and extends until the first crease or vertex it intersects. The nearest intersection can be found quickly without checking all edges because the nearest intersection must be along an edge that shares a face with the starting vertex. A visualization of this fact can be seen in figure \ref{fig:raycasting}. Although computing the face connectivity is $O(n)$ and checking intersections with all edges is also $O(n)$, precomputing the face connectivity only needs to be done once to make all ray casting efficient for that crease pattern. If the ray intersects an existing crease, we can preserve Kawasaki flat foldability by recursively reflecting the ray from the intersection vertex along the reflected angle, as demonstrated in figure \ref{fig:recursive-raycasting}. If the ray intersects a boundary edge or a higher degree vertex, the ray casting ends.
