@@ -91,6 +91,8 @@ def print_appendix_audit():
                   f"{s['completion_pct']:>6.1f}% | "
                   f"{s['db_size_mb']:>8.1f} | "
                   f"{s['est_tilings']:>9,} tilings ({s['est_size_gb']:.1f} GB)")
+    print(f"Total number of topologies across all DBs: {sum(get_dynamic_db_stats(N, sym)['topos'] for N, sym in configs):,}")
+    print(f"Total number of tilings across all DBs: {sum(get_dynamic_db_stats(N, sym)['tilings'] for N, sym in configs):,}")
 
 if __name__ == "__main__":
     print_appendix_audit()
