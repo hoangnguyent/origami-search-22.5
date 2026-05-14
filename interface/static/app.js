@@ -3,13 +3,13 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 const state = {
   nodes: {
     0: { id: 0, x: 400, y: 280 },
-    // 1: { id: 1, x: 500, y: 280 },
   },
   edges: [],
   nextNodeId: 1,
   selectedNode: 0,
   draggingNode: null,
   queryResult: null,
+  currentDetailResult: null, // Track the open modal result
 };
 
 const COLORS = {
@@ -40,11 +40,80 @@ document.addEventListener("keydown", onKeyDown);
 editorSvg.addEventListener("mousedown", onEditorMouseDown);
 window.addEventListener("mousemove", onEditorMouseMove);
 window.addEventListener("mouseup", onEditorMouseUp);
+document.getElementById("randomTreeBtn").addEventListener("click", generateRandomTree);
 
 document.getElementById("downloadCpBtn").addEventListener("click", () => {
-  // Dummy logic for now. Will wire up to a blob export later.
-//   alert("CP Download functionality will be implemented here!");
-    console.log("download cp button clicked, but functionality is not implemented yet.");
+  if (!state.currentDetailResult) return;
+  
+  const cp = state.currentDetailResult.cp;
+  const vertices = [];
+  const vMap = new Map();
+  const edges_vertices = [];
+  const edges_assignment = [];
+  
+  // Helper to deduplicate vertices using stringified coordinates (avoids float fuzziness)
+  function getVertexId(x, y) {
+    const key = x.toFixed(6) + "," + y.toFixed(6);
+    if (vMap.has(key)) return vMap.get(key);
+    
+    const id = vertices.length;
+    vertices.push([x, y]);
+    vMap.set(key, id);
+    return id;
+  }
+  
+  // Hardcoded assignments per your exact specification
+  function getFoldType(rawType) {
+    if (!rawType) return "F";
+    const t = String(rawType).trim().toLowerCase();
+    
+    if (t === "b") return "B";
+    if (t === "rm" || t === "m" || t === "hm") return "M";
+    if (t === "rv" || t === "av" || t === "v" || t === "hv") return "V";
+    if (t === "h" || t === "aux" || t === "ax") return "F";
+    
+    // Fallbacks just in case
+    if (t.includes("m")) return "M";
+    if (t.includes("v")) return "V";
+    return "F";
+  }
+
+  // Process all segments into the FOLD graph structure
+  cp.segments.forEach(seg => {
+    const u = getVertexId(seg.x1, seg.y1);
+    const v = getVertexId(seg.x2, seg.y2);
+    
+    edges_vertices.push([u, v]);
+    edges_assignment.push(getFoldType(seg.type));
+  });
+
+  // Construct the .fold JSON
+  const foldData = {
+    file_spec: 1.1,
+    file_creator: "SEARCH 22.5",
+    vertices_coords: vertices,
+    edges_vertices: edges_vertices,
+    edges_assignment: edges_assignment
+  };
+
+  // Create a Blob and trigger the file download
+  const blob = new Blob([JSON.stringify(foldData, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  
+  // Create a descriptive filename with Tiling ID
+  const rank = state.currentDetailResult.rank || 1;
+  const N = state.currentDetailResult.N || "N";
+  const sym = state.currentDetailResult.symmetry || "sym";
+  const tilingId = state.currentDetailResult.tiling_id || "unknown"; // FIX: Grab the tiling ID
+  
+  a.href = url;
+  // FIX: Added the tiling ID to the download filename
+  a.download = `cp${N}${sym}${tilingId}.fold`; 
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 });
 
 renderEditor();
@@ -62,6 +131,139 @@ function resetTree() {
   state.draggingNode = null;
   renderEditor();
   setStatus("Tree reset.");
+}
+function generateRandomTree() {
+  const targetLeaves = parseInt(document.getElementById("randomNodeCount").value, 10) || 6;
+  if (targetLeaves < 2) return;
+
+  // Clear existing tree
+  state.nodes = { 0: { id: 0, x: 400, y: 280 } };
+  state.edges = [];
+  state.nextNodeId = 1;
+  state.selectedNode = null;
+  state.draggingNode = null;
+
+  const margin = 40;
+  const width = 800;
+  const height = 560;
+
+  // Helpers for planar checking
+  function ccw(A, B, C) { return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x); }
+  function intersects(p1, p2, p3, p4) { 
+    return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4); 
+  }
+
+  // Helper to count current leaf nodes
+  function getLeafCount() {
+    if (state.edges.length === 0) return 1;
+    const degrees = {};
+    for (const node of Object.values(state.nodes)) degrees[node.id] = 0;
+    for (const edge of state.edges) {
+      degrees[edge.u]++;
+      degrees[edge.v]++;
+    }
+    return Object.values(degrees).filter(deg => deg === 1).length;
+  }
+
+  let attempts = 0;
+  const maxAttempts = 3000;
+
+  // --- PHASE 1: GENERATION ---
+  while (getLeafCount() < targetLeaves && attempts < maxAttempts) {
+    attempts++;
+    
+    const existingIds = Object.keys(state.nodes);
+    const parentId = existingIds[Math.floor(Math.random() * existingIds.length)];
+    const parentNode = state.nodes[parentId];
+
+    const angle = Math.random() * Math.PI * 2;
+    // Keep edges slightly shorter to allow more branching in the canvas
+    const dist = 30 + Math.random() * 45; 
+
+    const nx = parentNode.x + dist * Math.cos(angle);
+    const ny = parentNode.y + dist * Math.sin(angle);
+    const newNode = { x: nx, y: ny };
+
+    // Bounds check
+    if (nx < margin || nx > width - margin || ny < margin || ny > height - margin) continue;
+
+    // Proximity check
+    let tooClose = false;
+    for (const n of Object.values(state.nodes)) {
+      if (Math.hypot(n.x - nx, n.y - ny) < 25) { tooClose = true; break; }
+    }
+    if (tooClose) continue;
+
+    // Planarity check
+    let crossing = false;
+    for (const edge of state.edges) {
+      if (edge.u == parentId || edge.v == parentId) continue;
+      const uNode = state.nodes[edge.u];
+      const vNode = state.nodes[edge.v];
+      if (intersects(parentNode, newNode, uNode, vNode)) { crossing = true; break; }
+    }
+    if (crossing) continue;
+
+    const newNodeId = state.nextNodeId++;
+    state.nodes[newNodeId] = { id: newNodeId, x: nx, y: ny };
+    state.edges.push({ u: parseInt(parentId, 10), v: newNodeId });
+  }
+
+  // --- PHASE 2: SIMPLIFICATION (Remove Degree-2 Nodes) ---
+  let changed = true;
+  while (changed) {
+    changed = false;
+    const degrees = {};
+    const neighbors = {};
+    
+    // Build incidence maps
+    for (const id of Object.keys(state.nodes)) {
+      degrees[id] = 0;
+      neighbors[id] = [];
+    }
+    for (const edge of state.edges) {
+      degrees[edge.u]++;
+      degrees[edge.v]++;
+      neighbors[edge.u].push(edge.v);
+      neighbors[edge.v].push(edge.u);
+    }
+
+    // Find and collapse the first degree-2 node we see
+    for (const idStr of Object.keys(state.nodes)) {
+      const id = parseInt(idStr, 10);
+      if (degrees[id] === 2) {
+        const u = neighbors[id][0];
+        const v = neighbors[id][1];
+        
+        // Delete the node
+        delete state.nodes[id];
+        
+        // Filter out the two edges connecting to it
+        state.edges = state.edges.filter(e => 
+          !( (e.u === id && e.v === u) || (e.u === u && e.v === id) || 
+             (e.u === id && e.v === v) || (e.u === v && e.v === id) )
+        );
+        
+        // Bridge the neighbors
+        state.edges.push({ u: u, v: v });
+        
+        changed = true;
+        break; // Break to safely rebuild the degrees map for the next pass
+      }
+    }
+  }
+
+  // Focus a remaining node and render
+  const remainingIds = Object.keys(state.nodes);
+  state.selectedNode = remainingIds.length > 0 ? parseInt(remainingIds[0], 10) : null;
+  renderEditor();
+  
+  const finalLeaves = getLeafCount();
+  if (finalLeaves < targetLeaves) {
+    setStatus(`Stopped at ${finalLeaves} leaf nodes (canvas got too crowded).`);
+  } else {
+    setStatus(`Generated random uniaxial tree with ${finalLeaves} leaf nodes.`);
+  }
 }
 
 function onKeyDown(event) {
@@ -214,6 +416,7 @@ function selectedDbConfigs() {
 async function runQuery() {
   try {
     setStatus("Querying backend...");
+    const t0 = Date.now();
     const payload = {
       tree: serializeTree(),
       db_configs: selectedDbConfigs(),
@@ -235,9 +438,13 @@ async function runQuery() {
     if (!response.ok) throw new Error(data.error || "Query failed");
 
     state.queryResult = data;
+    const tf = Date.now()
     renderResults();
     resultSummary.textContent = `${data.results.length} result(s) loaded.`;
-    setStatus("Query complete.");
+    const n = Number(document.getElementById("resultCount").value || 5);
+    const isDiagOnly = document.getElementById("diagToggle").checked;
+    setStatus(`Successfully queried ${n} crease patterns. Database size: ${isDiagOnly? "586,695": "958,770"}. Query time: ${((tf-t0)/1000).toFixed(2)}s`);
+
   } catch (error) {
     setStatus(error.message, true);
   }
@@ -276,10 +483,13 @@ function renderResults() {
   });
 }
 function renderDetail(result, index) {
+  state.currentDetailResult = result; // Save active result for export
+  
   modalGrid.replaceChildren();
   if (!result) return;
 
-  modalTitle.textContent = `Rank ${result.rank ?? index + 1} Result (${result.N} ${result.symmetry}) — Distance: ${Number(result.distance).toFixed(5)}`;
+  // FIX: Added Tiling ID to the modal title
+  modalTitle.textContent = `Rank ${result.rank ?? index + 1} Result (${result.N} ${result.symmetry}) — Distance: ${Number(result.distance).toFixed(5)} — Tiling ID: ${result.tiling_id}`;
 
   // Top Row
   modalGrid.appendChild(panelSvg("Topology", result.topology, (svg) => renderGraphSvg(svg, result.topology, { nodeFill: "#a7c7ff" })));
