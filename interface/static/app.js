@@ -436,7 +436,7 @@ async function runQuery() {
       catch { data = { error: rawText.slice(0, 200) }; }
     }
     if (!response.ok) throw new Error(data.error || "Query failed");
-
+    
     state.queryResult = data;
     const tf = Date.now()
     renderResults();
@@ -683,3 +683,22 @@ function fitScale(b, w, h) {
 function transformX(x, b, s, w) { return 20 + (x - b.minX) * s + (w - 40 - (b.maxX - b.minX) * s) / 2; }
 function transformY(y, b, s, h) { return h - (20 + (y - b.minY) * s + (h - 40 - (b.maxY - b.minY) * s) / 2); }
 function pointForNode(g, id) { const f = g.nodes.find(n => n.id === id); return f && f.pos ? f.pos : [0, 0]; }
+
+/*
+TODO: 
+- kamada kawai or better arrangement of display trees, nonoverlapping edges. straighten out the random trees. for symmetric trees, display which ones are across the line of symmetry vs on
+- click to see closeup of cp, or export as png
+- display packing
+- change the Z(t) profile time range to capture similarity better. back to the drawing board for the math
+
+This tool definitely won't be a one and done/plug and chug, even for simple trees. you should look at the top few results which are in the ballpark, but at that point, the foldability/flap accessibility makes a much bigger difference
+
+Why does larger tree take longer query?
+
+fix canonicalization issues. also I think distance tends to be further for the larger N dbs bc of the way its normalized. so it's not as fair. ex: fish base has distance 1 in 3 diag but 16 in 4 diag
+
+cannot do a combination of smooth and detailed. the point splits have to come manually
+
+For full app: enable different constraint selection or drag around, and see tree update in real time. compute refs
+text to tree, or image to tree?
+*/

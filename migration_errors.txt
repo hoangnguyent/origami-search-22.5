@@ -1,1 +1,0 @@
-ID: 4449, N: 4, Sym: none | FATAL: unsupported operand type(s) for %: 'NoneType' and 'int'
