@@ -437,7 +437,7 @@ function serializeTree() {
 }
 
 function selectedDbConfigs() {
-  const isDiagOnly = document.getElementById("diagToggle").checked;
+  const isDiagOnly = !document.getElementById("diagToggle").checked;
   if (isDiagOnly) {
     return [
       { N: 3, symmetry: "diag" },
@@ -486,7 +486,7 @@ async function runQuery() {
     renderResults();
     resultSummary.textContent = `${data.results.length} result(s) loaded.`;
     const n = Number(document.getElementById("resultCount").value || 5);
-    const isDiagOnly = document.getElementById("diagToggle").checked;
+    const isDiagOnly = !document.getElementById("diagToggle").checked;
     setStatus(`Successfully queried ${n} crease patterns. Database size: ${isDiagOnly? "586,695": "958,770"}. Query time: ${((tf-t0)/1000).toFixed(2)}s`);
 
   } catch (error) {
