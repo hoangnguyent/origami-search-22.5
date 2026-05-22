@@ -12,17 +12,21 @@ const state = {
   currentDetailResult: null, // Track the open modal result
 };
 
-const COLORS = {
-  rm: "#ff6b6b",
-  rv: "#4dabf7",
-  av: "#4dabf7",
-  hm: "#ff6b6b",
-  hv: "#4dabf7",
-  h: "#9aa8bf",
-  v: "#4dabf7",
-  m: "#ff6b6b",
-  b: "#f0f3f7",
-};
+// crease pattern colors are defined via CSS variables so they follow theme
+function getCpColor(rawType) {
+  const style = getComputedStyle(document.documentElement);
+  const t = (rawType == null) ? "" : String(rawType).trim().toLowerCase();
+  // map common aliases to a canonical css var suffix
+  const map = {
+    'rm': 'rm', 'rv': 'rv', 'av': 'av', 'hm': 'hm', 'hv': 'hv', 'h': 'h', 'v': 'v', 'm': 'm', 'b': 'b',
+  };
+  const key = map[t] || (t.includes('m') ? 'm' : t.includes('v') ? 'v' : t.includes('b') ? 'b' : t.includes('h') ? 'h' : 'h');
+  const value = style.getPropertyValue(`--cp-${key}`).trim();
+  if (value) return value;
+  // fallback hardcoded palette
+  const fallback = { rm: '#ff6b6b', rv: '#4dabf7', av: '#4dabf7', hm: '#ff6b6b', hv: '#4dabf7', h: '#9aa8bf', v: '#4dabf7', m: '#ff6b6b', b: '#f0f3f7' };
+  return fallback[key] || '#9aa8bf';
+}
 
 const editorSvg = document.getElementById("editorSvg");
 const resultsGrid = document.getElementById("resultsGrid");
@@ -31,11 +35,49 @@ const resultSummary = document.getElementById("resultSummary");
 const detailModal = document.getElementById("detailModal");
 const modalGrid = document.getElementById("modalGrid");
 const modalTitle = document.getElementById("modalTitle");
+const settingsModal = document.getElementById("settingsModal");
+const settingsBtn = document.getElementById("settingsBtn");
+const closeSettingsModal = document.getElementById("closeSettingsModal");
+const themeSelect = document.getElementById("themeSelect");
+const languageSelect = document.getElementById("languageSelect");
+
+const THEME_STORAGE_KEY = "search225-theme-preference";
+const systemThemeQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+
+function readStoredThemePreference() {
+  try {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    return stored === 'light' || stored === 'dark' || stored === 'system' ? stored : null;
+  } catch { return null; }
+}
+
+function getEffectiveTheme(themePreference) {
+  if (themePreference === 'light' || themePreference === 'dark') return themePreference;
+  return systemThemeQuery && systemThemeQuery.matches ? 'light' : 'dark';
+}
+
+function applyTheme(themePreference, persist = true) {
+  const normalized = themePreference === 'light' || themePreference === 'dark' ? themePreference : 'system';
+  const effective = getEffectiveTheme(normalized);
+  document.documentElement.dataset.theme = effective;
+  if (themeSelect) themeSelect.value = normalized;
+  if (persist) {
+    try { localStorage.setItem(THEME_STORAGE_KEY, normalized); } catch {}
+  }
+}
+
+function setThemePreference(themePreference) { applyTheme(themePreference, true); }
 
 // Event Listeners
 document.getElementById("runQuery").addEventListener("click", runQuery);
 document.getElementById("resetTree").addEventListener("click", resetTree);
 document.getElementById("closeModal").addEventListener("click", () => detailModal.classList.add("hidden"));
+// Settings modal wiring
+if (settingsBtn) settingsBtn.addEventListener("click", () => settingsModal && settingsModal.classList.remove("hidden"));
+if (closeSettingsModal) closeSettingsModal.addEventListener("click", () => settingsModal && settingsModal.classList.add("hidden"));
+if (settingsModal) settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });
+if (themeSelect) themeSelect.addEventListener("change", () => setThemePreference(themeSelect.value));
+if (languageSelect) languageSelect.addEventListener("change", () => { try { localStorage.setItem('search225-language-preference', languageSelect.value); } catch {} });
 document.addEventListener("keydown", onKeyDown);
 editorSvg.addEventListener("mousedown", onEditorMouseDown);
 window.addEventListener("mousemove", onEditorMouseMove);
@@ -116,6 +158,8 @@ document.getElementById("downloadCpBtn").addEventListener("click", () => {
   URL.revokeObjectURL(url);
 });
 
+// Apply stored or system theme before initial render
+applyTheme(readStoredThemePreference() || 'system', false);
 renderEditor();
 
 function setStatus(message, isError = false) {
@@ -526,29 +570,34 @@ function renderCpSvg(svg, cp, width, height) {
 
   function mapTypeToColor(rawType) {
     const t = (rawType == null) ? "" : String(rawType).trim().toLowerCase();
-    if (COLORS[t]) return COLORS[t];
-    if (t === "ax" || t === "aux") return COLORS.av;
-    if (t.includes("m")) return COLORS.m; 
-    if (t.includes("v")) return COLORS.v; 
-    if (t.includes("b")) return COLORS.b; 
-    if (t.includes("h")) return COLORS.h; 
-    return COLORS.h; 
+    if (t === "ax" || t === "aux") return getCpColor('av');
+    if (t.includes("m")) return getCpColor('m');
+    if (t.includes("v")) return getCpColor('v');
+    if (t.includes("b")) return getCpColor('b');
+    if (t.includes("h")) return getCpColor('h');
+    return getCpColor(t || 'h');
   }
 
   for (const segment of cp.segments) {
     const stroke = mapTypeToColor(segment.type);
     const isThin = segment.type === "h" || String(segment.type).toLowerCase().includes("h");
-    
-    svg.appendChild(makeSvg("line", {
+
+    const line = makeSvg("line", {
       x1: transformX(segment.x1, bounds, scale, width),
       y1: transformY(segment.y1, bounds, scale, height),
       x2: transformX(segment.x2, bounds, scale, width),
       y2: transformY(segment.y2, bounds, scale, height),
-      stroke: stroke,
-      "stroke-width": isThin ? 1.2 : 2.2,
-      "stroke-linecap": "round",
-      opacity: 0.85,
-    }));
+    });
+    // set both attributes and inline styles so stylesheet rules don't override computed crease colors
+    line.setAttribute('stroke', stroke);
+    line.setAttribute('stroke-width', isThin ? '1.2' : '2.2');
+    line.setAttribute('stroke-linecap', 'round');
+    line.setAttribute('opacity', '0.85');
+    line.style.stroke = stroke;
+    line.style.strokeWidth = isThin ? "1.2" : "2.2";
+    line.style.strokeLinecap = "round";
+    line.style.opacity = "0.85";
+    svg.appendChild(line);
   }
 }
 
@@ -633,7 +682,7 @@ function renderHeatSvg(svg, heat) {
   
   // Result Legend
   legend.appendChild(makeSvg("line", { x1: width - 80, y1: 36, x2: width - 60, y2: 36, stroke: colorResult, "stroke-width": 2.3 }));
-  const rText = makeSvg("text", { x: width - 55, y: 40, fill: "#e8edf9", "font-size": 11 });
+  const rText = makeSvg("text", { x: width - 55, y: 40, fill: "#9daccc", "font-size": 11 });
   rText.textContent = "Result";
   legend.appendChild(rText);
 

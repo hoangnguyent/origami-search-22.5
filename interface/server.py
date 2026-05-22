@@ -275,6 +275,13 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             css = (STATIC_DIR / "styles.css").read_bytes()
             _send_bytes(self, "text/css; charset=utf-8", css)
             return
+        if self.path.endswith(".svg"):
+            # Construct the full path to the file within the static directory
+            file_path = STATIC_DIR / self.path.lstrip("/")
+            if file_path.exists():
+                svg_content = file_path.read_bytes()
+                _send_bytes(self, "image/svg+xml", svg_content)
+                return
 
         if self.path == "/api/config":
             _send_json(
