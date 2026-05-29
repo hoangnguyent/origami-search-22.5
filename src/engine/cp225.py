@@ -177,7 +177,13 @@ class Cp225:
         self.edges.append((new_vertex_idx, v2_idx, line_type))
         self.get_vertex_neighbors()
 
-    def ray_cast(self, start_idx: int, angle: int, operation_count=0) -> tuple[None, None] | tuple["Cp225", int]:
+    def ray_cast(
+        self,
+        start_idx: int,
+        angle: int,
+        operation_count=0,
+        new_line_type: str = "m",
+    ) -> tuple[None, None] | tuple["Cp225", int]:
         """
         Cast a ray from vertex `start_idx` along `angle` (int, multiple of 22.5 degrees),
         find the first edge intersection, split that edge, and add a new crease.
@@ -246,9 +252,12 @@ class Cp225:
             new_idx = len(self.vertices) - 1
             if not vertex_on_border(self.vertex_neighbors[new_idx]):
                 _, operation_count = self.ray_cast(
-                    new_idx, reflect_angle(angle, angle_edge), operation_count
+                    new_idx,
+                    reflect_angle(angle, angle_edge),
+                    operation_count,
+                    new_line_type=new_line_type,
                 )
-        self.edges.append((start_idx, new_idx, "m"))
+        self.edges.append((start_idx, new_idx, new_line_type))
         return self, operation_count + 1
 
     def remove_crease(self, edge_index: int) -> tuple["Cp225", int]:

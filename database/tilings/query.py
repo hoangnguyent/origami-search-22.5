@@ -28,138 +28,8 @@ from database.tilings.build_tilings import decompress_edges, Topology, Tiling
 from database.tilings.faiss_cache import get_t_scales, compute_hkt_signature, DIMENSION
 
 # =============================================================================
-# 2. RAW CACHE & EPHEMERAL FAISS MANAGEMENT
-# =============================================================================
-
-# def sync_raw_cache(session, N, symmetry):
-#     """
-#     Syncs the database to a raw .npy file. 
-#     Loading .npy is >100x faster than querying SQLite, allowing us to 
-#     dynamically weight and rebuild the FAISS index in RAM instantly at query time.
-#     """
-#     npy_path = f"database/tilings/storage/raw_embeddings_{N}_{symmetry}.npy"
-#     map_path = f"database/tilings/storage/faiss_map_{N}_{symmetry}.pkl"
-    
-#     # 1. Load existing cache
-#     if os.path.exists(npy_path) and os.path.exists(map_path):
-#         raw_matrix = np.load(npy_path)
-#         with open(map_path, 'rb') as f:
-#             faiss_map = pickle.load(f)
-#     else:
-#         raw_matrix = np.empty((0, DIMENSION), dtype=np.float32)
-#         faiss_map = []
-
-#     last_indexed_id = faiss_map[-1] if faiss_map else -1
-    
-#     # 2. Fetch missing embeddings from DB
-#     new_records = session.query(Tiling.id, Tiling.embedding).filter(Tiling.id > last_indexed_id).all()
-    
-#     # 3. Update and Save if new data exists
-#     if new_records:
-#         print(f"Syncing {len(new_records)} new embeddings from DB to local raw cache...")
-#         new_embeddings = np.vstack([np.frombuffer(r.embedding, dtype=np.float32) for r in new_records])
-#         raw_matrix = np.vstack([raw_matrix, new_embeddings])
-#         faiss_map.extend([r.id for r in new_records])
-        
-#         np.save(npy_path, raw_matrix)
-#         with open(map_path, 'wb') as f:
-#             pickle.dump(faiss_map, f, protocol=pickle.HIGHEST_PROTOCOL)
-            
-#     return raw_matrix, faiss_map
-
-# =============================================================================
-# 3. QUERY PIPELINE
-# =============================================================================
-
-# def load_db_cache(N, symmetry):
-#     """
-#     Loads the SQLite session, NumPy cache, and FAISS map for a specific database.
-#     If the cache doesn't exist, it builds it.
-#     """
-#     db_uri = f'sqlite:///database/tilings/storage/tilings_{N}_{symmetry}.db'
-#     cache_file = f'database/tilings/storage/cache_{N}_{symmetry}.npy'
-#     map_file = f'database/tilings/storage/map_{N}_{symmetry}.pkl'
-    
-#     engine = create_engine(db_uri)
-#     Session = sessionmaker(bind=engine)
-#     session = Session()
-    
-#     # Check if cache needs building
-#     if not os.path.exists(cache_file) or not os.path.exists(map_file):
-#         print(f"Building cache for N={N}, Sym={symmetry}...")
-#         all_tilings = session.query(Tiling.id, Tiling.embedding).all()
-        
-#         embeddings = []
-#         faiss_map = {}
-#         for idx, (t_id, emb_bytes) in enumerate(all_tilings):
-#             emb_array = np.frombuffer(emb_bytes, dtype=np.float32)
-#             embeddings.append(emb_array)
-#             faiss_map[idx] = t_id
-            
-#         embeddings_np = np.array(embeddings, dtype=np.float32)
-#         np.save(cache_file, embeddings_np)
-#         with open(map_file, 'wb') as f:
-#             pickle.dump(faiss_map, f)
-            
-#     # Load Cache
-#     embeddings_np = np.load(cache_file)
-#     with open(map_file, 'rb') as f:
-#         faiss_map = pickle.load(f)
-        
-#     return session, embeddings_np, faiss_map
-
-
-# =============================================================================
 # FEDERATED QUERY FUNCTION
 # =============================================================================
-# def random_pull_from_db(N, symmetry, n=5):
-#     """Fetches a random tiling from the specified database for testing/debugging."""
-#     db_uri = f'sqlite:///database/tilings/storage/tilings_{N}_{symmetry}.db'
-#     engine = create_engine(db_uri)
-#     Session = sessionmaker(bind=engine)
-#     session = Session()
-    
-#     count = session.query(Tiling).count()
-#     print(f"Sampling {n} tilings from DB with N={N}, Symmetry={symmetry} (Total Tilings: {count})...")
-#     tiling_ids = random.sample(range(1, count), n)
-#     results = []
-#     for tiling_id in tiling_ids:
-#         tiling = session.get(Tiling, tiling_id)
-#         topo = session.get(Topology, tiling.topology_id)
-        
-#         # A. Reconstruct Raw Topology
-#         G_raw = nx.Graph()
-#         G_raw.add_edges_from(decompress_edges(topo.binary_state, N))
-#         nx.set_node_attributes(G_raw, {node: node for node in G_raw.nodes()}, 'pos')
-
-#         # Deserialize Blob
-#         blob = pickle.loads(tiling.tiling_blob)
-#         loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
-        
-#         # Build CP (Canonicalized for clean visual output)
-#         cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=N)
-#         cp = add_hinges(cp)
-#         cp_frozen = canonicalize(cp)
-#         cp = unfreeze(cp_frozen)
-        
-#         # Fold and Extract Tree
-#         fold = cp_to_fold(cp)
-#         res_tree, res_packing = fold.get_tree_and_packing(include_packing=True)
-        
-#         results.append({
-#             'N': N,
-#             'symmetry': symmetry,
-#             'topology_id': topo.id,
-#             'tiling_id': tiling.id,
-#             'G_solved': loaded_G,
-#             'G_raw': G_raw,
-#             'pos_solved': loaded_pos,
-#             'cp': cp,
-#             'fold': fold,
-#             'tree': res_tree,
-#             'packing': res_packing
-#         })
-#     return results
 
 
 def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')], n=5):
@@ -262,7 +132,7 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
             fold = cp_to_fold(cp)
             # Packing is basically a cp with all the hinges drawn
             res_tree, packing = fold.get_tree_and_packing(include_packing=True)
-            res_packing = fold_to_cp(packing[0],inst_graph = packing[1])
+            res_packing = fold_to_cp(packing[0],inst_graph = packing[1], mv_reference = cp)
             
             results.append({
                 'rank': len(results) + 1,

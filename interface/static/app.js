@@ -12,22 +12,6 @@ const state = {
   currentDetailResult: null, // Track the open modal result
 };
 
-// crease pattern colors are defined via CSS variables so they follow theme
-function getCpColor(rawType) {
-  const style = getComputedStyle(document.documentElement);
-  const t = (rawType == null) ? "" : String(rawType).trim().toLowerCase();
-  // map common aliases to a canonical css var suffix
-  const map = {
-    'rm': 'rm', 'rv': 'rv', 'av': 'av', 'hm': 'hm', 'hv': 'hv', 'h': 'h', 'v': 'v', 'm': 'm', 'b': 'b',
-  };
-  const key = map[t] || (t.includes('m') ? 'm' : t.includes('v') ? 'v' : t.includes('b') ? 'b' : t.includes('h') ? 'h' : 'h');
-  const value = style.getPropertyValue(`--cp-${key}`).trim();
-  if (value) return value;
-  // fallback hardcoded palette
-  const fallback = { rm: '#ff6b6b', rv: '#4dabf7', av: '#4dabf7', hm: '#ff6b6b', hv: '#4dabf7', h: '#9aa8bf', v: '#4dabf7', m: '#ff6b6b', b: '#f0f3f7' };
-  return fallback[key] || '#9aa8bf';
-}
-
 const editorSvg = document.getElementById("editorSvg");
 const resultsGrid = document.getElementById("resultsGrid");
 const statusEl = document.getElementById("status");
@@ -497,10 +481,16 @@ function selectedDbConfigs() {
 
 async function runQuery() {
   try {
+    const tree = serializeTree();
+    if (tree.edges.length < 4) {
+      setStatus("Tree is too simple. Add at least 4 edges before running a query.", true);
+      return;
+    }
+
     setStatus("Querying backend...");
     const t0 = Date.now();
     const payload = {
-      tree: serializeTree(),
+      tree,
       db_configs: selectedDbConfigs(),
       n: Number(document.getElementById("resultCount").value || 5),
     };
@@ -607,60 +597,53 @@ function panelSvg(title, payload, renderer) {
 }
 
 // --------------------------------------------------------
-// Render Utilities (Retained from previous architecture)
+// Render Utilities 
 // --------------------------------------------------------
 
-function renderCpSvg(svg, cp, width, height) {
-  renderCreasePatternSvg(svg, cp, width, height);
-}
-
-function renderPackingSvg(svg, cp, width, height) {
-  renderCreasePatternSvg(svg, cp, width, height, {
-    hingeStroke: "#2cc5bf",
-    hingeStrokeWidth: 3.2,
-    hingeOpacity: 0.95,
-  });
-}
-
-function renderCreasePatternSvg(svg, cp, width, height, options = {}) {
+function renderCpSvg(svg, cp, width, height, options = {}) {
   const bounds = boundsFromSegments(cp.segments);
   const scale = fitScale(bounds, width, height);
-  const hingeStroke = options.hingeStroke || null;
-  const hingeStrokeWidth = options.hingeStrokeWidth || 2.2;
-  const hingeOpacity = options.hingeOpacity || 0.85;
-
-  function mapTypeToColor(rawType) {
-    const t = (rawType == null) ? "" : String(rawType).trim().toLowerCase();
-    if (t === "ax" || t === "aux") return getCpColor('av');
-    if (t.includes("m")) return getCpColor('m');
-    if (t.includes("v")) return getCpColor('v');
-    if (t.includes("b")) return getCpColor('b');
-    if (t.includes("h")) return getCpColor('h');
-    return getCpColor(t || 'h');
-  }
-
   for (const segment of cp.segments) {
-    const stroke = mapTypeToColor(segment.type);
-    const isHinge = segment.type === "h" || String(segment.type).toLowerCase().includes("h") || String(segment.type).toLowerCase().includes("aux");
-    const effectiveStroke = isHinge && hingeStroke ? hingeStroke : stroke;
-    const effectiveWidth = isHinge ? hingeStrokeWidth : 1.2;
-    const effectiveOpacity = isHinge ? hingeOpacity : 0.85;
+    const mv = (segment.type == null) ? "" : String(segment.type).trim().toLowerCase();
+    const strokeWidth = mv === "h" ? 1 : 2;
+    const classes = ["cp-segment", `cp-${mv}`];
+    // if (mv === "h") classes.push(hingeClass);
 
     const line = makeSvg("line", {
       x1: transformX(segment.x1, bounds, scale, width),
       y1: transformY(segment.y1, bounds, scale, height),
       x2: transformX(segment.x2, bounds, scale, width),
       y2: transformY(segment.y2, bounds, scale, height),
+      class: classes.join(" "),
     });
-    // set both attributes and inline styles so stylesheet rules don't override computed crease colors
-    line.setAttribute('stroke', effectiveStroke);
-    line.setAttribute('stroke-width', String(effectiveWidth));
-    line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('opacity', String(effectiveOpacity));
-    line.style.stroke = effectiveStroke;
-    line.style.strokeWidth = String(effectiveWidth);
-    line.style.strokeLinecap = "round";
-    line.style.opacity = String(effectiveOpacity);
+    line.setAttribute('stroke-width', String(strokeWidth));
+    // line.setAttribute('stroke-linecap', 'round');
+    line.style.strokeWidth = String(strokeWidth);
+    // line.style.strokeLinecap = "round";
+    svg.appendChild(line);
+  }
+}
+
+function renderPackingSvg(svg, cp, width, height, options = {}) {
+  const bounds = boundsFromSegments(cp.segments);
+  const scale = fitScale(bounds, width, height);
+  for (const segment of cp.segments) {
+    const mv = (segment.type == null) ? "" : String(segment.type).trim().toLowerCase();
+    const strokeWidth = mv === "h" ? 2.5 : mv === "b"? 2: 0.7;
+    const classes = ["cp-segment", `packing-${mv}`];
+    // if (mv === "h") classes.push(hingeClass);
+
+    const line = makeSvg("line", {
+      x1: transformX(segment.x1, bounds, scale, width),
+      y1: transformY(segment.y1, bounds, scale, height),
+      x2: transformX(segment.x2, bounds, scale, width),
+      y2: transformY(segment.y2, bounds, scale, height),
+      class: classes.join(" "),
+    });
+    line.setAttribute('stroke-width', String(strokeWidth));
+    // line.setAttribute('stroke-linecap', 'round');
+    line.style.strokeWidth = String(strokeWidth);
+    // line.style.strokeLinecap = "round";
     svg.appendChild(line);
   }
 }

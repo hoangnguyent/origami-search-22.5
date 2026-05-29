@@ -139,7 +139,7 @@ def build_crease_pattern(G, pos_solved_exact, faces, N=4, verbose=False):
                
     cp_edges = []
     for u, v in G.edges():
-        l_type = 'b' if is_border(pos_solved_exact[u], pos_solved_exact[v]) else 'av'
+        l_type = 'b' if is_border(pos_solved_exact[u], pos_solved_exact[v]) else 'v'
         cp_edges.append((n2i[u], n2i[v], l_type))
         
     cp = Cp225(vertices, cp_edges)
@@ -239,7 +239,7 @@ def build_crease_pattern(G, pos_solved_exact, faces, N=4, verbose=False):
                         
                         exists = any(((u == idx1 and v == idx2) or (u == idx2 and v == idx1)) for u, v, _ in cp.edges)
                         if not exists:
-                            l_type = "rv" if (idx1 in reflex_cp_indices or idx2 in reflex_cp_indices) else "rm"
+                            l_type = "v" if (idx1 in reflex_cp_indices or idx2 in reflex_cp_indices) else "m"
                             cp.edges.append((idx1, idx2, l_type))
                             
     return cp
@@ -253,8 +253,7 @@ def add_hinges(cp):
     the transformation that minimizes the hinge count and overall errors.
     """
     def get_odd_errors(current_cp):
-        """Helper to fetch only odd-degree vertices violating Kawasaki, 
-        filtering out those with 'b' (border) or 'av' (axial valley) neighbors."""
+        """Helper to fetch only odd-degree vertices violating Kawasaki"""
         current_cp.get_vertex_neighbors()
         errors = current_cp.kawasaki_errors()
         
@@ -288,12 +287,9 @@ def add_hinges(cp):
                     
                     # ULTRA-FAST CLONE: Shallow copy the lists (tuples/Vertex4D are immutable)
                     temp_cp = Cp225(cp.vertices[:], cp.edges[:])
-                    res, ops = temp_cp.ray_cast(target_v, a, 0)
+                    res, ops = temp_cp.ray_cast(target_v, a, 0, new_line_type="h")
                     
                     if res is not None:
-                        # Fast pythonic conversion of 'm' to 'h'
-                        temp_cp.edges = [(u, v, 'h' if lt == 'm' else lt) for u, v, lt in temp_cp.edges]
-                        
                         # Evaluate global consequences
                         cost = (len(get_odd_errors(temp_cp)), ops)
                         if cost < best_cost:
@@ -345,17 +341,16 @@ def add_hinges(cp):
 # 4. DEBUG & VISUALIZATION
 # =============================================================================
 COLORS = {
-    'rm': 'red',  #ridge mountain
-    'rv': 'blue', #ridge valley
-    'av': 'blue', #axial valley
-    'hm': 'red',  #hinge mountain
-    'hv': 'blue', #hinge valley
+    # 'rm': 'red',  #ridge mountain
+    # 'rv': 'blue', #ridge valley
+    # 'av': 'blue', #axial valley
+    # 'hm': 'red',  #hinge mountain
+    # 'hv': 'blue', #hinge valley
     'h': 'grey', #unknown/flat hinge
     'v': 'blue', 
     'm': 'red',
     'b': 'black'
 }
-import matplotlib.pyplot as plt
 def draw_cp_ax(ax, cp, title="Crease Pattern", debug = False):
     ax.set_title(title, fontsize=14)
     

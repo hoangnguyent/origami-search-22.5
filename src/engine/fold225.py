@@ -47,13 +47,9 @@ Fold225(
 Note: abbreviations like v or v_idx refer to the index, not the object itself. Full variable names like vertex or vert refer to the object itself. Same goes for edges, faces, and instances.
 
 """
-
-import cProfile
-import pstats
 import math
 import os
 from collections import deque, defaultdict
-from random import random
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
 import networkx as nx
@@ -67,7 +63,7 @@ from src.engine.math225_core import (
     flatten_cpp,
     split_and_rebuild_cpp
 )
-from src.engine.cp225 import Cp225
+from src.engine.cp225 import Cp225, point_on_line
 from src.engine.tree import merge_edges, get_proportional_tree_pos
 
 ALPHA = 0.1  # transparency factor. 0.2 for 40gsm tracing paper
@@ -77,24 +73,8 @@ Z = Vertex4D(0, 0, 1, 0)
 W = Vertex4D(0, 0, 0, 1)
 
 DIRECTIONS = [X, X + Y, Y, Y + Z, Z, Z + W, W, W - X]
-# PRECOMPUTED_2D_DIRECTIONS = [d.get_2d_components() for d in DIRECTIONS]
 
-# PLOT_COLORS = {
-#     "m": "purple",
-#     "v": "blue",
-#     "b": "black",
-#     "a": "#42e7dc",
-#     "i": "grey", #invisible (for debugging)
-#     "ax": "blue", # auxiliary
-#     "r": "red", #ridge
-#     "h": "grey" #hinge
-# }
 PLOT_COLORS = {
-    'rm': 'red',  #ridge mountain
-    'rv': 'blue', #ridge valley
-    'av': 'blue', #axial valley
-    'hm': 'red',  #hinge mountain
-    'hv': 'blue', #hinge valley
     'h': 'grey', #unknown/flat hinge
     'v': 'blue', 
     'm': 'red',
@@ -1289,7 +1269,7 @@ def flatten(fold: Fold225) -> Fold225:
     )
 
 
-def fold_to_cp(fold: Fold225, inst_graph: nx.Graph = None) -> Cp225:
+def fold_to_cp(fold: Fold225, inst_graph: nx.Graph = None, mv_reference: Cp225 = None) -> Cp225:
     """
     Unfolds the state back to a Crease Pattern.
     Uses inst_graph to label 'a' (auxiliary) and erase invisible slices.
@@ -1315,7 +1295,31 @@ def fold_to_cp(fold: Fold225, inst_graph: nx.Graph = None) -> Cp225:
     paths = nx.single_source_shortest_path(inst_graph, root)
 
     cp_verts = []
-    edge_tracker = {}  # Maps (v_low, v_high) -> 'b', 'm', 'a'
+    edge_tracker = {}  # Maps (v1, v2) Vertex4D pairs -> line type
+    cp_vertex_to_idx = {}
+    reference_edge_types = {}
+    reference_edges = []
+    if mv_reference is not None:
+        reference_edges = [
+            (mv_reference.vertices[v1_idx], mv_reference.vertices[v2_idx], line_type)
+            for v1_idx, v2_idx, line_type in mv_reference.edges
+        ]
+        reference_edge_types = {
+            frozenset((mv_reference.vertices[v1_idx], mv_reference.vertices[v2_idx])): line_type
+            for v1_idx, v2_idx, line_type in mv_reference.edges
+        }
+
+    def get_reference_edge_type(v1_cp, v2_cp):
+        """Look up the reference MV type for a crease, allowing subdivided collinear segments."""
+        exact_type = reference_edge_types.get(frozenset((v1_cp, v2_cp)))
+        if exact_type is not None:
+            return exact_type
+
+        for ref_v1, ref_v2, line_type in reference_edges:
+            if point_on_line(ref_v1, ref_v2, v1_cp) and point_on_line(ref_v1, ref_v2, v2_cp):
+                return line_type
+
+        return None
 
     # 3. Unfolding and Coloring
     for node, path_nodes in paths.items():
@@ -1355,12 +1359,14 @@ def fold_to_cp(fold: Fold225, inst_graph: nx.Graph = None) -> Cp225:
         for v in f_verts:
             if v not in cp_verts:
                 cp_verts.append(v)
+                cp_vertex_to_idx[v] = len(cp_verts) - 1
             f_cp_idxs.append(cp_verts.index(v))
+        f_cp_verts = [cp_verts[idx] for idx in f_cp_idxs]
 
         # 4. Process Edges for this Face
-        for slot, v1_cp in enumerate(f_cp_idxs):
-            v2_cp = f_cp_idxs[(slot + 1) % len(f_cp_idxs)]
-            edge_key = tuple(sorted((v1_cp, v2_cp)))
+        for slot, v1_cp in enumerate(f_cp_verts):
+            v2_cp = f_cp_verts[(slot + 1) % len(f_cp_verts)]
+            edge_key = frozenset((v1_cp, v2_cp))
 
             target_inst = fold.instances[f_idx][i_idx][slot]
 
@@ -1373,14 +1379,25 @@ def fold_to_cp(fold: Fold225, inst_graph: nx.Graph = None) -> Cp225:
                     if edge_data["is_invisible"]:
                         # Erase the boundary entirely
                         del edge_tracker[edge_key]
+                    elif edge_data["is_aux"] :
+                        edge_tracker[edge_key] = "h"
                     else:
-                        edge_tracker[edge_key] = "aux" if edge_data["is_aux"] else "m"
+                        reference_type = get_reference_edge_type(v1_cp, v2_cp)
+                        if reference_type is not None:
+                            edge_tracker[edge_key] = reference_type
+                        else:
+                            # this shouldn't happen, but is noticeable when it does
+                            edge_tracker[edge_key] = "b"
                 else:
-                    # Safety fallback for invalid manifolds
-                    edge_tracker[edge_key] = "v"
+                    # Safety fallback for invalid manifolds. Also shouldn't happen but is noticeable when it does.
+                    edge_tracker[edge_key] = "b"
 
     # Compile the final Crease Pattern
-    final_edges = [(v1, v2, t) for (v1, v2), t in edge_tracker.items()]
+    final_edges = [
+        (min(cp_vertex_to_idx[v1], cp_vertex_to_idx[v2]), max(cp_vertex_to_idx[v1], cp_vertex_to_idx[v2]), t)
+        for edge_key, t in edge_tracker.items()
+        for v1, v2 in [tuple(edge_key)]
+    ]
     return Cp225(cp_verts, final_edges)
 
 
