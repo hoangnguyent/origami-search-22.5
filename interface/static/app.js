@@ -40,6 +40,7 @@ const settingsBtn = document.getElementById("settingsBtn");
 const closeSettingsModal = document.getElementById("closeSettingsModal");
 const themeSelect = document.getElementById("themeSelect");
 const languageSelect = document.getElementById("languageSelect");
+const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
 
 const THEME_STORAGE_KEY = "search225-theme-preference";
 const systemThemeQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
@@ -78,6 +79,11 @@ if (closeSettingsModal) closeSettingsModal.addEventListener("click", () => setti
 if (settingsModal) settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });
 if (themeSelect) themeSelect.addEventListener("change", () => setThemePreference(themeSelect.value));
 if (languageSelect) languageSelect.addEventListener("change", () => { try { localStorage.setItem('search225-language-preference', languageSelect.value); } catch {} });
+if (resultsThumbModeSelect) {
+  resultsThumbModeSelect.addEventListener("change", () => {
+    if (state.queryResult) renderResults();
+  });
+}
 document.addEventListener("keydown", onKeyDown);
 editorSvg.addEventListener("mousedown", onEditorMouseDown);
 window.addEventListener("mousemove", onEditorMouseMove);
@@ -529,6 +535,7 @@ async function runQuery() {
 function renderResults() {
   resultsGrid.replaceChildren();
   if (!state.queryResult) return;
+  const thumbMode = resultsThumbModeSelect?.value || "cp";
 
   state.queryResult.results.forEach((result, index) => {
     const card = document.createElement("article");
@@ -542,7 +549,11 @@ function renderResults() {
     
     // FIX: Using the new thumb-svg class so it fills the 1:1 square
     const svg = makeSvg("svg", { viewBox: "0 0 220 220", class: "thumb-svg" });
-    renderCpSvg(svg, result.cp, 220, 220);
+    if (thumbMode === "tree" && result.tree) {
+      renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1", width: 220, height: 220 });
+    } else {
+      renderCpSvg(svg, result.cp, 220, 220);
+    }
     thumb.appendChild(svg);
 
     const meta = document.createElement("div");
@@ -652,25 +663,25 @@ function renderFoldSvg(svg, fold) {
   });
 }
 
-function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff" } = {}) {
+function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff", width = 420, height = 240 } = {}) {
   const bounds = boundsFromGraph(graph);
-  const scale = fitScale(bounds, 420, 240);
+  const scale = fitScale(bounds, width, height);
   for (const edge of graph.edges) {
     const start = pointForNode(graph, edge.u);
     const end = pointForNode(graph, edge.v);
     svg.appendChild(makeSvg("line", {
-      x1: transformX(start[0], bounds, scale, 420),
-      y1: transformY(start[1], bounds, scale, 240),
-      x2: transformX(end[0], bounds, scale, 420),
-      y2: transformY(end[1], bounds, scale, 240),
+      x1: transformX(start[0], bounds, scale, width),
+      y1: transformY(start[1], bounds, scale, height),
+      x2: transformX(end[0], bounds, scale, width),
+      y2: transformY(end[1], bounds, scale, height),
       class: "edge",
     }));
   }
   for (const node of graph.nodes) {
     if (!node.pos) continue;
     svg.appendChild(makeSvg("circle", {
-      cx: transformX(node.pos[0], bounds, scale, 420),
-      cy: transformY(node.pos[1], bounds, scale, 240),
+      cx: transformX(node.pos[0], bounds, scale, width),
+      cy: transformY(node.pos[1], bounds, scale, height),
       r: 4, fill: nodeFill, class: "node",
     }));
   }
