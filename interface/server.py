@@ -229,6 +229,7 @@ def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], d
                 "cp": serialize_cp(res["cp"]),
                 "fold": serialize_fold(res["fold"]),
                 "tree": serialize_tree(tree_graph, pos={node: [float(x), float(y)] for node, (x, y) in tree_pos.items()}),
+                "packing": serialize_cp(res["packing"]),
                 "heat": _build_heat_profile(query_tree, tree_graph, res["N"], res["symmetry"]),
             }
         )

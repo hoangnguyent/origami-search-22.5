@@ -551,6 +551,8 @@ function renderResults() {
     const svg = makeSvg("svg", { viewBox: "0 0 220 220", class: "thumb-svg" });
     if (thumbMode === "tree" && result.tree) {
       renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1", width: 220, height: 220 });
+    } else if (thumbMode === "packing" && result.packing) {
+      renderPackingSvg(svg, result.packing, 220, 220);
     } else {
       renderCpSvg(svg, result.cp, 220, 220);
     }
@@ -584,7 +586,8 @@ function renderDetail(result, index) {
   modalGrid.appendChild(panelSvg("Crease Pattern", result.cp, (svg) => renderCpSvg(svg, result.cp, 420, 240)));
   
   // Bottom Row
-  modalGrid.appendChild(panelSvg("Folded State", result.fold, (svg) => renderFoldSvg(svg, result.fold)));
+  // modalGrid.appendChild(panelSvg("Folded State", result.fold, (svg) => renderFoldSvg(svg, result.fold)));
+  modalGrid.appendChild(panelSvg("Packing", result.packing, (svg) => renderPackingSvg(svg, result.packing, 420, 240)));
   modalGrid.appendChild(panelSvg("Resulting Tree", result.tree, (svg) => renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1" })));
   modalGrid.appendChild(panelSvg("Heat Profile", result.heat, (svg) => renderHeatSvg(svg, result.heat)));
 
@@ -608,8 +611,23 @@ function panelSvg(title, payload, renderer) {
 // --------------------------------------------------------
 
 function renderCpSvg(svg, cp, width, height) {
+  renderCreasePatternSvg(svg, cp, width, height);
+}
+
+function renderPackingSvg(svg, cp, width, height) {
+  renderCreasePatternSvg(svg, cp, width, height, {
+    hingeStroke: "#2cc5bf",
+    hingeStrokeWidth: 3.2,
+    hingeOpacity: 0.95,
+  });
+}
+
+function renderCreasePatternSvg(svg, cp, width, height, options = {}) {
   const bounds = boundsFromSegments(cp.segments);
   const scale = fitScale(bounds, width, height);
+  const hingeStroke = options.hingeStroke || null;
+  const hingeStrokeWidth = options.hingeStrokeWidth || 2.2;
+  const hingeOpacity = options.hingeOpacity || 0.85;
 
   function mapTypeToColor(rawType) {
     const t = (rawType == null) ? "" : String(rawType).trim().toLowerCase();
@@ -623,7 +641,10 @@ function renderCpSvg(svg, cp, width, height) {
 
   for (const segment of cp.segments) {
     const stroke = mapTypeToColor(segment.type);
-    const isThin = segment.type === "h" || String(segment.type).toLowerCase().includes("h");
+    const isHinge = segment.type === "h" || String(segment.type).toLowerCase().includes("h") || String(segment.type).toLowerCase().includes("aux");
+    const effectiveStroke = isHinge && hingeStroke ? hingeStroke : stroke;
+    const effectiveWidth = isHinge ? hingeStrokeWidth : 1.2;
+    const effectiveOpacity = isHinge ? hingeOpacity : 0.85;
 
     const line = makeSvg("line", {
       x1: transformX(segment.x1, bounds, scale, width),
@@ -632,14 +653,14 @@ function renderCpSvg(svg, cp, width, height) {
       y2: transformY(segment.y2, bounds, scale, height),
     });
     // set both attributes and inline styles so stylesheet rules don't override computed crease colors
-    line.setAttribute('stroke', stroke);
-    line.setAttribute('stroke-width', isThin ? '1.2' : '2.2');
+    line.setAttribute('stroke', effectiveStroke);
+    line.setAttribute('stroke-width', String(effectiveWidth));
     line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('opacity', '0.85');
-    line.style.stroke = stroke;
-    line.style.strokeWidth = isThin ? "1.2" : "2.2";
+    line.setAttribute('opacity', String(effectiveOpacity));
+    line.style.stroke = effectiveStroke;
+    line.style.strokeWidth = String(effectiveWidth);
     line.style.strokeLinecap = "round";
-    line.style.opacity = "0.85";
+    line.style.opacity = String(effectiveOpacity);
     svg.appendChild(line);
   }
 }

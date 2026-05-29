@@ -22,7 +22,7 @@ from sqlalchemy.orm import declarative_base, sessionmaker, relationship
 # Pipeline Imports
 from src.engine.tiling2cp import load_frozen_blob, build_crease_pattern, add_hinges
 from src.engine.cp225 import canonicalize, unfreeze
-from src.engine.fold225 import cp_to_fold
+from src.engine.fold225 import cp_to_fold, fold_to_cp
 from src.engine.tree import extract_eigenvalues, get_proportional_tree_pos, EIG_COUNT, RESOLUTION
 from database.tilings.build_tilings import decompress_edges, Topology, Tiling
 from database.tilings.faiss_cache import get_t_scales, compute_hkt_signature, DIMENSION
@@ -112,53 +112,54 @@ from database.tilings.faiss_cache import get_t_scales, compute_hkt_signature, DI
 # =============================================================================
 # FEDERATED QUERY FUNCTION
 # =============================================================================
-def random_pull_from_db(N, symmetry, n=5):
-    """Fetches a random tiling from the specified database for testing/debugging."""
-    db_uri = f'sqlite:///database/tilings/storage/tilings_{N}_{symmetry}.db'
-    engine = create_engine(db_uri)
-    Session = sessionmaker(bind=engine)
-    session = Session()
+# def random_pull_from_db(N, symmetry, n=5):
+#     """Fetches a random tiling from the specified database for testing/debugging."""
+#     db_uri = f'sqlite:///database/tilings/storage/tilings_{N}_{symmetry}.db'
+#     engine = create_engine(db_uri)
+#     Session = sessionmaker(bind=engine)
+#     session = Session()
     
-    count = session.query(Tiling).count()
-    print(f"Sampling {n} tilings from DB with N={N}, Symmetry={symmetry} (Total Tilings: {count})...")
-    tiling_ids = random.sample(range(1, count), n)
-    results = []
-    for tiling_id in tiling_ids:
-        tiling = session.get(Tiling, tiling_id)
-        topo = session.get(Topology, tiling.topology_id)
+#     count = session.query(Tiling).count()
+#     print(f"Sampling {n} tilings from DB with N={N}, Symmetry={symmetry} (Total Tilings: {count})...")
+#     tiling_ids = random.sample(range(1, count), n)
+#     results = []
+#     for tiling_id in tiling_ids:
+#         tiling = session.get(Tiling, tiling_id)
+#         topo = session.get(Topology, tiling.topology_id)
         
-        # A. Reconstruct Raw Topology
-        G_raw = nx.Graph()
-        G_raw.add_edges_from(decompress_edges(topo.binary_state, N))
-        nx.set_node_attributes(G_raw, {node: node for node in G_raw.nodes()}, 'pos')
+#         # A. Reconstruct Raw Topology
+#         G_raw = nx.Graph()
+#         G_raw.add_edges_from(decompress_edges(topo.binary_state, N))
+#         nx.set_node_attributes(G_raw, {node: node for node in G_raw.nodes()}, 'pos')
 
-        # Deserialize Blob
-        blob = pickle.loads(tiling.tiling_blob)
-        loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
+#         # Deserialize Blob
+#         blob = pickle.loads(tiling.tiling_blob)
+#         loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
         
-        # Build CP (Canonicalized for clean visual output)
-        cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=N)
-        cp = add_hinges(cp)
-        cp_frozen = canonicalize(cp)
-        cp = unfreeze(cp_frozen)
+#         # Build CP (Canonicalized for clean visual output)
+#         cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=N)
+#         cp = add_hinges(cp)
+#         cp_frozen = canonicalize(cp)
+#         cp = unfreeze(cp_frozen)
         
-        # Fold and Extract Tree
-        fold = cp_to_fold(cp)
-        res_tree = fold.get_tree_and_packing()[0]
+#         # Fold and Extract Tree
+#         fold = cp_to_fold(cp)
+#         res_tree, res_packing = fold.get_tree_and_packing(include_packing=True)
         
-        results.append({
-            'N': N,
-            'symmetry': symmetry,
-            'topology_id': topo.id,
-            'tiling_id': tiling.id,
-            'G_solved': loaded_G,
-            'G_raw': G_raw,
-            'pos_solved': loaded_pos,
-            'cp': cp,
-            'fold': fold,
-            'tree': res_tree
-        })
-    return results
+#         results.append({
+#             'N': N,
+#             'symmetry': symmetry,
+#             'topology_id': topo.id,
+#             'tiling_id': tiling.id,
+#             'G_solved': loaded_G,
+#             'G_raw': G_raw,
+#             'pos_solved': loaded_pos,
+#             'cp': cp,
+#             'fold': fold,
+#             'tree': res_tree,
+#             'packing': res_packing
+#         })
+#     return results
 
 
 def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')], n=5):
@@ -259,7 +260,9 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
             # -----------------------------
             
             fold = cp_to_fold(cp)
-            res_tree = fold.get_tree_and_packing()[0]
+            # Packing is basically a cp with all the hinges drawn
+            res_tree, packing = fold.get_tree_and_packing(include_packing=True)
+            res_packing = fold_to_cp(packing[0],inst_graph = packing[1])
             
             results.append({
                 'rank': len(results) + 1,
@@ -273,7 +276,8 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
                 'pos_solved': loaded_pos,
                 'cp': cp,
                 'fold': fold,
-                'tree': res_tree
+                'tree': res_tree,
+                'packing': res_packing
             })
     finally:
         for s in active_sessions.values():

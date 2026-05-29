@@ -101,6 +101,8 @@ PLOT_COLORS = {
     'b': 'black',
     "aux": "#42e7dc",
 }
+SQUARE_SIZE = 2
+
 
 class Fold225:
     """
@@ -1011,6 +1013,8 @@ class Fold225:
 
         if not include_packing:
             return tree, (current_fold, None)
+        
+# ============================================================
 
         # --- 6. Instance Connection Classification  ---
         instances_adj.add_nodes_from(instance_to_idx.values())
@@ -1023,8 +1027,7 @@ class Fold225:
         annotated_G = nx.Graph()
 
         # Helper to exactly determine which side of a hinge plane a face sits on.
-        # Because slicing guarantees a face doesn't cross the plane, we just need
-        # to find any single vertex on the face that isn't exactly ON the hinge.
+        # Because slicing guarantees a face doesn't cross the plane, we just need to find any single vertex on the face that isn't exactly ON the hinge.
         def get_face_side(f_idx, h_val):
             for e_idx in current_fold.faces[f_idx]:
                 for v_idx in current_fold.edges[e_idx]:
@@ -1159,9 +1162,230 @@ def unfreeze(flat_tuple: tuple) -> Fold225:
 
     return Fold225(vertices, edges, faces, instances)
 
+# =============================================================================
+# Conversion between Cp225 and Fold225
+# =============================================================================
+
+
+def cp_to_fold(cp: Cp225) -> Fold225:
+    """
+    Fold up a crease pattern. Before flattening, edges/vertices can overlap, and separate instances are counted as separate faces.
+    """
+
+    faces = cp.compute_faces()
+    num_faces = len(faces)
+    num_vertices = len(cp.vertices)
+
+    # First, map every edge to the face(s) that own it.
+    edge_to_faces = defaultdict(list)
+    for f_idx, face_edges in enumerate(faces):
+        for e_idx in face_edges:
+            edge_to_faces[e_idx].append(f_idx)
+
+    # initialize instances
+    instances = []
+    for face in faces:
+        instances.append(
+            [  # list of instances: just one instance
+                [None] * len(face)  # starter instance: all Nones
+            ]
+        )
+
+    # Also track neighbor relationships for the Kinematics BFS
+    face_neighbors = defaultdict(list)
+
+    for e_idx in range(len(cp.edges)):
+        owners = edge_to_faces[e_idx]
+
+        if len(owners) == 2:
+            # Internal Crease
+            f1, f2 = owners
+            instances[f1][0][faces[f1].index(e_idx)] = (f2, 0)
+            instances[f2][0][faces[f2].index(e_idx)] = (f1, 0)
+
+            face_neighbors[f1].append((f2, e_idx))
+            face_neighbors[f2].append((f1, e_idx))
+
+        # Note: If len(owners) == 0, the edge is floating (unused).
+        #       If len(owners) == 1, edge is border. Already default None in that spot
+        #       If len(owners) > 2, the CP is non-manifold (invalid).
+
+    # --- 2. Kinematics (BFS for Folded Positions) ---
+    face_parent = [None] * num_faces
+    face_parent[0] = (0, None)  # Root face
+    q = deque([0])
+
+    while q:
+        f1 = q.popleft()
+        for f2, e_idx in face_neighbors[f1]:
+            if face_parent[f2] is None:
+                face_parent[f2] = (f1, e_idx)
+                q.append(f2)
+
+    # Map vertices to faces for coordinate calculation
+    vertex_to_face = {}
+    for f_idx, face_edges in enumerate(faces):
+        for e_idx in face_edges:
+            v1, v2, _ = cp.edges[e_idx]
+            vertex_to_face[v1] = f_idx
+            vertex_to_face[v2] = f_idx
+
+    # Calculate positions
+    new_vertices = [None] * num_vertices
+    for v_idx in range(num_vertices):
+        pos = cp.vertices[v_idx]
+        curr_f = vertex_to_face.get(v_idx, 0)
+
+        # Walk up the tree to the root
+        while curr_f != 0:
+            parent_info = face_parent[curr_f]
+            if parent_info is None:
+                # Disconnected face (shouldn't happen in valid CP)
+                break
+            parent_f, e_idx = parent_info
+
+            # Get original crease vertices for reflection
+            v1_idx, v2_idx, _ = cp.edges[e_idx]
+            pos = reflect(cp.vertices[v1_idx], cp.vertices[v2_idx], pos)
+            curr_f = parent_f
+
+        new_vertices[v_idx] = pos
+    fold = Fold225(
+        # vertices=cp.vertices,
+        vertices=new_vertices,
+        edges=[(v1, v2) for v1, v2, _ in cp.edges],
+        faces=faces,
+        instances=instances,
+    )
+
+    return flatten(fold)
+
+
+def flatten(fold: Fold225) -> Fold225:
+    """
+    Remove redundant vertices, edges, faces from a Fold225 representation.
+    Delegates heavy topology tracking to C++.
+    """
+
+    # 2. Call the C++ Core
+    unique_verts, unique_edges, unique_faces, cpp_new_insts = flatten_cpp(
+        fold.vertices, fold.edges, fold.faces, fold.cpp_instances()
+    )
+
+    # 3. Rebuild the Python object (Restore -1 to None)
+    new_instances = [
+        [
+            [conn if conn[0] != -1 else None for conn in inst]
+            for inst in stack
+        ]
+        for stack in cpp_new_insts
+    ]
+
+    return Fold225(
+        vertices=unique_verts,
+        edges=[tuple(e) for e in unique_edges],
+        faces=unique_faces,
+        instances=new_instances,
+    )
+
+
+def fold_to_cp(fold: Fold225, inst_graph: nx.Graph = None) -> Cp225:
+    """
+    Unfolds the state back to a Crease Pattern.
+    Uses inst_graph to label 'a' (auxiliary) and erase invisible slices.
+    If no inst_graph is passed, fall back to a standard physical fold (assumes all edges are folded, no auxiliary joins)
+    """
+
+    # 1. Fallback Graph Generation
+    if inst_graph is None:
+        inst_graph = nx.Graph()
+        for f_idx, stack in enumerate(fold.instances):
+            for i_idx, inst in enumerate(stack):
+                u = (f_idx, i_idx)
+                inst_graph.add_node(u)
+                for slot, conn in enumerate(inst):
+                    if conn is not None:
+                        e_idx = fold.faces[f_idx][slot]
+                        inst_graph.add_edge(
+                            u, conn, edge_idx=e_idx, is_aux=False, is_invisible=False
+                        )
+
+    # 2. Pathing
+    root = (0, 0)
+    paths = nx.single_source_shortest_path(inst_graph, root)
+
+    cp_verts = []
+    edge_tracker = {}  # Maps (v_low, v_high) -> 'b', 'm', 'a'
+
+    # 3. Unfolding and Coloring
+    for node, path_nodes in paths.items():
+        f_idx, i_idx = node
+
+        # Extract path instructions
+        path_info = []
+        for i in range(len(path_nodes) - 1):
+            data = inst_graph[path_nodes[i]][path_nodes[i + 1]]
+            path_info.append((data["edge_idx"], data["is_aux"]))
+
+        # --- TOPOLOGY FIX: Aligning vertices to slots ---
+        face_edges = fold.faces[f_idx]
+        face_verts_idx = []
+        for i, e in enumerate(face_edges):
+            # Look BACKWARDS to find the starting vertex of edge 'e'
+            prev_e = face_edges[(i - 1) % len(face_edges)]
+            v1, v2 = fold.edges[e]
+            face_verts_idx.append(v1 if v1 in fold.edges[prev_e] else v2)
+
+        f_verts = [fold.vertices[v] for v in face_verts_idx]
+
+        # Geometry of the unfolding path
+        path_geoms = [
+            [fold.vertices[v1], fold.vertices[v2]]
+            for v1, v2 in [fold.edges[eid] for eid, _ in path_info]
+        ]
+
+        # Unfolding must happen from leaf to root. Reflecting across the exact folded hinge geometries in reverse order mathematically guarantees the flat state without needing to compound reflections.
+        for i in reversed(range(len(path_geoms))):
+            if path_info[i][1]:  # Skip aux bridges
+                continue
+            f_verts = reflect_group(*path_geoms[i], f_verts)
+
+        # Map to CP indices
+        f_cp_idxs = []
+        for v in f_verts:
+            if v not in cp_verts:
+                cp_verts.append(v)
+            f_cp_idxs.append(cp_verts.index(v))
+
+        # 4. Process Edges for this Face
+        for slot, v1_cp in enumerate(f_cp_idxs):
+            v2_cp = f_cp_idxs[(slot + 1) % len(f_cp_idxs)]
+            edge_key = tuple(sorted((v1_cp, v2_cp)))
+
+            target_inst = fold.instances[f_idx][i_idx][slot]
+
+            if edge_key not in edge_tracker:
+                edge_tracker[edge_key] = "b"  # First encounter is always boundary
+            else:
+                # Second encounter completes the connection based on local graph data
+                if target_inst is not None and inst_graph.has_edge(node, target_inst):
+                    edge_data = inst_graph[node][target_inst]
+                    if edge_data["is_invisible"]:
+                        # Erase the boundary entirely
+                        del edge_tracker[edge_key]
+                    else:
+                        edge_tracker[edge_key] = "aux" if edge_data["is_aux"] else "m"
+                else:
+                    # Safety fallback for invalid manifolds
+                    edge_tracker[edge_key] = "v"
+
+    # Compile the final Crease Pattern
+    final_edges = [(v1, v2, t) for (v1, v2), t in edge_tracker.items()]
+    return Cp225(cp_verts, final_edges)
+
 
 # =============================================================================
-# Visualization
+# Visualization for debug
 # =============================================================================
 
 
@@ -1434,522 +1658,3 @@ def plot_multi_state_grid(
     plt.savefig(f_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
     print(f"Rendered {n} states to {f_path}")
-
-
-# =============================================================================
-# Conversion between Cp225 and Fold225
-# =============================================================================
-
-
-def cp_to_fold(cp: Cp225) -> Fold225:
-    """
-    Fold up a crease pattern. Before flattening, edges/vertices can overlap, and separate instances are counted as separate faces.
-    """
-
-    faces = cp.compute_faces()
-    num_faces = len(faces)
-    num_vertices = len(cp.vertices)
-
-    # First, map every edge to the face(s) that own it.
-    edge_to_faces = defaultdict(list)
-    for f_idx, face_edges in enumerate(faces):
-        for e_idx in face_edges:
-            edge_to_faces[e_idx].append(f_idx)
-
-    # initialize instances
-    instances = []
-    for face in faces:
-        instances.append(
-            [  # list of instances: just one instance
-                [None] * len(face)  # starter instance: all Nones
-            ]
-        )
-
-    # Also track neighbor relationships for the Kinematics BFS
-    face_neighbors = defaultdict(list)
-
-    for e_idx in range(len(cp.edges)):
-        owners = edge_to_faces[e_idx]
-
-        if len(owners) == 2:
-            # Internal Crease
-            f1, f2 = owners
-            instances[f1][0][faces[f1].index(e_idx)] = (f2, 0)
-            instances[f2][0][faces[f2].index(e_idx)] = (f1, 0)
-
-            face_neighbors[f1].append((f2, e_idx))
-            face_neighbors[f2].append((f1, e_idx))
-
-        # Note: If len(owners) == 0, the edge is floating (unused).
-        #       If len(owners) == 1, edge is border. Already default None in that spot
-        #       If len(owners) > 2, the CP is non-manifold (invalid).
-
-    # --- 2. Kinematics (BFS for Folded Positions) ---
-    face_parent = [None] * num_faces
-    face_parent[0] = (0, None)  # Root face
-    q = deque([0])
-
-    while q:
-        f1 = q.popleft()
-        for f2, e_idx in face_neighbors[f1]:
-            if face_parent[f2] is None:
-                face_parent[f2] = (f1, e_idx)
-                q.append(f2)
-
-    # Map vertices to faces for coordinate calculation
-    vertex_to_face = {}
-    for f_idx, face_edges in enumerate(faces):
-        for e_idx in face_edges:
-            v1, v2, _ = cp.edges[e_idx]
-            vertex_to_face[v1] = f_idx
-            vertex_to_face[v2] = f_idx
-
-    # Calculate positions
-    new_vertices = [None] * num_vertices
-    for v_idx in range(num_vertices):
-        pos = cp.vertices[v_idx]
-        curr_f = vertex_to_face.get(v_idx, 0)
-
-        # Walk up the tree to the root
-        while curr_f != 0:
-            parent_info = face_parent[curr_f]
-            if parent_info is None:
-                # Disconnected face (shouldn't happen in valid CP)
-                break
-            parent_f, e_idx = parent_info
-
-            # Get original crease vertices for reflection
-            v1_idx, v2_idx, _ = cp.edges[e_idx]
-            pos = reflect(cp.vertices[v1_idx], cp.vertices[v2_idx], pos)
-            curr_f = parent_f
-
-        new_vertices[v_idx] = pos
-    fold = Fold225(
-        # vertices=cp.vertices,
-        vertices=new_vertices,
-        edges=[(v1, v2) for v1, v2, _ in cp.edges],
-        faces=faces,
-        instances=instances,
-    )
-
-    return flatten(fold)
-
-
-def flatten(fold: Fold225) -> Fold225:
-    """
-    Remove redundant vertices, edges, faces from a Fold225 representation.
-    Delegates heavy topology tracking to C++.
-    """
-
-    # 2. Call the C++ Core
-    unique_verts, unique_edges, unique_faces, cpp_new_insts = flatten_cpp(
-        fold.vertices, fold.edges, fold.faces, fold.cpp_instances()
-    )
-
-    # 3. Rebuild the Python object (Restore -1 to None)
-    new_instances = [
-        [
-            [conn if conn[0] != -1 else None for conn in inst]
-            for inst in stack
-        ]
-        for stack in cpp_new_insts
-    ]
-
-    return Fold225(
-        vertices=unique_verts,
-        edges=[tuple(e) for e in unique_edges],
-        faces=unique_faces,
-        instances=new_instances,
-    )
-
-
-def fold_to_cp(fold: Fold225, inst_graph: nx.Graph = None) -> Cp225:
-    """
-    Unfolds the state back to a Crease Pattern.
-    Uses inst_graph to label 'a' (auxiliary) and erase invisible slices.
-    If no inst_graph is passed, fall back to a standard physical fold (assumes all edges are folded, no auxiliary joins)
-    """
-
-    # 1. Fallback Graph Generation
-    if inst_graph is None:
-        inst_graph = nx.Graph()
-        for f_idx, stack in enumerate(fold.instances):
-            for i_idx, inst in enumerate(stack):
-                u = (f_idx, i_idx)
-                inst_graph.add_node(u)
-                for slot, conn in enumerate(inst):
-                    if conn is not None:
-                        e_idx = fold.faces[f_idx][slot]
-                        inst_graph.add_edge(
-                            u, conn, edge_idx=e_idx, is_aux=False, is_invisible=False
-                        )
-
-    # 2. Pathing
-    root = (0, 0)
-    paths = nx.single_source_shortest_path(inst_graph, root)
-
-    cp_verts = []
-    edge_tracker = {}  # Maps (v_low, v_high) -> 'b', 'm', 'a'
-
-    # 3. Unfolding and Coloring
-    for node, path_nodes in paths.items():
-        f_idx, i_idx = node
-
-        # Extract path instructions
-        path_info = []
-        for i in range(len(path_nodes) - 1):
-            data = inst_graph[path_nodes[i]][path_nodes[i + 1]]
-            path_info.append((data["edge_idx"], data["is_aux"]))
-
-        # --- TOPOLOGY FIX: Aligning vertices to slots ---
-        face_edges = fold.faces[f_idx]
-        face_verts_idx = []
-        for i, e in enumerate(face_edges):
-            # Look BACKWARDS to find the starting vertex of edge 'e'
-            prev_e = face_edges[(i - 1) % len(face_edges)]
-            v1, v2 = fold.edges[e]
-            face_verts_idx.append(v1 if v1 in fold.edges[prev_e] else v2)
-
-        f_verts = [fold.vertices[v] for v in face_verts_idx]
-
-        # Geometry of the unfolding path
-        path_geoms = [
-            [fold.vertices[v1], fold.vertices[v2]]
-            for v1, v2 in [fold.edges[eid] for eid, _ in path_info]
-        ]
-
-        # Unfolding must happen from leaf to root. Reflecting across the exact folded hinge geometries in reverse order mathematically guarantees the flat state without needing to compound reflections.
-        for i in reversed(range(len(path_geoms))):
-            if path_info[i][1]:  # Skip aux bridges
-                continue
-            f_verts = reflect_group(*path_geoms[i], f_verts)
-
-        # Map to CP indices
-        f_cp_idxs = []
-        for v in f_verts:
-            if v not in cp_verts:
-                cp_verts.append(v)
-            f_cp_idxs.append(cp_verts.index(v))
-
-        # 4. Process Edges for this Face
-        for slot, v1_cp in enumerate(f_cp_idxs):
-            v2_cp = f_cp_idxs[(slot + 1) % len(f_cp_idxs)]
-            edge_key = tuple(sorted((v1_cp, v2_cp)))
-
-            target_inst = fold.instances[f_idx][i_idx][slot]
-
-            if edge_key not in edge_tracker:
-                edge_tracker[edge_key] = "b"  # First encounter is always boundary
-            else:
-                # Second encounter completes the connection based on local graph data
-                if target_inst is not None and inst_graph.has_edge(node, target_inst):
-                    edge_data = inst_graph[node][target_inst]
-                    if edge_data["is_invisible"]:
-                        # Erase the boundary entirely
-                        del edge_tracker[edge_key]
-                    else:
-                        edge_tracker[edge_key] = "aux" if edge_data["is_aux"] else "m"
-                else:
-                    # Safety fallback for invalid manifolds
-                    edge_tracker[edge_key] = "v"
-
-    # Compile the final Crease Pattern
-    final_edges = [(v1, v2, t) for (v1, v2), t in edge_tracker.items()]
-    return Cp225(cp_verts, final_edges)
-
-
-# =============================================================================
-# Main Testing and Profiling
-# =============================================================================
-
-
-class FoldEvolver:
-    """
-    Wrapper object for driving the fold generation engine
-    """
-    def __init__(
-        self,
-        root_fold,
-        raycast=True,
-        bp=False,
-        midpoints=False,
-        components_to_flip="ONE",
-    ):
-        self.root = root_fold
-        self.raycast = raycast
-        self.bp = bp
-        self.midpoints = midpoints
-        self.components_to_flip = components_to_flip
-
-        self.family_tree = root_fold.get_children(
-            raycast=self.raycast,
-            bp=self.bp,
-            midpoints=self.midpoints,
-            components_to_flip=self.components_to_flip,
-        )
-        # We store the "current" generation as a list of frozen states
-        # Start with root, but we won't add root to the family_tree per your request
-        self.current_generation = list(self.family_tree)
-        self.generation_count = 1
-
-    def evolve(self, num_generations=1, select_n=None, select_percent=None):
-        """
-        Processes generations.
-        select_n: Top N folds to keep as parents for the next gen.
-        select_percent: Top X% of folds to keep as parents.
-        """
-        for _ in range(1, num_generations + 1):
-            next_gen_candidates = {}  # {frozen_child: frozen_parent}
-
-            print(f"--- Processing Generation {self.generation_count+1} ---")
-            print(f"Parents in this gen: {len(self.current_generation)}")
-
-            for i, frozen_parent in enumerate(self.current_generation):
-                parent_fold = unfreeze(frozen_parent)
-                # Generate children
-                children = parent_fold.get_children(
-                    raycast=self.raycast, bp=self.bp, midpoints=self.midpoints, components_to_flip=self.components_to_flip
-                )
-
-                for frozen_child in children:
-                    # Only track and process if we haven't seen this state before
-                    if frozen_child not in self.family_tree:
-                        # Map child to parent for tree tracking
-                        next_gen_candidates[frozen_child] = frozen_parent
-
-                if i % 10 == 0 and i > 0:
-                    print(
-                        f"Parent {i} processed... children found so far: {len(next_gen_candidates)}"
-                    )
-
-            # 1. Update the global family tree with this generation's findings
-            self.family_tree.update(next_gen_candidates)
-
-            # 2. Rank candidates by goodness to determine who moves to the next generation
-            ranked_candidates = self._rank_candidates(list(next_gen_candidates.keys()))
-
-            # 3. Apply Cutoff logic
-            cutoff = self._get_cutoff_index(
-                len(ranked_candidates), select_n, select_percent
-            )
-            self.current_generation = [
-                fold for fold, score in ranked_candidates[:cutoff]
-            ]
-            self.generation_count += 1
-            print(
-                f"Gen {self.generation_count} complete. {len(next_gen_candidates)} unique children found."
-            )
-            print(
-                f"Top goodness in gen: {ranked_candidates[0][1] if ranked_candidates else 0:.4f}"
-            )
-
-    def _rank_candidates(self, frozen_list, criteria="goodness"):
-        """Unfreezes, scores, and sorts folds."""
-        if criteria == "goodness":
-            scored = []
-            for frozen in frozen_list:
-                f = unfreeze(frozen)
-                scored.append((frozen, f.goodness()))
-        elif criteria == "efficiency":
-            scored = []
-            for frozen in frozen_list:
-                f = unfreeze(frozen)
-                tree, _ = f.get_tree_and_packing(include_packing=False)
-                total_length = sum(nx.get_edge_attributes(tree, "length").values())
-                scored.append(
-                    (frozen, f.goodness() / total_length if total_length > 0 else 0)
-                )
-        # Sort by goodness descending
-        return sorted(scored, key=lambda x: x[1], reverse=True)
-
-    def _get_cutoff_index(self, total, n, percent):
-        if n:
-            return min(total, n)
-        if percent:
-            return max(1, math.floor(total * percent))
-        return total  # Default to keeping all
-
-    def get_top_folds(self, top_n=100, criteria="goodness"):
-        """Returns the absolute best folds found across all generations."""
-        ranked = self._rank_candidates(list(self.family_tree), criteria=criteria)
-        return [unfreeze(f) for f, score in ranked[:top_n]]
-    
-
-import json
-import os
-
-def janky_evolve_and_save(evolver, total_gens=4, filename="origami_tree.json"):
-    # Initialize the file with Gen 0
-    tree_data = {}
-    
-    # Process Gen 0 (Root)
-    root_frozen = canonicalize(evolver.root)
-    tree_data["gen_0"] = [serialize_state(evolver.root, None, 0, root_frozen)]
-    
-    # Save Gen 0 immediately
-    with open(filename, "w") as f:
-        json.dump(tree_data, f, indent=4)
-    print("--- Gen 0 Saved ---")
-
-    current_parents = [root_frozen]
-    seen_states = {root_frozen}
-
-    for g in range(1, total_gens + 1):
-        next_gen_frozen = []
-        gen_list_for_json = []
-        
-        print(f"Processing Gen {g}...")
-        
-        for parent_frozen in current_parents:
-            parent_fold = unfreeze(parent_frozen)
-            children = parent_fold.get_children(
-                raycast=evolver.raycast, 
-                bp=evolver.bp, 
-                midpoints=evolver.midpoints, 
-                components_to_flip=evolver.components_to_flip
-            )
-
-            for child_frozen in children:
-                if child_frozen not in seen_states:
-                    seen_states.add(child_frozen)
-                    next_gen_frozen.append(child_frozen)
-                    
-                    # Serialize and add to our temporary list
-                    child_fold = unfreeze(child_frozen)
-                    gen_list_for_json.append(
-                        serialize_state(child_fold, parent_frozen, g, child_frozen)
-                    )
-
-        # Update the main dict and overwrite the file
-        tree_data[f"gen_{g}"] = gen_list_for_json
-        with open(filename, "w") as f:
-            json.dump(tree_data, f, indent=4)
-            
-        # Prep for next generation
-        current_parents = next_gen_frozen
-        print(f"--- Gen {g} Saved ({len(gen_list_for_json)} states) ---")
-
-def serialize_state(fold_obj, parent_frozen, gen_idx, current_frozen):
-    """Helper to turn a Fold225 object into a JSON-friendly dict."""
-    rendered_faces, multiplicities = fold_obj.render()
-    cp = fold_to_cp(fold_obj)
-    
-    return {
-        "id": str(hash(current_frozen)),
-        "parent": str(hash(parent_frozen)) if parent_frozen else None,
-        "generation": gen_idx,
-        "goodness": fold_obj.goodness(),
-        "folded_faces": rendered_faces,
-        "multiplicities": multiplicities,
-        "cp_edges": cp.render()
-    }
-import json
-import random
-
-def random_walk_evolve_and_save(evolver, total_depth=20, filename="origami_path.json"):
-    """
-    Performs a random walk (Depth-First) through the folding tree.
-    In each step, it explores ALL children of ONE parent, saves them to JSON,
-    then picks ONE child to continue the path.
-    """
-    tree_data = {}
-    seen_states = set()
-
-    # Process Gen 0 (Root)
-    current_frozen_parent = canonicalize(evolver.root)
-    seen_states.add(current_frozen_parent)
-    
-    tree_data["gen_0"] = [serialize_state(evolver.root, None, 0, current_frozen_parent)]
-    
-    with open(filename, "w") as f:
-        json.dump(tree_data, f, indent=4)
-    
-    print(f"--- Gen 0 (Root) Saved ---")
-
-    for g in range(1, total_depth + 1):
-        gen_list_for_json = []
-        
-        # Unfreeze the single parent we chose from the last generation
-        parent_fold = unfreeze(current_frozen_parent)
-        
-        # Generate ALL possible children for this parent
-        children = parent_fold.get_children(
-            raycast=evolver.raycast, 
-            bp=evolver.bp, 
-            midpoints=evolver.midpoints, 
-            components_to_flip=evolver.components_to_flip
-        )
-
-        # Filter out states we've seen on this path (to avoid loops/backtracking)
-        new_children = [c for c in children if c not in seen_states]
-
-        if not new_children:
-            print(f"Dead end reached at generation {g-1}. No new children found.")
-            break
-
-        # Serialize ALL children of this parent for the JSON
-        # This allows the Manim script to show the 'local neighborhood' of the path
-        for child_frozen in new_children:
-            child_fold = unfreeze(child_frozen)
-            gen_list_for_json.append(
-                serialize_state(child_fold, current_frozen_parent, g, child_frozen)
-            )
-
-        # Update JSON
-        tree_data[f"gen_{g}"] = gen_list_for_json
-        with open(filename, "w") as f:
-            json.dump(tree_data, f, indent=4)
-
-        # --- THE DEPTH-FIRST CHOICE ---
-        # Pick exactly ONE child to be the parent for the next generation
-        current_frozen_parent = random.choice(new_children)
-        seen_states.add(current_frozen_parent)
-        
-        print(f"--- Gen {g} Saved ({len(new_children)} sibling states). Path continues... ---")
-BOUNDARY_CORNERS = {
-    Vertex4D(-1, 0, -1, 0),
-    Vertex4D(1, 0, -1, 0),
-    Vertex4D(1, 0, 1, 0),
-    Vertex4D(-1, 0, 1, 0),
-}
-cp = Cp225(
-        vertices=list(BOUNDARY_CORNERS),
-        edges=[
-            (0, 1, "b"),
-            (1, 2, "b"),
-            (2, 3, "b"),
-            (3, 0, "b"),
-        ],
-    )
-ROOT = cp_to_fold(cp)
-SQUARE_SIZE = 2
-
-if __name__ == "__main__":
-    profiler = cProfile.Profile()
-    profiler.enable()
-    
-    print("===== Start Test =====")
-    
-    evolver = FoldEvolver(ROOT, midpoints=False)
-    
-    # This will build and save gen-by-gen
-    random_walk_evolve_and_save(evolver, total_depth=9)
-
-    # evolver = FoldEvolver(ROOT, raycast=True, bp=False, midpoints=True, components_to_flip="ONE")
-    # # Gen 2 : evolve everyone
-    # evolver.evolve()
-    # frozen = evolver.family_tree
-    # unfrozen = [unfreeze(f) for f in frozen]
-    # plot_multiple(unfrozen)
-
-    # # Gen 3: Only 50% move on to the next gen, based on goodness ranking
-    # evolver.evolve()
-    # print(f"Family tree size after Gen 3: {len(evolver.family_tree)}")
-
-
-    profiler.disable()
-    stats = pstats.Stats(profiler)
-    stats.sort_stats("cumulative")  # Sort by cumulative time
-    # stats.print_stats(20)  # Print the top  functions
-
-    print("===== End Test =====")
