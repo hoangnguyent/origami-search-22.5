@@ -9,7 +9,13 @@ const state = {
   selectedNode: 0,
   draggingNode: null,
   queryResult: null,
+  queryNodeCount: 1,
   currentDetailResult: null, // Track the open modal result
+  currentDetailIndex: null,
+  detailViewModes: {
+    left: "cp",
+    right: "tree",
+  },
 };
 
 const editorSvg = document.getElementById("editorSvg");
@@ -19,6 +25,9 @@ const resultSummary = document.getElementById("resultSummary");
 const detailModal = document.getElementById("detailModal");
 const modalGrid = document.getElementById("modalGrid");
 const modalTitle = document.getElementById("modalTitle");
+const modalMeta = document.getElementById("modalMeta");
+const detailPrevBtn = document.getElementById("detailPrevBtn");
+const detailNextBtn = document.getElementById("detailNextBtn");
 const settingsModal = document.getElementById("settingsModal");
 const settingsBtn = document.getElementById("settingsBtn");
 const closeSettingsModal = document.getElementById("closeSettingsModal");
@@ -27,7 +36,29 @@ const languageSelect = document.getElementById("languageSelect");
 const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
 
 const THEME_STORAGE_KEY = "search225-theme-preference";
+const DETAIL_LEFT_VIEW_KEY = "search225-detail-left-view";
+const DETAIL_RIGHT_VIEW_KEY = "search225-detail-right-view";
 const systemThemeQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+
+function readStoredDetailView(key, fallback) {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistDetailView(side, value) {
+  try {
+    localStorage.setItem(side === "left" ? DETAIL_LEFT_VIEW_KEY : DETAIL_RIGHT_VIEW_KEY, value);
+  } catch {}
+}
+
+function syncDetailViewPreferences() {
+  state.detailViewModes.left = readStoredDetailView(DETAIL_LEFT_VIEW_KEY, state.detailViewModes.left);
+  state.detailViewModes.right = readStoredDetailView(DETAIL_RIGHT_VIEW_KEY, state.detailViewModes.right);
+}
 
 function readStoredThemePreference() {
   try {
@@ -53,10 +84,38 @@ function applyTheme(themePreference, persist = true) {
 
 function setThemePreference(themePreference) { applyTheme(themePreference, true); }
 
+function closeDetailModal() {
+  detailModal.classList.add("hidden");
+  detailModal.setAttribute("aria-hidden", "true");
+  state.currentDetailResult = null;
+  state.currentDetailIndex = null;
+}
+
+function updateDetailView(side, value) {
+  if (state.detailViewModes[side] === value) return;
+  state.detailViewModes[side] = value;
+  persistDetailView(side, value);
+  if (state.currentDetailResult && state.currentDetailIndex !== null) {
+    renderDetail(state.currentDetailResult, state.currentDetailIndex);
+  }
+}
+
+function navigateDetail(step) {
+  if (!state.queryResult?.results?.length || state.currentDetailIndex === null) return;
+  const nextIndex = state.currentDetailIndex + step;
+  if (nextIndex < 0 || nextIndex >= state.queryResult.results.length) return;
+  renderDetail(state.queryResult.results[nextIndex], nextIndex);
+}
+
 // Event Listeners
 document.getElementById("runQuery").addEventListener("click", runQuery);
 document.getElementById("resetTree").addEventListener("click", resetTree);
-document.getElementById("closeModal").addEventListener("click", () => detailModal.classList.add("hidden"));
+document.getElementById("closeModal").addEventListener("click", closeDetailModal);
+if (detailPrevBtn) detailPrevBtn.addEventListener("click", () => navigateDetail(-1));
+if (detailNextBtn) detailNextBtn.addEventListener("click", () => navigateDetail(1));
+if (detailModal) detailModal.addEventListener("click", (event) => {
+  if (event.target === detailModal) closeDetailModal();
+});
 // Settings modal wiring
 if (settingsBtn) settingsBtn.addEventListener("click", () => settingsModal && settingsModal.classList.remove("hidden"));
 if (closeSettingsModal) closeSettingsModal.addEventListener("click", () => settingsModal && settingsModal.classList.add("hidden"));
@@ -150,6 +209,7 @@ document.getElementById("downloadCpBtn").addEventListener("click", () => {
 
 // Apply stored or system theme before initial render
 applyTheme(readStoredThemePreference() || 'system', false);
+syncDetailViewPreferences();
 renderEditor();
 
 function setStatus(message, isError = false) {
@@ -304,7 +364,7 @@ function onKeyDown(event) {
   if (event.key === "Escape") {
     // Close modal on Escape
     if (!detailModal.classList.contains("hidden")) {
-      detailModal.classList.add("hidden");
+      closeDetailModal();
       return;
     }
     state.selectedNode = null;
@@ -510,6 +570,7 @@ async function runQuery() {
     if (!response.ok) throw new Error(data.error || "Query failed");
     
     state.queryResult = data;
+    state.queryNodeCount = Math.max(1, tree.nodes.length || 0);
     const tf = Date.now()
     renderResults();
     resultSummary.textContent = `${data.results.length} result(s) loaded.`;
@@ -543,17 +604,23 @@ function renderResults() {
       renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1", width: 220, height: 220 });
     } else if (thumbMode === "packing" && result.packing) {
       renderPackingSvg(svg, result.packing, 220, 220);
-    } else {
+    } else if (thumbMode === "fold" && result.fold) {
+      renderFoldSvg(svg, result.fold, 220, 220)
+    }
+    else {
       renderCpSvg(svg, result.cp, 220, 220);
     }
     thumb.appendChild(svg);
 
     const meta = document.createElement("div");
+    const quality = getMatchQuality(result.distance);
     meta.className = "result-meta";
+    meta.dataset.quality = quality;
+    meta.classList.add("match-quality");
     meta.innerHTML = `
-      <div><strong>Rank ${result.rank ?? index + 1}</strong></div>
-      <div>Distance: ${Number(result.distance).toFixed(4)}</div>
-      <div>${result.N} ${result.symmetry}</div>
+      <div><strong>Option ${result.rank ?? index + 1}</strong></div>
+      <div>Match quality: ${quality}</div>
+      <div>ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}</div>
     `;
 
     card.appendChild(thumb);
@@ -561,39 +628,120 @@ function renderResults() {
     resultsGrid.appendChild(card);
   });
 }
+const symmetry_abbr = {
+  "diag":"d",
+  "book":"b",
+  "none":"n"
+}
+
+function getMatchQuality(distance) {
+  const value = Number(distance*state.queryNodeCount**2);
+  if (!Number.isFinite(value)) return "unknown";
+  if (value < 50) return "Perfect";
+  if (value < 150) return "Good";
+  if (value < 500) return "Acceptable";
+  if (value < 1500.0) return "Poor";
+  return "Terrible";
+}
+
 function renderDetail(result, index) {
   state.currentDetailResult = result; // Save active result for export
+  state.currentDetailIndex = index;
   
   modalGrid.replaceChildren();
   if (!result) return;
 
-  // FIX: Added Tiling ID to the modal title
-  modalTitle.textContent = `Rank ${result.rank ?? index + 1} Result (${result.N} ${result.symmetry}) — Distance: ${Number(result.distance).toFixed(5)} — Tiling ID: ${result.tiling_id}`;
+  modalTitle.textContent = `Option ${result.rank ?? index + 1}`;
+  const quality = getMatchQuality(result.distance);
+  modalMeta.dataset.quality = quality;
+  modalMeta.classList.add("match-quality");
+  modalMeta.textContent = `Match quality: ${quality} • Normalized distance: ${(result.distance*state.queryNodeCount**2).toFixed(4)} • Tiling ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
 
-  // Top Row
-  modalGrid.appendChild(panelSvg("Topology", result.topology, (svg) => renderGraphSvg(svg, result.topology, { nodeFill: "#a7c7ff" })));
-  modalGrid.appendChild(panelSvg("Solved Tiling", result.solved_tiling, (svg) => renderGraphSvg(svg, result.solved_tiling, { nodeFill: "#8cffc1" })));
-  modalGrid.appendChild(panelSvg("Crease Pattern", result.cp, (svg) => renderCpSvg(svg, result.cp, 420, 240)));
-  
-  // Bottom Row
-  // modalGrid.appendChild(panelSvg("Folded State", result.fold, (svg) => renderFoldSvg(svg, result.fold)));
-  modalGrid.appendChild(panelSvg("Packing", result.packing, (svg) => renderPackingSvg(svg, result.packing, 420, 240)));
-  modalGrid.appendChild(panelSvg("Resulting Tree", result.tree, (svg) => renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1" })));
-  modalGrid.appendChild(panelSvg("Heat Profile", result.heat, (svg) => renderHeatSvg(svg, result.heat)));
+  renderDetailBody(result);
+  updateDetailNavButtons();
 
   detailModal.classList.remove("hidden");
+  detailModal.setAttribute("aria-hidden", "false");
 }
 
-function panelSvg(title, payload, renderer) {
-  const card = document.createElement("div");
-  card.className = "detail-card";
-  const heading = document.createElement("h3");
-  heading.textContent = title;
-  const svg = makeSvg("svg", { viewBox: "0 0 420 240", class: "detail-svg" });
-  renderer(svg, payload);
-  card.appendChild(heading);
-  card.appendChild(svg);
-  return card;
+function updateDetailNavButtons() {
+  if (!detailPrevBtn || !detailNextBtn) return;
+  const total = state.queryResult?.results?.length || 0;
+  detailPrevBtn.disabled = state.currentDetailIndex === null || state.currentDetailIndex <= 0;
+  detailNextBtn.disabled = state.currentDetailIndex === null || state.currentDetailIndex >= total - 1;
+}
+
+function renderDetailBody(result) {
+  const leftPane = buildDetailPane({
+    side: "left",
+    activeValue: state.detailViewModes.left,
+    options: [
+      { value: "cp", label: "Crease pattern" },
+      { value: "packing", label: "Packing" },
+    ],
+    renderActive: (svg, currentValue) => {
+      if (currentValue === "packing" && result.packing) {
+        renderPackingSvg(svg, result.packing, 420, 260);
+      } else {
+        renderCpSvg(svg, result.cp, 420, 260);
+      }
+    },
+  });
+
+  const rightPane = buildDetailPane({
+    side: "right",
+    activeValue: state.detailViewModes.right,
+    options: [
+      { value: "tree", label: "Tree" },
+      { value: "fold", label: "Folded form" },
+    ],
+    renderActive: (svg, currentValue) => {
+      if (currentValue === "fold" && result.fold) {
+        renderFoldSvg(svg, result.fold);
+      } else {
+        renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1", width: 420, height: 260 });
+      }
+    },
+  });
+
+  modalGrid.appendChild(leftPane);
+  modalGrid.appendChild(rightPane);
+}
+
+function buildDetailPane({ side, activeValue, options, renderActive }) {
+  const panel = document.createElement("section");
+  panel.className = "detail-panel";
+
+  const toggleGroup = document.createElement("div");
+  toggleGroup.className = "detail-toggle-group";
+
+  options.forEach((option) => {
+    const label = document.createElement("label");
+    label.className = "detail-toggle-option";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = `detail-${side}-mode`;
+    input.value = option.value;
+    input.checked = option.value === activeValue;
+    input.addEventListener("change", () => {
+      if (input.checked) updateDetailView(side, option.value);
+    });
+    const span = document.createElement("span");
+    span.textContent = option.label;
+    label.appendChild(input);
+    label.appendChild(span);
+    toggleGroup.appendChild(label);
+  });
+
+  const body = document.createElement("div");
+  body.className = "detail-panel-body";
+  const svg = makeSvg("svg", { viewBox: "0 0 420 260", class: "detail-svg" });
+  renderActive(svg, activeValue);
+  body.appendChild(svg);
+
+  panel.appendChild(body);
+  panel.appendChild(toggleGroup);
+  return panel;
 }
 
 // --------------------------------------------------------
