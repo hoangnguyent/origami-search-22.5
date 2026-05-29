@@ -322,8 +322,40 @@ function onKeyDown(event) {
     renderEditor();
   }
 
-  if (event.key === "Backspace" && state.selectedNode !== null) {
+  if ((event.key === "Backspace" || event.key === "Delete") && state.selectedNode !== null) {
+    event.preventDefault();
+
     const target = state.selectedNode;
+
+    const incidentEdges = state.edges.filter((edge) => edge.u === target || edge.v === target);
+
+    if (incidentEdges.length > 2) {
+      setStatus("Cannot delete a vertex with more than 2 connections", true);
+      return;
+    }
+
+    if (incidentEdges.length === 2) {
+      const neighbors = incidentEdges.map((edge) => (edge.u === target ? edge.v : edge.u));
+      delete state.nodes[target];
+      state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
+      state.edges.push({ u: neighbors[0], v: neighbors[1] });
+      state.selectedNode = null;
+      state.draggingNode = null;
+      renderEditor();
+      return;
+    }
+
+    if (incidentEdges.length === 1) {
+      const [edge] = incidentEdges;
+      const nextSelected = edge.u === target ? edge.v : edge.u;
+      delete state.nodes[target];
+      state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
+      state.selectedNode = nextSelected ?? null;
+      state.draggingNode = null;
+      renderEditor();
+      return;
+    }
+
     delete state.nodes[target];
     state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
     state.selectedNode = null;
