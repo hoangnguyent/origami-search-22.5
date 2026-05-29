@@ -174,6 +174,161 @@ def extract_eigenvalues(G, eig_count=EIG_COUNT, resolution=RESOLUTION):
         return padded
     else:
         return eigenvalues[:eig_count]
+
+import numpy as np
+import networkx as nx
+from scipy.linalg import eigh
+from scipy.spatial.distance import cdist
+
+def get_macroscopic_laplacian(G):
+    """
+    Extracts the generalized Laplacian (L) and Mass (M) matrices 
+    for the raw macroscopic tree without needing edge subdivision.
+    """
+    n = len(G.nodes)
+    L = np.zeros((n, n))
+    M = np.zeros((n, n))
+    
+    nodes = list(G.nodes())
+    idx = {node: i for i, node in enumerate(nodes)}
+    
+    # Calculate total length to normalize conductance/mass
+    lengths = [data.get('length', 1.0) for u, v, data in G.edges(data=True)]
+    total_length = sum(lengths) if sum(lengths) > 0 else 1.0
+    
+    for u, v, data in G.edges(data=True):
+        i, j = idx[u], idx[v]
+        
+        L_norm = data.get('length', 1.0) / total_length
+        conductance = 1.0 / max(L_norm, 1e-7) 
+        mass = L_norm / 2.0
+        
+        L[i, j] -= conductance
+        L[j, i] -= conductance
+        L[i, i] += conductance
+        L[j, j] += conductance
+        
+        M[i, i] += mass
+        M[j, j] += mass
+        
+    return L, M, nodes
+
+def compute_hks(L, M, t_scales):
+    """
+    Computes the Heat Kernel Signature using the generalized eigenvalue problem.
+    """
+    # eigh(L, M) solves L v = w M v. Eigenvectors v are M-orthogonal.
+    w, v = eigh(L, M)
+    w = np.clip(w, 0, None) # Ensure physical non-negative decay
+    
+    n_nodes = L.shape[0]
+    n_scales = len(t_scales)
+    hks = np.zeros((n_nodes, n_scales))
+    
+    for i in range(n_nodes):
+        for j, t in enumerate(t_scales):
+            # HKS(i, t) = sum_k e^{-t * w_k} * (v_{ik})^2
+            hks[i, j] = np.sum(np.exp(-t * w) * (v[i, :] ** 2))
+            
+    # Scale invariance: Normalize so traces start near 1.0
+    norms = hks[:, 0:1]
+    norms[norms == 0] = 1.0
+    hks = hks / norms
+    
+    return hks
+
+def sinkhorn_knopp(C, epsilon=0.05, max_iter=100):
+    """
+    Solves the Entropic Optimal Transport problem.
+    C: Cost matrix of shape (n, m)
+    epsilon: Blur parameter controlling the entropy (higher = more stub splitting)
+    """
+    n, m = C.shape
+    K = np.exp(-C / epsilon)
+    
+    # Uniform mass distribution for nodes in both trees
+    a = np.ones(n) / n
+    b = np.ones(m) / m
+    
+    # Sinkhorn iterations
+    v = np.ones(m)
+    for _ in range(max_iter):
+        u = a / (K @ v + 1e-10)
+        v = b / (K.T @ u + 1e-10)
+        
+    # Soft correspondence matrix
+    Pi = np.diag(u) @ K @ np.diag(v)
+    return Pi
+
+def align_queried_tree(T_input, T_query, t_scales = None, epsilon=0.05, fabrik_iters=50):
+    """
+    Takes an input tree with node positions and a queried tree with rigid lengths.
+    Returns the queried tree with optimized node positions.
+    """
+    if t_scales is None:
+        t_scales = np.logspace(-3, 1, num=16)
+    # 1. Extract HKS for both trees
+    L1, M1, nodes1 = get_macroscopic_laplacian(T_input)
+    hks1 = compute_hks(L1, M1, t_scales)
+    
+    L2, M2, nodes2 = get_macroscopic_laplacian(T_query)
+    hks2 = compute_hks(L2, M2, t_scales)
+    
+    # 2. Cost Matrix & Optimal Transport
+    # Calculate Squared Euclidean distance between signatures
+    C = cdist(hks1, hks2, metric='sqeuclidean')
+    
+    # Normalize cost matrix to make the epsilon parameter globally stable
+    C = C / (C.max() + 1e-10)
+    Pi = sinkhorn_knopp(C, epsilon=epsilon)
+    
+    # 3. Calculate Target Coordinates via the Transport Plan
+    X = np.zeros((len(nodes1), 2))
+    for i, n1 in enumerate(nodes1):
+        pos = T_input.nodes[n1].get('pos', (0,0))
+        X[i] = [pos[0], pos[1]]
+        
+    # y_target[j] = sum_i (Pi[i, j] * x[i]) / sum_i (Pi[i, j])
+    # This naturally solves the "stub" problem: an extra node in T_query will
+    # pull mass evenly from the parent and child in T_input, putting its target exactly at the midpoint!
+    col_sums = Pi.sum(axis=0) + 1e-10
+    Y_target = (Pi.T @ X) / col_sums[:, None]
+    
+    # 4. Iterative Kinematic Resolution (Pseudo-FABRIK / Verlet)
+    Y = Y_target.copy()
+    edges_query = list(T_query.edges(data=True))
+    idx2 = {n: i for i, n in enumerate(nodes2)}
+    
+    # Because T_query is an acyclic tree, iterative distance projection 
+    # rapidly converges without the buckling/crumpling artifacts of a nonlinear solver.
+    for _ in range(fabrik_iters):
+        for u, v, data in edges_query:
+            i, j = idx2[u], idx2[v]
+            
+            # The required 22.5 database edge length
+            L_req = data.get('length', 1.0) 
+            
+            diff = Y[j] - Y[i]
+            dist = np.linalg.norm(diff)
+            
+            # Prevent singularity if nodes are exactly on top of each other
+            if dist < 1e-7:
+                diff = np.array([1e-7, 0.0])
+                dist = 1e-7
+                
+            # Move both nodes equally along the vector connecting them to satisfy L_req
+            correction = (dist - L_req) / dist * 0.5 * diff
+            Y[i] += correction
+            Y[j] -= correction
+            
+    # 5. Apply computed positions back to the queried graph
+    T_query_aligned = T_query.copy()
+    for i, n2 in enumerate(nodes2):
+        T_query_aligned.nodes[n2]['pos'] = Y[i].tolist()
+        
+    return T_query_aligned, Pi
+
+
 # ===== Visualization helper =====
 def plot_trees(trees):
     n = len(trees)
@@ -201,3 +356,5 @@ def plot_trees(trees):
     plt.savefig(filepath)
     plt.close(fig)
     print(f"Saved render to {filepath}")
+if __name__ == "__main__":
+    pass

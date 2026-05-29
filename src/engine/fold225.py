@@ -50,18 +50,13 @@ Note: abbreviations like v or v_idx refer to the index, not the object itself. F
 
 import cProfile
 import pstats
-
 import math
 import os
 from collections import deque, defaultdict
 from random import random
-import sys
-
 import matplotlib.pyplot as plt
 from matplotlib.patches import Polygon
-
 import networkx as nx
-from numpy import angle
 
 from src.engine.math225_core import (
     Fraction,
@@ -1932,7 +1927,7 @@ SQUARE_SIZE = 2
 if __name__ == "__main__":
     profiler = cProfile.Profile()
     profiler.enable()
-
+    
     print("===== Start Test =====")
     
     evolver = FoldEvolver(ROOT, midpoints=False)
