@@ -9,24 +9,14 @@ const state = {
   selectedNode: 0,
   draggingNode: null,
   queryResult: null,
+  queryNodeCount: 1,
   currentDetailResult: null, // Track the open modal result
+  currentDetailIndex: null,
+  detailViewModes: {
+    left: "cp",
+    right: "tree",
+  },
 };
-
-// crease pattern colors are defined via CSS variables so they follow theme
-function getCpColor(rawType) {
-  const style = getComputedStyle(document.documentElement);
-  const t = (rawType == null) ? "" : String(rawType).trim().toLowerCase();
-  // map common aliases to a canonical css var suffix
-  const map = {
-    'rm': 'rm', 'rv': 'rv', 'av': 'av', 'hm': 'hm', 'hv': 'hv', 'h': 'h', 'v': 'v', 'm': 'm', 'b': 'b',
-  };
-  const key = map[t] || (t.includes('m') ? 'm' : t.includes('v') ? 'v' : t.includes('b') ? 'b' : t.includes('h') ? 'h' : 'h');
-  const value = style.getPropertyValue(`--cp-${key}`).trim();
-  if (value) return value;
-  // fallback hardcoded palette
-  const fallback = { rm: '#ff6b6b', rv: '#4dabf7', av: '#4dabf7', hm: '#ff6b6b', hv: '#4dabf7', h: '#9aa8bf', v: '#4dabf7', m: '#ff6b6b', b: '#f0f3f7' };
-  return fallback[key] || '#9aa8bf';
-}
 
 const editorSvg = document.getElementById("editorSvg");
 const resultsGrid = document.getElementById("resultsGrid");
@@ -35,14 +25,40 @@ const resultSummary = document.getElementById("resultSummary");
 const detailModal = document.getElementById("detailModal");
 const modalGrid = document.getElementById("modalGrid");
 const modalTitle = document.getElementById("modalTitle");
+const modalMeta = document.getElementById("modalMeta");
+const detailPrevBtn = document.getElementById("detailPrevBtn");
+const detailNextBtn = document.getElementById("detailNextBtn");
 const settingsModal = document.getElementById("settingsModal");
 const settingsBtn = document.getElementById("settingsBtn");
 const closeSettingsModal = document.getElementById("closeSettingsModal");
 const themeSelect = document.getElementById("themeSelect");
 const languageSelect = document.getElementById("languageSelect");
+const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
 
 const THEME_STORAGE_KEY = "search225-theme-preference";
+const DETAIL_LEFT_VIEW_KEY = "search225-detail-left-view";
+const DETAIL_RIGHT_VIEW_KEY = "search225-detail-right-view";
 const systemThemeQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
+
+function readStoredDetailView(key, fallback) {
+  try {
+    const stored = localStorage.getItem(key);
+    return stored || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function persistDetailView(side, value) {
+  try {
+    localStorage.setItem(side === "left" ? DETAIL_LEFT_VIEW_KEY : DETAIL_RIGHT_VIEW_KEY, value);
+  } catch {}
+}
+
+function syncDetailViewPreferences() {
+  state.detailViewModes.left = readStoredDetailView(DETAIL_LEFT_VIEW_KEY, state.detailViewModes.left);
+  state.detailViewModes.right = readStoredDetailView(DETAIL_RIGHT_VIEW_KEY, state.detailViewModes.right);
+}
 
 function readStoredThemePreference() {
   try {
@@ -68,16 +84,49 @@ function applyTheme(themePreference, persist = true) {
 
 function setThemePreference(themePreference) { applyTheme(themePreference, true); }
 
+function closeDetailModal() {
+  detailModal.classList.add("hidden");
+  detailModal.setAttribute("aria-hidden", "true");
+  state.currentDetailResult = null;
+  state.currentDetailIndex = null;
+}
+
+function updateDetailView(side, value) {
+  if (state.detailViewModes[side] === value) return;
+  state.detailViewModes[side] = value;
+  persistDetailView(side, value);
+  if (state.currentDetailResult && state.currentDetailIndex !== null) {
+    renderDetail(state.currentDetailResult, state.currentDetailIndex);
+  }
+}
+
+function navigateDetail(step) {
+  if (!state.queryResult?.results?.length || state.currentDetailIndex === null) return;
+  const nextIndex = state.currentDetailIndex + step;
+  if (nextIndex < 0 || nextIndex >= state.queryResult.results.length) return;
+  renderDetail(state.queryResult.results[nextIndex], nextIndex);
+}
+
 // Event Listeners
 document.getElementById("runQuery").addEventListener("click", runQuery);
 document.getElementById("resetTree").addEventListener("click", resetTree);
-document.getElementById("closeModal").addEventListener("click", () => detailModal.classList.add("hidden"));
+document.getElementById("closeModal").addEventListener("click", closeDetailModal);
+if (detailPrevBtn) detailPrevBtn.addEventListener("click", () => navigateDetail(-1));
+if (detailNextBtn) detailNextBtn.addEventListener("click", () => navigateDetail(1));
+if (detailModal) detailModal.addEventListener("click", (event) => {
+  if (event.target === detailModal) closeDetailModal();
+});
 // Settings modal wiring
 if (settingsBtn) settingsBtn.addEventListener("click", () => settingsModal && settingsModal.classList.remove("hidden"));
 if (closeSettingsModal) closeSettingsModal.addEventListener("click", () => settingsModal && settingsModal.classList.add("hidden"));
 if (settingsModal) settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });
 if (themeSelect) themeSelect.addEventListener("change", () => setThemePreference(themeSelect.value));
 if (languageSelect) languageSelect.addEventListener("change", () => { try { localStorage.setItem('search225-language-preference', languageSelect.value); } catch {} });
+if (resultsThumbModeSelect) {
+  resultsThumbModeSelect.addEventListener("change", () => {
+    if (state.queryResult) renderResults();
+  });
+}
 document.addEventListener("keydown", onKeyDown);
 editorSvg.addEventListener("mousedown", onEditorMouseDown);
 window.addEventListener("mousemove", onEditorMouseMove);
@@ -160,6 +209,7 @@ document.getElementById("downloadCpBtn").addEventListener("click", () => {
 
 // Apply stored or system theme before initial render
 applyTheme(readStoredThemePreference() || 'system', false);
+syncDetailViewPreferences();
 renderEditor();
 
 function setStatus(message, isError = false) {
@@ -314,7 +364,7 @@ function onKeyDown(event) {
   if (event.key === "Escape") {
     // Close modal on Escape
     if (!detailModal.classList.contains("hidden")) {
-      detailModal.classList.add("hidden");
+      closeDetailModal();
       return;
     }
     state.selectedNode = null;
@@ -322,8 +372,40 @@ function onKeyDown(event) {
     renderEditor();
   }
 
-  if (event.key === "Backspace" && state.selectedNode !== null) {
+  if ((event.key === "Backspace" || event.key === "Delete") && state.selectedNode !== null) {
+    event.preventDefault();
+
     const target = state.selectedNode;
+
+    const incidentEdges = state.edges.filter((edge) => edge.u === target || edge.v === target);
+
+    if (incidentEdges.length > 2) {
+      setStatus("Cannot delete a vertex with more than 2 connections", true);
+      return;
+    }
+
+    if (incidentEdges.length === 2) {
+      const neighbors = incidentEdges.map((edge) => (edge.u === target ? edge.v : edge.u));
+      delete state.nodes[target];
+      state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
+      state.edges.push({ u: neighbors[0], v: neighbors[1] });
+      state.selectedNode = null;
+      state.draggingNode = null;
+      renderEditor();
+      return;
+    }
+
+    if (incidentEdges.length === 1) {
+      const [edge] = incidentEdges;
+      const nextSelected = edge.u === target ? edge.v : edge.u;
+      delete state.nodes[target];
+      state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
+      state.selectedNode = nextSelected ?? null;
+      state.draggingNode = null;
+      renderEditor();
+      return;
+    }
+
     delete state.nodes[target];
     state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
     state.selectedNode = null;
@@ -459,10 +541,16 @@ function selectedDbConfigs() {
 
 async function runQuery() {
   try {
+    const tree = serializeTree();
+    if (tree.edges.length < 4) {
+      setStatus("Tree is too simple. Add at least 4 edges before running a query.", true);
+      return;
+    }
+
     setStatus("Querying backend...");
     const t0 = Date.now();
     const payload = {
-      tree: serializeTree(),
+      tree,
       db_configs: selectedDbConfigs(),
       n: Number(document.getElementById("resultCount").value || 5),
     };
@@ -482,6 +570,7 @@ async function runQuery() {
     if (!response.ok) throw new Error(data.error || "Query failed");
     
     state.queryResult = data;
+    state.queryNodeCount = Math.max(1, tree.nodes.length || 0);
     const tf = Date.now()
     renderResults();
     resultSummary.textContent = `${data.results.length} result(s) loaded.`;
@@ -497,6 +586,7 @@ async function runQuery() {
 function renderResults() {
   resultsGrid.replaceChildren();
   if (!state.queryResult) return;
+  const thumbMode = resultsThumbModeSelect?.value || "cp";
 
   state.queryResult.results.forEach((result, index) => {
     const card = document.createElement("article");
@@ -510,15 +600,27 @@ function renderResults() {
     
     // FIX: Using the new thumb-svg class so it fills the 1:1 square
     const svg = makeSvg("svg", { viewBox: "0 0 220 220", class: "thumb-svg" });
-    renderCpSvg(svg, result.cp, 220, 220);
+    if (thumbMode === "tree" && result.tree) {
+      renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1", width: 220, height: 220 });
+    } else if (thumbMode === "packing" && result.packing) {
+      renderPackingSvg(svg, result.packing, 220, 220);
+    } else if (thumbMode === "fold" && result.fold) {
+      renderFoldSvg(svg, result.fold, 220, 220)
+    }
+    else {
+      renderCpSvg(svg, result.cp, 220, 220);
+    }
     thumb.appendChild(svg);
 
     const meta = document.createElement("div");
+    const quality = getMatchQuality(result.distance);
     meta.className = "result-meta";
+    meta.dataset.quality = quality;
+    meta.classList.add("match-quality");
     meta.innerHTML = `
-      <div><strong>Rank ${result.rank ?? index + 1}</strong></div>
-      <div>Distance: ${Number(result.distance).toFixed(4)}</div>
-      <div>${result.N} ${result.symmetry}</div>
+      <div><strong>Option ${result.rank ?? index + 1}</strong></div>
+      <div>Match quality: ${quality}</div>
+      <div>ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}</div>
     `;
 
     card.appendChild(thumb);
@@ -526,77 +628,170 @@ function renderResults() {
     resultsGrid.appendChild(card);
   });
 }
+const symmetry_abbr = {
+  "diag":"d",
+  "book":"b",
+  "none":"n"
+}
+
+function getMatchQuality(distance) {
+  const value = Number(distance*state.queryNodeCount**2);
+  if (!Number.isFinite(value)) return "unknown";
+  if (value < 50) return "Perfect";
+  if (value < 150) return "Good";
+  if (value < 500) return "Acceptable";
+  if (value < 1500.0) return "Poor";
+  return "Terrible";
+}
+
 function renderDetail(result, index) {
   state.currentDetailResult = result; // Save active result for export
+  state.currentDetailIndex = index;
   
   modalGrid.replaceChildren();
   if (!result) return;
 
-  // FIX: Added Tiling ID to the modal title
-  modalTitle.textContent = `Rank ${result.rank ?? index + 1} Result (${result.N} ${result.symmetry}) — Distance: ${Number(result.distance).toFixed(5)} — Tiling ID: ${result.tiling_id}`;
+  modalTitle.textContent = `Option ${result.rank ?? index + 1}`;
+  const quality = getMatchQuality(result.distance);
+  modalMeta.dataset.quality = quality;
+  modalMeta.classList.add("match-quality");
+  modalMeta.textContent = `Match quality: ${quality} • Normalized distance: ${(result.distance*state.queryNodeCount**2).toFixed(4)} • Tiling ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
 
-  // Top Row
-  modalGrid.appendChild(panelSvg("Topology", result.topology, (svg) => renderGraphSvg(svg, result.topology, { nodeFill: "#a7c7ff" })));
-  modalGrid.appendChild(panelSvg("Solved Tiling", result.solved_tiling, (svg) => renderGraphSvg(svg, result.solved_tiling, { nodeFill: "#8cffc1" })));
-  modalGrid.appendChild(panelSvg("Crease Pattern", result.cp, (svg) => renderCpSvg(svg, result.cp, 420, 240)));
-  
-  // Bottom Row
-  modalGrid.appendChild(panelSvg("Folded State", result.fold, (svg) => renderFoldSvg(svg, result.fold)));
-  modalGrid.appendChild(panelSvg("Resulting Tree", result.tree, (svg) => renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1" })));
-  modalGrid.appendChild(panelSvg("Heat Profile", result.heat, (svg) => renderHeatSvg(svg, result.heat)));
+  renderDetailBody(result);
+  updateDetailNavButtons();
 
   detailModal.classList.remove("hidden");
+  detailModal.setAttribute("aria-hidden", "false");
 }
 
-function panelSvg(title, payload, renderer) {
-  const card = document.createElement("div");
-  card.className = "detail-card";
-  const heading = document.createElement("h3");
-  heading.textContent = title;
-  const svg = makeSvg("svg", { viewBox: "0 0 420 240", class: "detail-svg" });
-  renderer(svg, payload);
-  card.appendChild(heading);
-  card.appendChild(svg);
-  return card;
+function updateDetailNavButtons() {
+  if (!detailPrevBtn || !detailNextBtn) return;
+  const total = state.queryResult?.results?.length || 0;
+  detailPrevBtn.disabled = state.currentDetailIndex === null || state.currentDetailIndex <= 0;
+  detailNextBtn.disabled = state.currentDetailIndex === null || state.currentDetailIndex >= total - 1;
+}
+
+function renderDetailBody(result) {
+  const leftPane = buildDetailPane({
+    side: "left",
+    activeValue: state.detailViewModes.left,
+    options: [
+      { value: "cp", label: "Crease pattern" },
+      { value: "packing", label: "Packing" },
+    ],
+    renderActive: (svg, currentValue) => {
+      if (currentValue === "packing" && result.packing) {
+        renderPackingSvg(svg, result.packing, 420, 260);
+      } else {
+        renderCpSvg(svg, result.cp, 420, 260);
+      }
+    },
+  });
+
+  const rightPane = buildDetailPane({
+    side: "right",
+    activeValue: state.detailViewModes.right,
+    options: [
+      { value: "tree", label: "Tree" },
+      { value: "fold", label: "Folded form" },
+    ],
+    renderActive: (svg, currentValue) => {
+      if (currentValue === "fold" && result.fold) {
+        renderFoldSvg(svg, result.fold);
+      } else {
+        renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1", width: 420, height: 260 });
+      }
+    },
+  });
+
+  modalGrid.appendChild(leftPane);
+  modalGrid.appendChild(rightPane);
+}
+
+function buildDetailPane({ side, activeValue, options, renderActive }) {
+  const panel = document.createElement("section");
+  panel.className = "detail-panel";
+
+  const toggleGroup = document.createElement("div");
+  toggleGroup.className = "detail-toggle-group";
+
+  options.forEach((option) => {
+    const label = document.createElement("label");
+    label.className = "detail-toggle-option";
+    const input = document.createElement("input");
+    input.type = "radio";
+    input.name = `detail-${side}-mode`;
+    input.value = option.value;
+    input.checked = option.value === activeValue;
+    input.addEventListener("change", () => {
+      if (input.checked) updateDetailView(side, option.value);
+    });
+    const span = document.createElement("span");
+    span.textContent = option.label;
+    label.appendChild(input);
+    label.appendChild(span);
+    toggleGroup.appendChild(label);
+  });
+
+  const body = document.createElement("div");
+  body.className = "detail-panel-body";
+  const svg = makeSvg("svg", { viewBox: "0 0 420 260", class: "detail-svg" });
+  renderActive(svg, activeValue);
+  body.appendChild(svg);
+
+  panel.appendChild(body);
+  panel.appendChild(toggleGroup);
+  return panel;
 }
 
 // --------------------------------------------------------
-// Render Utilities (Retained from previous architecture)
+// Render Utilities 
 // --------------------------------------------------------
 
-function renderCpSvg(svg, cp, width, height) {
+function renderCpSvg(svg, cp, width, height, options = {}) {
   const bounds = boundsFromSegments(cp.segments);
   const scale = fitScale(bounds, width, height);
-
-  function mapTypeToColor(rawType) {
-    const t = (rawType == null) ? "" : String(rawType).trim().toLowerCase();
-    if (t === "ax" || t === "aux") return getCpColor('av');
-    if (t.includes("m")) return getCpColor('m');
-    if (t.includes("v")) return getCpColor('v');
-    if (t.includes("b")) return getCpColor('b');
-    if (t.includes("h")) return getCpColor('h');
-    return getCpColor(t || 'h');
-  }
-
   for (const segment of cp.segments) {
-    const stroke = mapTypeToColor(segment.type);
-    const isThin = segment.type === "h" || String(segment.type).toLowerCase().includes("h");
+    const mv = (segment.type == null) ? "" : String(segment.type).trim().toLowerCase();
+    const strokeWidth = mv === "h" ? 1 : 2;
+    const classes = ["cp-segment", `cp-${mv}`];
+    // if (mv === "h") classes.push(hingeClass);
 
     const line = makeSvg("line", {
       x1: transformX(segment.x1, bounds, scale, width),
       y1: transformY(segment.y1, bounds, scale, height),
       x2: transformX(segment.x2, bounds, scale, width),
       y2: transformY(segment.y2, bounds, scale, height),
+      class: classes.join(" "),
     });
-    // set both attributes and inline styles so stylesheet rules don't override computed crease colors
-    line.setAttribute('stroke', stroke);
-    line.setAttribute('stroke-width', isThin ? '1.2' : '2.2');
-    line.setAttribute('stroke-linecap', 'round');
-    line.setAttribute('opacity', '0.85');
-    line.style.stroke = stroke;
-    line.style.strokeWidth = isThin ? "1.2" : "2.2";
-    line.style.strokeLinecap = "round";
-    line.style.opacity = "0.85";
+    line.setAttribute('stroke-width', String(strokeWidth));
+    // line.setAttribute('stroke-linecap', 'round');
+    line.style.strokeWidth = String(strokeWidth);
+    // line.style.strokeLinecap = "round";
+    svg.appendChild(line);
+  }
+}
+
+function renderPackingSvg(svg, cp, width, height, options = {}) {
+  const bounds = boundsFromSegments(cp.segments);
+  const scale = fitScale(bounds, width, height);
+  for (const segment of cp.segments) {
+    const mv = (segment.type == null) ? "" : String(segment.type).trim().toLowerCase();
+    const strokeWidth = mv === "h" ? 2.5 : mv === "b"? 2: 0.7;
+    const classes = ["cp-segment", `packing-${mv}`];
+    // if (mv === "h") classes.push(hingeClass);
+
+    const line = makeSvg("line", {
+      x1: transformX(segment.x1, bounds, scale, width),
+      y1: transformY(segment.y1, bounds, scale, height),
+      x2: transformX(segment.x2, bounds, scale, width),
+      y2: transformY(segment.y2, bounds, scale, height),
+      class: classes.join(" "),
+    });
+    line.setAttribute('stroke-width', String(strokeWidth));
+    // line.setAttribute('stroke-linecap', 'round');
+    line.style.strokeWidth = String(strokeWidth);
+    // line.style.strokeLinecap = "round";
     svg.appendChild(line);
   }
 }
@@ -620,25 +815,25 @@ function renderFoldSvg(svg, fold) {
   });
 }
 
-function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff" } = {}) {
+function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff", width = 420, height = 240 } = {}) {
   const bounds = boundsFromGraph(graph);
-  const scale = fitScale(bounds, 420, 240);
+  const scale = fitScale(bounds, width, height);
   for (const edge of graph.edges) {
     const start = pointForNode(graph, edge.u);
     const end = pointForNode(graph, edge.v);
     svg.appendChild(makeSvg("line", {
-      x1: transformX(start[0], bounds, scale, 420),
-      y1: transformY(start[1], bounds, scale, 240),
-      x2: transformX(end[0], bounds, scale, 420),
-      y2: transformY(end[1], bounds, scale, 240),
+      x1: transformX(start[0], bounds, scale, width),
+      y1: transformY(start[1], bounds, scale, height),
+      x2: transformX(end[0], bounds, scale, width),
+      y2: transformY(end[1], bounds, scale, height),
       class: "edge",
     }));
   }
   for (const node of graph.nodes) {
     if (!node.pos) continue;
     svg.appendChild(makeSvg("circle", {
-      cx: transformX(node.pos[0], bounds, scale, 420),
-      cy: transformY(node.pos[1], bounds, scale, 240),
+      cx: transformX(node.pos[0], bounds, scale, width),
+      cy: transformY(node.pos[1], bounds, scale, height),
       r: 4, fill: nodeFill, class: "node",
     }));
   }

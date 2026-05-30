@@ -2,12 +2,10 @@
 Datatype for tiling objects as a planar graph of directed half-edges (doubly connected edge list)
 """
 from time import time
-
 import networkx as nx
 import numpy as np
 import matplotlib.pyplot as plt
 import math
-import itertools
 from z3.z3 import BoolVal, Solver, Bool, And, Or, Not, If, sat, Implies
 import cProfile
 import pstats
