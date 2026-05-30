@@ -175,186 +175,239 @@ def extract_eigenvalues(G, eig_count=EIG_COUNT, resolution=RESOLUTION):
     else:
         return eigenvalues[:eig_count]
 
-import numpy as np
-import networkx as nx
-from scipy.linalg import eigh
-from scipy.spatial.distance import cdist
 
-def get_macroscopic_laplacian(G):
-    """
-    Extracts the generalized Laplacian (L) and Mass (M) matrices 
-    for the raw macroscopic tree without needing edge subdivision.
-    """
-    n = len(G.nodes)
-    L = np.zeros((n, n))
-    M = np.zeros((n, n))
-    
-    nodes = list(G.nodes())
-    idx = {node: i for i, node in enumerate(nodes)}
-    
-    # Calculate total length to normalize conductance/mass
-    lengths = [data.get('length', 1.0) for u, v, data in G.edges(data=True)]
-    total_length = sum(lengths) if sum(lengths) > 0 else 1.0
-    
-    for u, v, data in G.edges(data=True):
-        i, j = idx[u], idx[v]
-        
-        L_norm = data.get('length', 1.0) / total_length
-        conductance = 1.0 / max(L_norm, 1e-7) 
-        mass = L_norm / 2.0
-        
-        L[i, j] -= conductance
-        L[j, i] -= conductance
-        L[i, i] += conductance
-        L[j, j] += conductance
-        
-        M[i, i] += mass
-        M[j, j] += mass
-        
-    return L, M, nodes
+# from scipy.spatial.distance import cdist
 
-def compute_hks(L, M, t_scales):
-    """
-    Computes the Heat Kernel Signature using the generalized eigenvalue problem.
-    """
-    # eigh(L, M) solves L v = w M v. Eigenvectors v are M-orthogonal.
-    w, v = eigh(L, M)
-    w = np.clip(w, 0, None) # Ensure physical non-negative decay
+# def get_macroscopic_laplacian(G):
+#     """
+#     Extracts the generalized Laplacian (L) and Mass (M) matrices 
+#     for the raw macroscopic tree without needing edge subdivision.
+#     """
+#     n = len(G.nodes)
+#     L = np.zeros((n, n))
+#     M = np.zeros((n, n))
     
-    n_nodes = L.shape[0]
-    n_scales = len(t_scales)
-    hks = np.zeros((n_nodes, n_scales))
+#     nodes = list(G.nodes())
+#     idx = {node: i for i, node in enumerate(nodes)}
     
-    for i in range(n_nodes):
-        for j, t in enumerate(t_scales):
-            # HKS(i, t) = sum_k e^{-t * w_k} * (v_{ik})^2
-            hks[i, j] = np.sum(np.exp(-t * w) * (v[i, :] ** 2))
-            
-    # Scale invariance: Normalize so traces start near 1.0
-    norms = hks[:, 0:1]
-    norms[norms == 0] = 1.0
-    hks = hks / norms
+#     # Calculate total length to normalize conductance/mass
+#     lengths = [data.get('length', 1.0) for u, v, data in G.edges(data=True)]
+#     total_length = sum(lengths) if sum(lengths) > 0 else 1.0
     
-    return hks
-
-def sinkhorn_knopp(C, epsilon=0.05, max_iter=100):
-    """
-    Solves the Entropic Optimal Transport problem.
-    C: Cost matrix of shape (n, m)
-    epsilon: Blur parameter controlling the entropy (higher = more stub splitting)
-    """
-    n, m = C.shape
-    K = np.exp(-C / epsilon)
-    
-    # Uniform mass distribution for nodes in both trees
-    a = np.ones(n) / n
-    b = np.ones(m) / m
-    
-    # Sinkhorn iterations
-    v = np.ones(m)
-    for _ in range(max_iter):
-        u = a / (K @ v + 1e-10)
-        v = b / (K.T @ u + 1e-10)
+#     for u, v, data in G.edges(data=True):
+#         i, j = idx[u], idx[v]
         
-    # Soft correspondence matrix
-    Pi = np.diag(u) @ K @ np.diag(v)
-    return Pi
-
-def align_queried_tree(T_input, T_query, t_scales = None, epsilon=0.05, fabrik_iters=50):
-    """
-    Takes an input tree with node positions and a queried tree with rigid lengths.
-    Returns the queried tree with optimized node positions.
-    """
-    if t_scales is None:
-        t_scales = np.logspace(-3, 1, num=16)
-    # 1. Extract HKS for both trees
-    L1, M1, nodes1 = get_macroscopic_laplacian(T_input)
-    hks1 = compute_hks(L1, M1, t_scales)
-    
-    L2, M2, nodes2 = get_macroscopic_laplacian(T_query)
-    hks2 = compute_hks(L2, M2, t_scales)
-    
-    # 2. Cost Matrix & Optimal Transport
-    # Calculate Squared Euclidean distance between signatures
-    C = cdist(hks1, hks2, metric='sqeuclidean')
-    
-    # Normalize cost matrix to make the epsilon parameter globally stable
-    C = C / (C.max() + 1e-10)
-    Pi = sinkhorn_knopp(C, epsilon=epsilon)
-    
-    # 3. Calculate Target Coordinates via the Transport Plan
-    X = np.zeros((len(nodes1), 2))
-    for i, n1 in enumerate(nodes1):
-        pos = T_input.nodes[n1].get('pos', (0,0))
-        X[i] = [pos[0], pos[1]]
+#         L_norm = data.get('length', 1.0) / total_length
+#         conductance = 1.0 / max(L_norm, 1e-7) 
+#         mass = L_norm / 2.0
         
-    # y_target[j] = sum_i (Pi[i, j] * x[i]) / sum_i (Pi[i, j])
-    # This naturally solves the "stub" problem: an extra node in T_query will
-    # pull mass evenly from the parent and child in T_input, putting its target exactly at the midpoint!
-    col_sums = Pi.sum(axis=0) + 1e-10
-    Y_target = (Pi.T @ X) / col_sums[:, None]
+#         L[i, j] -= conductance
+#         L[j, i] -= conductance
+#         L[i, i] += conductance
+#         L[j, j] += conductance
+        
+#         M[i, i] += mass
+#         M[j, j] += mass
+        
+#     return L, M, nodes
+
+# def compute_hks(L, M, t_scales):
+#     """
+#     Computes the Heat Kernel Signature using the generalized eigenvalue problem.
+#     """
+#     # eigh(L, M) solves L v = w M v. Eigenvectors v are M-orthogonal.
+#     w, v = eigh(L, M)
+#     w = np.clip(w, 0, None) # Ensure physical non-negative decay
     
-    # 4. Iterative Kinematic Resolution (Pseudo-FABRIK / Verlet)
-    Y = Y_target.copy()
-    edges_query = list(T_query.edges(data=True))
-    idx2 = {n: i for i, n in enumerate(nodes2)}
+#     n_nodes = L.shape[0]
+#     n_scales = len(t_scales)
+#     hks = np.zeros((n_nodes, n_scales))
     
-    # Because T_query is an acyclic tree, iterative distance projection 
-    # rapidly converges without the buckling/crumpling artifacts of a nonlinear solver.
-    for _ in range(fabrik_iters):
-        for u, v, data in edges_query:
-            i, j = idx2[u], idx2[v]
+#     for i in range(n_nodes):
+#         for j, t in enumerate(t_scales):
+#             # HKS(i, t) = sum_k e^{-t * w_k} * (v_{ik})^2
+#             hks[i, j] = np.sum(np.exp(-t * w) * (v[i, :] ** 2))
             
-            # The required 22.5 database edge length
-            L_req = data.get('length', 1.0) 
+#     # Scale invariance: Normalize so traces start near 1.0
+#     norms = hks[:, 0:1]
+#     norms[norms == 0] = 1.0
+#     hks = hks / norms
+    
+#     return hks
+
+# def sinkhorn_knopp(C, epsilon=0.05, max_iter=100):
+#     """
+#     Solves the Entropic Optimal Transport problem.
+#     C: Cost matrix of shape (n, m)
+#     epsilon: Blur parameter controlling the entropy (higher = more stub splitting)
+#     """
+#     n, m = C.shape
+#     K = np.exp(-C / epsilon)
+    
+#     # Uniform mass distribution for nodes in both trees
+#     a = np.ones(n) / n
+#     b = np.ones(m) / m
+    
+#     # Sinkhorn iterations
+#     v = np.ones(m)
+#     for _ in range(max_iter):
+#         u = a / (K @ v + 1e-10)
+#         v = b / (K.T @ u + 1e-10)
+        
+#     # Soft correspondence matrix
+#     Pi = np.diag(u) @ K @ np.diag(v)
+#     return Pi
+
+# def get_principal_axes(X):
+#     """
+#     Centers, scales, and extracts the 2D principal axes (eigenvectors) of a point cloud.
+#     """
+#     # 1. Center at origin
+#     X_c = X - np.mean(X, axis=0)
+    
+#     # 2. Scale to unit bounding variance
+#     scale = np.max(np.linalg.norm(X_c, axis=1)) + 1e-8
+#     X_norm = X_c / scale
+    
+#     # 3. Covariance and Eigen-decomposition
+#     cov = X_norm.T @ X_norm
+#     w, v = np.linalg.eigh(cov)
+    
+#     # 4. Sort by eigenvalue descending (Primary axis first)
+#     idx = w.argsort()[::-1]
+#     v = v[:, idx]
+    
+#     return X_norm, v
+
+# def align_queried_tree(T_input, T_query, t_scales = None, epsilon=0.05, beta=0.1, fabrik_iters=150):
+#     """
+#     Aligns the queried tree using a Hybrid Cost Matrix (HKS + Spatial Prior)
+#     beta: Weight of the spatial symmetry breaker
+#     """
+#     if t_scales is None:
+#         t_scales = np.logspace(-3, 1, num=16) # 16 scales from 0.001 to 10
+#     # 1. Extract HKS
+#     L1, M1, nodes1 = get_macroscopic_laplacian(T_input)
+#     hks1 = compute_hks(L1, M1, t_scales)
+    
+#     L2, M2, nodes2 = get_macroscopic_laplacian(T_query)
+#     hks2 = compute_hks(L2, M2, t_scales)
+    
+#     # 2. Extract and Align Spatial Priors
+#     # Input tree has the user's explicit coordinates
+#     pos1 = np.array([T_input.nodes[n].get('pos', (0,0)) for n in nodes1])
+    
+#     # Query tree uses the backend's default force-directed untangled layout
+#     default_pos2_dict = get_proportional_tree_pos(T_query)
+#     pos2 = np.array([default_pos2_dict[n] for n in nodes2])
+    
+#     # Align the default layout to the user's layout
+#     # pos2_aligned, pos1_norm = procrustes_align_2d(pos2, pos1)
+#     pos1_norm, V1 = get_principal_axes(pos1)
+#     pos2_norm, V2 = get_principal_axes(pos2)
+#     # 3. Base Topological Cost (Does not change with rotation)
+#     C_hks = cdist(hks1, hks2, metric='sqeuclidean')
+#     C_hks = C_hks / (C_hks.max() + 1e-10)
+    
+#     # 4. Test all 4 PCA Orientations to solve sign ambiguity
+#     best_cost = float('inf')
+#     best_Pi = None
+    
+#     flips = [
+#         np.array([[1, 0], [0, 1]]),
+#         np.array([[-1, 0], [0, 1]]),
+#         np.array([[1, 0], [0, -1]]),
+#         np.array([[-1, 0], [0, -1]])
+#     ]
+    
+#     for flip in flips:
+#         # Construct rotation matrix aligning V2 to V1 with the given flip
+#         R = V2 @ flip @ V1.T
+#         pos2_aligned = pos2_norm @ R
+        
+#         # Spatial Cost for this specific orientation
+#         C_space = cdist(pos1_norm, pos2_aligned, metric='sqeuclidean')
+#         C_space = C_space / (C_space.max() + 1e-10)
+        
+#         # Hybrid Cost
+#         C_total = C_hks + (beta * C_space)
+#         Pi = sinkhorn_knopp(C_total, epsilon=epsilon)
+        
+#         # The transport cost evaluates how well both Topology and Space match
+#         cost = np.sum(Pi * C_total)
+        
+#         if cost < best_cost:
+#             best_cost = cost
+#             best_Pi = Pi
             
-            diff = Y[j] - Y[i]
-            dist = np.linalg.norm(diff)
+#     # 5. Calculate Target Coordinates (Using the ACTUAL user coordinates)
+#     col_sums = best_Pi.sum(axis=0) + 1e-10
+#     Y_target = (best_Pi.T @ pos1) / col_sums[:, None]
+    
+#     # 6. Iterative Kinematic Resolution (Verlet with Repulsion)
+#     Y = Y_target.copy()
+#     edges_query = list(T_query.edges(data=True))
+#     idx2 = {n: i for i, n in enumerate(nodes2)}
+    
+#     for _ in range(fabrik_iters):
+#         # A. Tiny repulsive force to prevent 1D straight-line collapse
+#         for i in range(len(Y)):
+#             for j in range(i + 1, len(Y)):
+#                 diff = Y[i] - Y[j]
+#                 dist = np.linalg.norm(diff)
+#                 if dist < 0.1:
+#                     repulsion = (diff / (dist + 1e-5)) * 0.01
+#                     Y[i] += repulsion
+#                     Y[j] -= repulsion
+
+#         # B. Enforce Rigid Edge Lengths
+#         for u, v, data in edges_query:
+#             i, j = idx2[u], idx2[v]
+#             L_req = data.get('length', 1.0) 
             
-            # Prevent singularity if nodes are exactly on top of each other
-            if dist < 1e-7:
-                diff = np.array([1e-7, 0.0])
-                dist = 1e-7
+#             diff = Y[j] - Y[i]
+#             dist = np.linalg.norm(diff)
+#             if dist < 1e-7:
+#                 diff = np.array([1e-7, 0.0]); dist = 1e-7
                 
-            # Move both nodes equally along the vector connecting them to satisfy L_req
-            correction = (dist - L_req) / dist * 0.5 * diff
-            Y[i] += correction
-            Y[j] -= correction
+#             correction = (dist - L_req) / dist * 0.5 * diff
+#             Y[i] += correction
+#             Y[j] -= correction
             
-    # 5. Apply computed positions back to the queried graph
-    T_query_aligned = T_query.copy()
-    for i, n2 in enumerate(nodes2):
-        T_query_aligned.nodes[n2]['pos'] = Y[i].tolist()
+#     # Apply computed positions back to the queried graph
+#     T_query_aligned = T_query.copy()
+#     for i, n2 in enumerate(nodes2):
+#         T_query_aligned.nodes[n2]['pos'] = Y[i].tolist()
         
-    return T_query_aligned, Pi
+#     return T_query_aligned, best_Pi
 
 
-# ===== Visualization helper =====
-def plot_trees(trees):
-    n = len(trees)
-    rows = math.ceil(math.sqrt(n / 2))
-    cols = math.ceil(n / rows)
-    fig, axes = plt.subplots(rows, cols, figsize=(cols * 5, rows * 5))
-    axes = axes.flatten() if n > 1 else [axes]
-    for i, ax in enumerate(axes):
-        ax.axis("off")
-    for i, tree in enumerate(trees):
-        ax = axes[i]
-        pos = get_proportional_tree_pos(tree)
-        nx.draw(tree, pos, with_labels=True, node_color='lightblue', edge_color='gray', ax=ax)
-        ax.set_title(f"Tree {i}")
-        ax.axis('equal')
+# # ===== Visualization helper =====
+# def plot_trees(trees):
+#     n = len(trees)
+#     rows = math.ceil(math.sqrt(n / 2))
+#     cols = math.ceil(n / rows)
+#     fig, axes = plt.subplots(rows, cols, figsize=(cols * 5, rows * 5))
+#     axes = axes.flatten() if n > 1 else [axes]
+#     for i, ax in enumerate(axes):
+#         ax.axis("off")
+#     for i, tree in enumerate(trees):
+#         ax = axes[i]
+#         pos = get_proportional_tree_pos(tree)
+#         nx.draw(tree, pos, with_labels=True, node_color='lightblue', edge_color='gray', ax=ax)
+#         ax.set_title(f"Tree {i}")
+#         ax.axis('equal')
 
 
-    renders_dir = "renders"
-    os.makedirs(renders_dir, exist_ok=True)
-    existing_files = [f for f in os.listdir(renders_dir) if f.endswith(".png")]
-    file_count = len(existing_files)
-    filename = f"trees_{file_count}.png"
-    filepath = os.path.join(renders_dir, filename)
-    plt.tight_layout(pad=0)
-    plt.savefig(filepath)
-    plt.close(fig)
-    print(f"Saved render to {filepath}")
-if __name__ == "__main__":
-    pass
+#     renders_dir = "renders"
+#     os.makedirs(renders_dir, exist_ok=True)
+#     existing_files = [f for f in os.listdir(renders_dir) if f.endswith(".png")]
+#     file_count = len(existing_files)
+#     filename = f"trees_{file_count}.png"
+#     filepath = os.path.join(renders_dir, filename)
+#     plt.tight_layout(pad=0)
+#     plt.savefig(filepath)
+#     plt.close(fig)
+#     print(f"Saved render to {filepath}")
+# if __name__ == "__main__":
+#     pass

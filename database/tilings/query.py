@@ -133,6 +133,8 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
             # Packing is basically a cp with all the hinges drawn
             res_tree, packing = fold.get_tree_and_packing(include_packing=True)
             res_packing = fold_to_cp(packing[0],inst_graph = packing[1], mv_reference = cp)
+            # from src.engine.tree import align_queried_tree
+            # res_tree, _ = align_queried_tree(query_tree, res_tree)
             
             results.append({
                 'rank': len(results) + 1,

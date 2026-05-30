@@ -85,7 +85,11 @@ def _build_query_graph(tree_payload: dict[str, Any]) -> nx.Graph:
     graph = nx.Graph()
 
     for node in tree_payload.get("nodes", []):
-        graph.add_node(int(node["id"]))
+        node_id = int(node["id"])
+        pos = node.get("pos")
+        if pos is None and "x" in node and "y" in node:
+            pos = [float(node["x"]), float(node["y"])]
+        graph.add_node(node_id, pos=pos)
 
     nodes_by_id = {int(node["id"]): node for node in tree_payload.get("nodes", [])}
     for edge in tree_payload.get("edges", []):
@@ -119,8 +123,34 @@ def _normalize_db_configs(payload: dict[str, Any]) -> list[tuple[int, str]]:
 
 
 def _serialize_query_tree(query_tree: nx.Graph) -> dict[str, Any]:
-    pos = {node: [float(coord[0]), float(coord[1])] for node, coord in get_proportional_tree_pos(query_tree).items()}
+    pos = {
+        node: [float(coord[0]), float(coord[1])]
+        for node, coord in nx.get_node_attributes(query_tree, "pos").items()
+        if coord is not None
+    }
+    if not pos:
+        pos = {
+            node: [float(coord[0]), float(coord[1])]
+            for node, coord in get_proportional_tree_pos(query_tree).items()
+        }
     return serialize_tree(query_tree, pos=pos)
+
+
+def _serialize_tree_with_preserved_pos(graph: nx.Graph) -> dict[str, Any]:
+    if isinstance(graph, tuple):
+        graph = graph[0]
+
+    pos = {
+        node: [float(coord[0]), float(coord[1])]
+        for node, coord in nx.get_node_attributes(graph, "pos").items()
+        if coord is not None
+    }
+    if not pos:
+        pos = {
+            node: [float(coord[0]), float(coord[1])]
+            for node, coord in get_proportional_tree_pos(graph).items()
+        }
+    return serialize_tree(graph, pos=pos)
 
 
 def _serialize_topology_graph(graph: nx.Graph, seed: int = 42) -> dict[str, Any]:
@@ -215,7 +245,6 @@ def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], d
 
     for res in results:
         tree_graph = res["tree"]
-        tree_pos = get_proportional_tree_pos(tree_graph)
         ui_results.append(
             {
                 "rank": res.get("rank"),
@@ -228,7 +257,7 @@ def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], d
                 "solved_tiling": _serialize_solved_tiling(res["G_solved"], res["pos_solved"]),
                 "cp": serialize_cp(res["cp"]),
                 "fold": serialize_fold(res["fold"]),
-                "tree": serialize_tree(tree_graph, pos={node: [float(x), float(y)] for node, (x, y) in tree_pos.items()}),
+                "tree": _serialize_tree_with_preserved_pos(tree_graph),
                 "packing": serialize_cp(res["packing"]),
                 "heat": _build_heat_profile(query_tree, tree_graph, res["N"], res["symmetry"]),
             }
@@ -282,6 +311,30 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             if file_path.exists():
                 svg_content = file_path.read_bytes()
                 _send_bytes(self, "image/svg+xml", svg_content)
+                return
+
+        # Serve any files requested under /interface/static/... by mapping to STATIC_DIR
+        if self.path.startswith("/interface/static/"):
+            rel = self.path[len("/interface/static/"):].lstrip("/")
+            file_path = STATIC_DIR / rel
+            if file_path.exists() and file_path.is_file():
+                body = file_path.read_bytes()
+                # crude content-type mapping
+                if file_path.suffix == ".js":
+                    ctype = "application/javascript; charset=utf-8"
+                elif file_path.suffix == ".css":
+                    ctype = "text/css; charset=utf-8"
+                elif file_path.suffix == ".svg":
+                    ctype = "image/svg+xml"
+                elif file_path.suffix == ".json":
+                    ctype = "application/json; charset=utf-8"
+                elif file_path.suffix == ".png":
+                    ctype = "image/png"
+                elif file_path.suffix == ".ico":
+                    ctype = "image/x-icon"
+                else:
+                    ctype = "application/octet-stream"
+                _send_bytes(self, ctype, body)
                 return
 
         if self.path == "/api/config":
