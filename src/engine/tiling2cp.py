@@ -341,12 +341,7 @@ def add_hinges(cp):
 # 4. DEBUG & VISUALIZATION
 # =============================================================================
 COLORS = {
-    # 'rm': 'red',  #ridge mountain
-    # 'rv': 'blue', #ridge valley
-    # 'av': 'blue', #axial valley
-    # 'hm': 'red',  #hinge mountain
-    # 'hv': 'blue', #hinge valley
-    'h': 'grey', #unknown/flat hinge
+    'h': 'grey', 
     'v': 'blue', 
     'm': 'red',
     'b': 'black'
@@ -443,16 +438,3 @@ if __name__ == "__main__":
     stats.sort_stats("cumulative")  # Sort by cumulative time
     stats.print_stats(20)  # Print the top  functions
     print("====== Plotting Results ======")
-    # try:
-    #     # plot_multiple(folds,debug = True)
-    #     plot_multi_state_grid(folds,cps = cps, labels = labels,packing_instead_of_cp=False)
-    # except Exception as e:
-    #     print("Error during folding/plotting:", e)
-    # plt.tight_layout()
-    # plt.show()
-
-
-    """
-    6270
-    1952
-    """

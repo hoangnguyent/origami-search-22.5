@@ -1,3 +1,9 @@
+"""
+Database management utilities
+
+"""
+
+import os
 import pickle
 import time
 import multiprocessing
@@ -140,9 +146,54 @@ def smart_migrate_and_clean(N, symmetry):
     print(f"Malformed & DELETED:     {deleted_count}")
     print(f"Total Time:              {(time.time() - start_time):.2f} seconds")
     print("-" * 50)
+    
+def remove_tiling(tiling_id, N, symmetry):
+    db_path = f'database/tilings/storage/tilings_{N}_{symmetry}.db'
+    db_uri = f'sqlite:///{db_path}'
+    
+    if not os.path.exists(db_path):
+        print(f"Error: Database file '{db_path}' does not exist.")
+        return
 
+    print(f"Connecting to DB: N={N}, Sym={symmetry}...")
+    engine = create_engine(db_uri)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    try:
+        # Fetch the target tiling
+        tiling = session.query(Tiling).filter_by(id=tiling_id).first()
+        
+        if tiling:
+            topo_id = tiling.topology_id
+            
+            # Delete and commit
+            session.delete(tiling)
+            session.commit()
+            
+            print(f"SUCCESS: Tiling ID {tiling_id} (Child of Topology ID {topo_id}) has been permanently deleted.")
+            print("-" * 60)
+            print("CRITICAL REMINDER: Your FAISS index and SQLite database are now out of sync!")
+            print(f"Please re-run `faiss_cache.py` for N={N}, Sym={symmetry} to rebuild the index.")
+            print("-" * 60)
+        else:
+            print(f"Notice: Tiling ID {tiling_id} was not found in the database. No action taken.")
+            
+    except Exception as e:
+        session.rollback()
+        print(f"An error occurred during deletion: {e}")
+    finally:
+        session.close()
 
 if __name__ == "__main__":
+    targets = [
+        (2253, 4, 'diag'),
+        (19633, 4, 'diag'),
+        (2249, 4, 'diag'),
+        
+    ]
+    for tiling_id, N, sym in targets:
+        remove_tiling(tiling_id, N, sym)
     with keep.running():
         # smart_migrate_and_clean(N=3, symmetry='diag')
         # smart_migrate_and_clean(N=3, symmetry='none')
