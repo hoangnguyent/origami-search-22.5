@@ -68,7 +68,7 @@ async function runQuery() {
     if (resultSummary) resultSummary.textContent = `${data.results.length} result(s) loaded.`;
     const n = Number(document.getElementById("resultCount").value || 5);
     const isDiagOnly = !document.getElementById("diagToggle").checked;
-    Utils.setStatus(`Successfully queried ${n} crease patterns. Database size: ${isDiagOnly? "586,695": "958,770"}. Query time: ${((tf-t0)/1000).toFixed(2)}s`);
+    Utils.setStatus(`Successfully queried ${n} crease patterns. Database size: ${isDiagOnly? "1,235,954": "1,803,458"}. Query time: ${((tf-t0)/1000).toFixed(2)}s`);
 
   } catch (error) {
     Utils.setStatus(error.message, true);
