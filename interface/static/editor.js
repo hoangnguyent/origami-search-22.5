@@ -41,10 +41,8 @@ export function onEditorMouseDown(event) {
     state.nodes[newNode.id] = newNode;
     state.edges.push({ u: state.selectedNode, v: newNode.id });
     state.nextNodeId += 1;
-    if (!event.shiftKey) {
-      state.selectedNode = newNode.id;
-    }
     renderEditor();
+    setStatus("Ready");
   }
 }
 
@@ -56,7 +54,12 @@ export function onEditorMouseMove(event) {
   renderEditor();
 }
 
-export function onEditorMouseUp() { state.draggingNode = null; }
+export function onEditorMouseUp() {
+  if (state.draggingNode !== null) {
+    setStatus("Ready");
+  }
+  state.draggingNode = null;
+}
 
 export function makeSvgLocal(tag, attrs = {}) { return makeSvg(tag, attrs); }
 

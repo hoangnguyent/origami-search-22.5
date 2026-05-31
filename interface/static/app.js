@@ -97,19 +97,27 @@ function onKeyDown(event) {
       delete state.nodes[target];
       state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
       state.edges.push({ u: neighbors[0], v: neighbors[1] });
-      state.selectedNode = null; state.draggingNode = null; Editor.renderEditor(); return;
+      state.selectedNode = null; state.draggingNode = null; Editor.renderEditor(); Utils.setStatus("Ready"); return;
     }
     if (incidentEdges.length === 1) {
       const [edge] = incidentEdges;
       const nextSelected = edge.u === target ? edge.v : edge.u;
       delete state.nodes[target];
       state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
-      state.selectedNode = nextSelected ?? null; state.draggingNode = null; Editor.renderEditor(); return;
+      state.selectedNode = nextSelected ?? null; state.draggingNode = null; Editor.renderEditor(); Utils.setStatus("Ready"); return;
     }
     delete state.nodes[target];
     state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
-    state.selectedNode = null; state.draggingNode = null; Editor.renderEditor();
+    state.selectedNode = null; state.draggingNode = null; Editor.renderEditor(); Utils.setStatus("Ready");
   }
+}
+
+function onDocumentClick(event) {
+  if (!editorSvgEl) return;
+  if (event.target instanceof Node && editorSvgEl.contains(event.target)) return;
+  if (state.selectedNode === null) return;
+  state.selectedNode = null;
+  Editor.renderEditor();
 }
 
 // Wire DOM events
@@ -126,6 +134,7 @@ if (themeSelect) themeSelect.addEventListener("change", () => Utils.applyTheme(t
 if (languageSelect) languageSelect.addEventListener("change", () => { try { localStorage.setItem('search225-language-preference', languageSelect.value); } catch {} });
 if (resultsThumbModeSelect) { resultsThumbModeSelect.addEventListener("change", () => { if (state.queryResult) Results.renderResults(); }); }
 document.addEventListener("keydown", onKeyDown);
+document.addEventListener("click", onDocumentClick);
 if (editorSvgEl) { editorSvgEl.addEventListener("mousedown", Editor.onEditorMouseDown); window.addEventListener("mousemove", Editor.onEditorMouseMove); window.addEventListener("mouseup", Editor.onEditorMouseUp); }
 document.getElementById("randomTreeBtn").addEventListener("click", Editor.generateRandomTree);
 document.getElementById("downloadCpBtn").addEventListener("click", Detail.exportCurrentCp);
