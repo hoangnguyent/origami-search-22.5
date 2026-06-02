@@ -23,6 +23,30 @@
       <section class="left-panel">
         <div class="editor-container">
           <svg id="editorSvg" viewBox="0 0 800 560" role="img" aria-label="Interactive tree editor"></svg>
+          <div id="mobileEditorControls" class="editor-mobile-controls mobile-only" aria-label="Editor actions">
+            <button id="deleteNodeBtn" class="icon-btn editor-action-btn editor-delete-btn" type="button" aria-label="Delete selected node" title="Delete selected node">
+              <img src="/assets/trash.svg" alt="" aria-hidden="true" />
+            </button>
+            <div class="editor-nudge-pad" role="group" aria-label="Move selected node">
+              <span class="editor-nudge-spacer editor-nudge-up-spacer"></span>
+              <button id="moveNodeUpBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-up" type="button" aria-label="Move selected node up" title="Move selected node up">
+                <img src="/assets/arrow-up.svg" alt="" aria-hidden="true" />
+              </button>
+              <span class="editor-nudge-spacer editor-nudge-right-spacer"></span>
+              <button id="moveNodeLeftBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-left" type="button" aria-label="Move selected node left" title="Move selected node left">
+                <img src="/assets/arrow-left.svg" alt="" aria-hidden="true" />
+              </button>
+              <span class="editor-nudge-spacer editor-nudge-center-spacer"></span>
+              <button id="moveNodeRightBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-right" type="button" aria-label="Move selected node right" title="Move selected node right">
+                <img src="/assets/arrow-right.svg" alt="" aria-hidden="true" />
+              </button>
+              <span class="editor-nudge-spacer editor-nudge-left-spacer"></span>
+              <button id="moveNodeDownBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-down" type="button" aria-label="Move selected node down" title="Move selected node down">
+                <img src="/assets/arrow-down.svg" alt="" aria-hidden="true" />
+              </button>
+              <span class="editor-nudge-spacer editor-nudge-down-spacer"></span>
+            </div>
+          </div>
         </div>
           <div class="controls-container">
             <div class="toggles">
