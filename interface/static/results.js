@@ -5,8 +5,28 @@ import { getMatchQuality, symmetry_abbr } from './utils.js';
 const resultsGrid = document.getElementById("resultsGrid");
 const resultSummary = document.getElementById("resultSummary");
 const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
+const loadingGifUrl = new URL("./assets/loading.svg", import.meta.url).href;
+
+function renderLoadingResults() {
+  resultsGrid.replaceChildren();
+
+  const loadingCard = document.createElement("div");
+  loadingCard.className = "results-loading";
+  loadingCard.innerHTML = `
+    <img src="${loadingGifUrl}" alt="" aria-hidden="true" />
+    <p>Fetching results...</p>
+  `;
+
+  resultsGrid.appendChild(loadingCard);
+  if (resultSummary) resultSummary.textContent = "Fetching results...";
+}
 
 export function renderResults() {
+  if (state.isQueryLoading) {
+    renderLoadingResults();
+    return;
+  }
+
   resultsGrid.replaceChildren();
   if (!state.queryResult) return;
   const thumbMode = resultsThumbModeSelect?.value || "cp";

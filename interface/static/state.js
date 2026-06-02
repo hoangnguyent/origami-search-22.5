@@ -7,6 +7,7 @@ export const state = {
   selectedNode: 0,
   draggingNode: null,
   queryResult: null,
+  isQueryLoading: false,
   queryNodeCount: 1,
   currentDetailResult: null,
   currentDetailIndex: null,

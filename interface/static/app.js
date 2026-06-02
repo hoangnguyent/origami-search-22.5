@@ -41,6 +41,8 @@ async function runQuery() {
     }
 
     Utils.setStatus("Querying backend...");
+    state.isQueryLoading = true;
+    Results.renderResults();
     const t0 = Date.now();
     const payload = {
       tree,
@@ -60,6 +62,7 @@ async function runQuery() {
       try { data = JSON.parse(rawText); } catch { data = { error: rawText.slice(0, 200) }; }
     }
     if (!response.ok) throw new Error(data.error || "Query failed");
+    state.isQueryLoading = false;
     state.queryResult = data;
     state.queryNodeCount = Math.max(1, tree.nodes.length || 0);
     const tf = Date.now();
@@ -71,7 +74,9 @@ async function runQuery() {
     Utils.setStatus(`Successfully queried ${n} crease patterns. Database size: ${isDiagOnly? "1,235,954": "1,803,458"}. Query time: ${((tf-t0)/1000).toFixed(2)}s`);
 
   } catch (error) {
+    state.isQueryLoading = false;
     Utils.setStatus(error.message, true);
+    Results.renderResults();
   }
 }
 
