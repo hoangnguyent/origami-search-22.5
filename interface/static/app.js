@@ -140,7 +140,7 @@ if (languageSelect) languageSelect.addEventListener("change", () => { try { loca
 if (resultsThumbModeSelect) { resultsThumbModeSelect.addEventListener("change", () => { if (state.queryResult) Results.renderResults(); }); }
 document.addEventListener("keydown", onKeyDown);
 document.addEventListener("click", onDocumentClick);
-if (editorSvgEl) { editorSvgEl.addEventListener("mousedown", Editor.onEditorMouseDown); window.addEventListener("mousemove", Editor.onEditorMouseMove); window.addEventListener("mouseup", Editor.onEditorMouseUp); }
+if (editorSvgEl) { editorSvgEl.addEventListener("mousedown", Editor.onEditorMouseDown); editorSvgEl.addEventListener("wheel", Editor.onEditorWheel, { passive: false }); window.addEventListener("mousemove", Editor.onEditorMouseMove); window.addEventListener("mouseup", Editor.onEditorMouseUp); }
 document.getElementById("randomTreeBtn").addEventListener("click", Editor.generateRandomTree);
 document.getElementById("downloadCpBtn").addEventListener("click", Detail.exportCurrentCp);
 

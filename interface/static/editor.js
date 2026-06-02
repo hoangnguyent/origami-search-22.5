@@ -3,6 +3,21 @@ import { makeSvg } from './renderers.js';
 import { setStatus } from './utils.js';
 
 const editorSvg = document.getElementById("editorSvg");
+const PAN_DRAG_THRESHOLD = 4;
+const MIN_ZOOM = 0.35;
+const MAX_ZOOM = 2.8;
+const ZOOM_STEP = 1.12;
+
+function clamp(value, minValue, maxValue) {
+  return Math.min(Math.max(value, minValue), maxValue);
+}
+
+function getWorldPointFromScreen(screenX, screenY) {
+  return {
+    x: (screenX - state.panOffset.x) / state.zoom,
+    y: (screenY - state.panOffset.y) / state.zoom,
+  };
+}
 
 export function getSvgPoint(event) {
   const point = editorSvg.createSVGPoint();
@@ -28,57 +43,119 @@ export function getClosestNode(x, y, hitRadius = 18) {
 export function onEditorMouseDown(event) {
   if (event.button !== 0) return;
   const { x, y } = getSvgPoint(event);
-  const hit = getClosestNode(x, y);
+  const { x: worldX, y: worldY } = getWorldPointFromScreen(x, y);
+  const hit = getClosestNode(worldX, worldY);
   if (hit) {
     state.selectedNode = hit.id;
     state.draggingNode = hit.id;
+    state.backgroundGesture = null;
+    state.isPanning = false;
     renderEditor();
     return;
   }
 
+  state.backgroundGesture = {
+    startClientX: event.clientX,
+    startClientY: event.clientY,
+    startPanX: state.panOffset.x,
+    startPanY: state.panOffset.y,
+    worldX,
+    worldY,
+  };
+  state.isPanning = false;
+
   if (state.selectedNode !== null) {
-    const newNode = { id: state.nextNodeId, x, y };
+    event.preventDefault();
+  }
+}
+
+export function onEditorMouseMove(event) {
+  if (state.draggingNode !== null) {
+    const { x, y } = getSvgPoint(event);
+    const { x: worldX, y: worldY } = getWorldPointFromScreen(x, y);
+    state.nodes[state.draggingNode].x = worldX;
+    state.nodes[state.draggingNode].y = worldY;
+    renderEditor();
+    return;
+  }
+
+  if (!state.backgroundGesture) return;
+
+  const dx = event.clientX - state.backgroundGesture.startClientX;
+  const dy = event.clientY - state.backgroundGesture.startClientY;
+  const movedEnough = Math.hypot(dx, dy) >= PAN_DRAG_THRESHOLD;
+  if (!state.isPanning && !movedEnough) return;
+
+  state.isPanning = true;
+  state.panOffset.x = state.backgroundGesture.startPanX + dx;
+  state.panOffset.y = state.backgroundGesture.startPanY + dy;
+  renderEditor();
+}
+
+export function onEditorWheel(event) {
+  if (!editorSvg) return;
+  event.preventDefault();
+
+  const { x: screenX, y: screenY } = getSvgPoint(event);
+  const worldPoint = getWorldPointFromScreen(screenX, screenY);
+  const zoomDirection = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
+  const nextZoom = clamp(state.zoom * zoomDirection, MIN_ZOOM, MAX_ZOOM);
+
+  state.zoom = nextZoom;
+  state.panOffset.x = screenX - worldPoint.x * state.zoom;
+  state.panOffset.y = screenY - worldPoint.y * state.zoom;
+  renderEditor();
+}
+
+export function onEditorMouseUp() {
+  const shouldCreateNode = state.backgroundGesture && !state.isPanning && state.selectedNode !== null;
+
+  if (state.draggingNode !== null) {
+    setStatus("Ready");
+  }
+  state.draggingNode = null;
+
+  if (shouldCreateNode) {
+    const newNode = { id: state.nextNodeId, x: state.backgroundGesture.worldX, y: state.backgroundGesture.worldY };
     state.nodes[newNode.id] = newNode;
     state.edges.push({ u: state.selectedNode, v: newNode.id });
     state.nextNodeId += 1;
     renderEditor();
     setStatus("Ready");
-  }
-}
-
-export function onEditorMouseMove(event) {
-  if (state.draggingNode === null) return;
-  const { x, y } = getSvgPoint(event);
-  state.nodes[state.draggingNode].x = x;
-  state.nodes[state.draggingNode].y = y;
-  renderEditor();
-}
-
-export function onEditorMouseUp() {
-  if (state.draggingNode !== null) {
+  } else if (state.isPanning) {
     setStatus("Ready");
   }
-  state.draggingNode = null;
+
+  state.backgroundGesture = null;
+  state.isPanning = false;
 }
 
 export function makeSvgLocal(tag, attrs = {}) { return makeSvg(tag, attrs); }
 
 export function renderEditor() {
   editorSvg.replaceChildren();
-  editorSvg.appendChild(makeSvg("rect", { x: 0, y: 0, width: 800, height: 560, rx: 18, fill: "transparent" }));
+  editorSvg.classList.toggle("is-panning", state.isPanning);
+  editorSvg.classList.toggle("has-dragged-node", state.draggingNode !== null);
+
+  editorSvg.appendChild(makeSvg("rect", { x: 0, y: 0, width: 800, height: 560, rx: 18, fill: "transparent", class: "editor-background" }));
+
+  const content = makeSvg("g", { transform: `translate(${state.panOffset.x} ${state.panOffset.y}) scale(${state.zoom})` });
 
   for (const edge of state.edges) {
     const start = state.nodes[edge.u];
     const end = state.nodes[edge.v];
-    editorSvg.appendChild(makeSvg("line", { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: "edge" }));
+    content.appendChild(makeSvg("line", { x1: start.x, y1: start.y, x2: end.x, y2: end.y, class: "edge", "vector-effect": "non-scaling-stroke" }));
   }
 
   for (const node of Object.values(state.nodes)) {
-    editorSvg.appendChild(makeSvg("circle", {
-      cx: node.x, cy: node.y, r: 12,
+    content.appendChild(makeSvg("circle", {
+      cx: node.x, cy: node.y, r: 12 / state.zoom,
       class: node.id === state.selectedNode ? "node selected-node" : "node tree-node",
+      "vector-effect": "non-scaling-stroke",
     }));
   }
+
+  editorSvg.appendChild(content);
 }
 
 export function serializeTree() {
@@ -100,6 +177,10 @@ export function resetTree() {
   state.nextNodeId = 1;
   state.selectedNode = 0;
   state.draggingNode = null;
+  state.zoom = 1;
+  state.panOffset = { x: 0, y: 0 };
+  state.isPanning = false;
+  state.backgroundGesture = null;
   renderEditor();
   setStatus("Tree reset.");
 }
@@ -112,6 +193,10 @@ export function generateRandomTree() {
   state.nextNodeId = 1;
   state.selectedNode = null;
   state.draggingNode = null;
+  state.zoom = 1;
+  state.panOffset = { x: 0, y: 0 };
+  state.isPanning = false;
+  state.backgroundGesture = null;
 
   const margin = 40;
   const width = 800;
