@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>About - SEARCH 22.5</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="stylesheet" href="/about.css" />
+</head>
+<body>
+  <div class="app-shell about-shell">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <h1 id="appTitle"><a href="/index.html" style="text-decoration: none; color: inherit;">SEARCH 22.5</a></h1>
+      </div>
+      <div class="top-bar-actions">
+        <a href="/index.html" class="header-link">Open App</a>
+      </div>
+    </header>
+
+    <main class="about-content">
+      <section class="hero">
+        <h1 class="hero-title">SEARCH 22.5</h1>
+        <p class="hero-subtitle">
+          [A fast, interactive tool for discovering and designing 22.5-degree uniaxial computational origami bases.]
+        </p>
+        <a href="/index.html" class="cta-button">Launch Workspace</a>
+      </section>
+
+      <section class="doc-section">
+        <h2>How to use this tool</h2>
+        <p class="doc-intro">[Brief introduction explaining the general workflow of the application, similar to a quick-start guide.]</p>
+        
+        <div class="step-grid">
+          <div class="step-card">
+            <div class="step-number">1</div>
+            <h3>Define your tree</h3>
+            <p>[Explain how to use the canvas: click to select nodes, drag to pan, pinch to zoom, and use the UI or arrow keys to nudge vertices into place.]</p>
+          </div>
+          
+          <div class="step-card">
+            <div class="step-number">2</div>
+            <h3>Configure search</h3>
+            <p>[Explain the toggles on the left panel, what diagonal vs. asymmetric symmetry means, and how to set the result count.]</p>
+          </div>
+
+          <div class="step-card">
+            <div class="step-number">3</div>
+            <h3>Analyze results</h3>
+            <p>[Explain the detail modal, the difference between crease pattern, packing, and tree views, and how match quality is calculated.]</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="doc-section">
+        <h2>Frequently Asked Questions</h2>
+        
+        <details class="faq-item">
+          <summary>What is a 22.5-degree crease pattern?</summary>
+          <p>[Explain the mathematical constraint and why this specific angle is popular in modern complex origami design.]</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>How do I export my design?</summary>
+          <p>[Explain the .FOLD export button located in the detail view and what software supports it.]</p>
+        </details>
+
+        <details class="faq-item">
+          <summary>Why are some results marked as "Poor" quality?</summary>
+          <p>[Explain the distance metric and how the algorithm attempts to map the user's freehand tree to the nearest valid mathematical tiling.]</p>
+        </details>
+      </section>
+
+      <footer class="about-footer">
+        <p>Created by [Your Name/Lab]. Powered by [Algorithm/Technology name].</p>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>

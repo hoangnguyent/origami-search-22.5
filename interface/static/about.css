@@ -1,0 +1,196 @@
+/* Release the global scroll lock from styles.css for this specific page */
+body {
+  overflow: auto !important;
+  height: auto !important;
+}
+
+/* Override split-view constraints to allow natural page scrolling */
+.about-shell {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+
+/* Override split-view constraints to allow natural page scrolling */
+.about-shell {
+  height: auto;
+  min-height: 100dvh;
+  overflow: visible;
+}
+
+/* Header link override */
+.header-link {
+  color: var(--text);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--line-soft);
+  transition: 0.15s;
+}
+.header-link:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--accent);
+}
+
+/* Main Content Container */
+.about-content {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 80px 24px;
+  width: 100%;
+}
+
+/* Hero Section */
+.hero {
+  text-align: center;
+  margin-bottom: 80px;
+}
+.hero-title {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  margin: 0 0 20px;
+  color: var(--accent);
+  letter-spacing: -0.02em;
+}
+.hero-subtitle {
+  font-size: clamp(1.1rem, 2vw, 1.25rem);
+  color: var(--muted);
+  max-width: 65ch;
+  margin: 0 auto 40px;
+  line-height: 1.6;
+}
+
+/* Primary Call to Action Button */
+.cta-button {
+  display: inline-block;
+  padding: 16px 36px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: #0b1020; /* Keep text dark for contrast against bright accent */
+  background: var(--accent);
+  border-radius: 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  box-shadow: 0 4px 14px rgba(122, 211, 255, 0.25);
+}
+.cta-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(122, 211, 255, 0.4);
+}
+html[data-theme="light"] .cta-button {
+  color: #ffffff;
+}
+
+/* Documentation Typography */
+.doc-section {
+  margin-bottom: 64px;
+}
+.doc-section h2 {
+  font-size: 1.75rem;
+  margin: 0 0 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--text);
+}
+.doc-intro {
+  font-size: 1.1rem;
+  color: var(--muted);
+  line-height: 1.6;
+  margin-bottom: 32px;
+  max-width: 70ch;
+}
+
+/* Step Cards Grid */
+.step-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 20px;
+}
+.step-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--line-soft);
+  padding: 24px;
+  border-radius: 16px;
+}
+.step-number {
+  width: 32px;
+  height: 32px;
+  background: rgba(122, 211, 255, 0.15);
+  color: var(--accent);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  margin-bottom: 16px;
+}
+.step-card h3 {
+  margin: 0 0 12px;
+  font-size: 1.15rem;
+  color: var(--text);
+}
+.step-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+  font-size: 0.95rem;
+}
+
+/* FAQ Accordion */
+.faq-item {
+  background: var(--bg-surface);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+.faq-item summary {
+  padding: 18px 20px;
+  font-weight: 600;
+  font-size: 1.1rem;
+  cursor: pointer;
+  user-select: none;
+  outline: none;
+  color: var(--text);
+  transition: background 0.15s;
+}
+.faq-item summary:hover {
+  background: var(--bg-surface-hover);
+}
+.faq-item p {
+  margin: 0;
+  padding: 0 20px 20px 42px; /* Indented slightly to match the arrow */
+  color: var(--muted);
+  line-height: 1.6;
+  max-width: 75ch;
+}
+/* Style the native summary arrow */
+.faq-item summary::marker {
+  color: var(--accent);
+}
+
+/* Footer */
+.about-footer {
+  margin-top: 80px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line);
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* Mobile Breakpoints */
+@media (max-width: 768px) {
+  .about-content {
+    padding: 40px 20px;
+  }
+  .hero {
+    margin-bottom: 48px;
+  }
+  .faq-item p {
+    padding-left: 20px; /* Remove indent on small screens */
+  }
+}
