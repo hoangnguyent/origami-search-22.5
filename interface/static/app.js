@@ -5,10 +5,10 @@ import * as Results from './results.js';
 import * as Detail from './detail.js';
 import * as Utils from './utils.js';
 
-const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
-const settingsModal = document.getElementById("settingsModal");
-const settingsBtn = document.getElementById("settingsBtn");
-const closeSettingsModal = document.getElementById("closeSettingsModal");
+// const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
+// const settingsModal = document.getElementById("settingsModal");
+// const settingsBtn = document.getElementById("settingsBtn");
+// const closeSettingsModal = document.getElementById("closeSettingsModal");
 const themeSelect = document.getElementById("themeSelect");
 const languageSelect = document.getElementById("languageSelect");
 const editorSvgEl = document.getElementById("editorSvg");
@@ -17,7 +17,79 @@ const moveNodeUpBtn = document.getElementById("moveNodeUpBtn");
 const moveNodeDownBtn = document.getElementById("moveNodeDownBtn");
 const moveNodeLeftBtn = document.getElementById("moveNodeLeftBtn");
 const moveNodeRightBtn = document.getElementById("moveNodeRightBtn");
-const NODE_NUDGE_STEP = 12;
+const NODE_NUDGE_STEP = 12; //for mobile tree editing
+
+const themeToggleBtn = document.getElementById("themeToggleBtn");
+const donateBtn = document.getElementById("donateBtn");
+const discordBtn = document.getElementById("discordBtn");
+const languageBtn = document.getElementById("languageBtn");
+
+const donateModal = document.getElementById("donateModal");
+const discordModal = document.getElementById("discordModal");
+const languageModal = document.getElementById("languageModal");
+function setupModal(openBtn, modalEl, closeBtnId) {
+  if (!openBtn || !modalEl) return;
+  const closeBtn = document.getElementById(closeBtnId);
+  
+  openBtn.addEventListener("click", () => modalEl.classList.remove("hidden"));
+  if (closeBtn) closeBtn.addEventListener("click", () => modalEl.classList.add("hidden"));
+  modalEl.addEventListener("click", (e) => {
+    if (e.target === modalEl) modalEl.classList.add("hidden");
+  });
+}
+// Wire up the Modals
+setupModal(donateBtn, donateModal, "closeDonateModal");
+setupModal(discordBtn, discordModal, "closeDiscordModal");
+setupModal(languageBtn, languageModal, "closeLanguageModal");
+
+// Wire up the 1-click Theme Toggle
+if (themeToggleBtn) {
+  themeToggleBtn.addEventListener("click", () => {
+    // Read the current theme from the HTML tag, default to dark if not explicitly light
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    Utils.applyTheme(nextTheme, true);
+  });
+}
+
+// Language selection logic (placeholder hook)
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    const selectedLang = e.currentTarget.dataset.lang;
+    try { localStorage.setItem('search225-language-preference', selectedLang); } catch {}
+    
+    // Update active button styling visually
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.add('secondary'));
+    e.currentTarget.classList.remove('secondary');
+    
+    // Close modal
+    if (languageModal) languageModal.classList.add('hidden');
+  });
+});
+
+// NEW SEGMENTED CONTROL LOGIC
+const resultsThumbInput = document.getElementById("resultsThumbMode");
+const thumbModeBtns = document.querySelectorAll(".thumb-mode-btn");
+
+if (resultsThumbInput && thumbModeBtns.length > 0) {
+  thumbModeBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      // 1. Remove active class from all buttons
+      thumbModeBtns.forEach(b => b.classList.remove("active"));
+      
+      // 2. Indent the clicked button
+      btn.classList.add("active");
+      
+      // 3. Sync the hidden input so the renderer knows what to draw
+      resultsThumbInput.value = btn.dataset.mode;
+      
+      // 4. Fire the re-render if we have data
+      if (state.queryResult) {
+        Results.renderResults();
+      }
+    });
+  });
+}
 
 function selectedDbConfigs() {
   const isDiagOnly = !document.getElementById("diagToggle").checked;
@@ -145,12 +217,7 @@ const closeModalBtn = document.getElementById("closeModal"); if (closeModalBtn) 
 const prevBtn = document.getElementById("detailPrevBtn"); if (prevBtn) prevBtn.addEventListener("click", () => Detail.navigateDetail(-1));
 const nextBtn = document.getElementById("detailNextBtn"); if (nextBtn) nextBtn.addEventListener("click", () => Detail.navigateDetail(1));
 const detailModalEl = document.getElementById("detailModal"); if (detailModalEl) detailModalEl.addEventListener("click", (e) => { if (e.target === detailModalEl) Detail.closeDetailModal(); });
-if (settingsBtn) settingsBtn.addEventListener("click", () => settingsModal && settingsModal.classList.remove("hidden"));
-if (closeSettingsModal) closeSettingsModal.addEventListener("click", () => settingsModal && settingsModal.classList.add("hidden"));
-if (settingsModal) settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });
-if (themeSelect) themeSelect.addEventListener("change", () => Utils.applyTheme(themeSelect.value, true));
-if (languageSelect) languageSelect.addEventListener("change", () => { try { localStorage.setItem('search225-language-preference', languageSelect.value); } catch {} });
-if (resultsThumbModeSelect) { resultsThumbModeSelect.addEventListener("change", () => { if (state.queryResult) Results.renderResults(); }); }
+
 document.addEventListener("keydown", onKeyDown);
 document.addEventListener("click", onDocumentClick);
 if (editorSvgEl) {

@@ -13,22 +13,89 @@
         <h1 id="appTitle">SEARCH 22.5</h1>
       </div>
       <div class="top-bar-actions">
-        <a href="/about.html" class="icon-btn" aria-label="Help and Documentation" title="Help & About">
-          <img src="/assets/help.svg" alt="" aria-hidden="true" />
-        </a>
-        <button id="settingsBtn" class="icon-btn" type="button" aria-label="Open settings" title="Settings">
-          <img src="/assets/gear.svg" alt="" aria-hidden="true" />
+        <button id="donateBtn" class="icon-btn action-icon" type="button" aria-label="Donate" title="Donate">
+          <img src="/assets/donate.svg" alt="" aria-hidden="true" />
         </button>
+        <button id="discordBtn" class="icon-btn action-icon" type="button" aria-label="Join Discord" title="Join Discord">
+          <img src="/assets/discord.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="themeToggleBtn" class="icon-btn action-icon" type="button" aria-label="Toggle light/dark mode" title="Toggle Theme">
+          <img src="/assets/light-dark.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="languageBtn" class="icon-btn action-icon" type="button" aria-label="Change Language" title="Change Language">
+          <img src="/assets/language.svg" alt="" aria-hidden="true" />
+        </button>
+        <a href="/about.html" target="_blank" class="icon-btn action-icon" aria-label="Help and Documentation" title="Help & About">
+          <img src="/assets/info.svg" alt="" aria-hidden="true" />
+        </a>
       </div>
     </header>
+
+    <div id="donateModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeDonateModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header">
+          <h2>Donate</h2>
+        </div>
+        <div class="settings-panel">
+          <p class="modal-meta" style="text-align: left; max-width: none;">If you find SEARCH 22.5 useful, consider supporting financially for its continued development!</p>
+          <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
+            <a href="https://www.paypal.com/paypalme/theplantpsychologist" target="_blank">
+              <button type="button">Donate via PayPal</button>
+            </a>
+            <!-- <button type="button">Support on Ko-fi</button>
+            <button type="button" class="secondary">GitHub Sponsors</button> -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="discordModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeDiscordModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header">
+          <h2>Community and development</h2>
+        </div>
+        <div class="settings-panel">
+          <p class="modal-meta" style="text-align: left; max-width: none;">Join our Discord server to get tech support, report bugs, and request new features. You can also join the development team, chat about computational origami in general, and share your creations!</p>
+          <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
+            <a href="https://discord.gg/5YcGh8b9yC" target="_blank">
+              <button type="button">Join the community</button>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="languageModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeLanguageModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header">
+          <h2>Select Language</h2>
+        </div>
+        <div class="settings-panel">
+          <div class="language-grid">
+            <button type="button" class="lang-btn" data-lang="en">🇺🇸 English</button>
+            <button type="button" class="lang-btn secondary" data-lang="es">🇪🇸 Español</button>
+            <button type="button" class="lang-btn secondary" data-lang="ja">🇯🇵 日本語</button>
+            <button type="button" class="lang-btn secondary" data-lang="zh">🇨🇳 中文</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <main class="split-view">
       <section class="left-panel">
         <div class="editor-container">
           <svg id="editorSvg" viewBox="0 0 800 560" role="img" aria-label="Interactive tree editor"></svg>
+
+          <button id="resetTree" class="icon-btn editor-action-btn editor-reset-btn" type="button" aria-label="Reset tree" title="Reset entire tree">
+            <img src="/assets/trash.svg" alt="" aria-hidden="true" />
+          </button>
+
           <div id="mobileEditorControls" class="editor-mobile-controls mobile-only" aria-label="Editor actions">
             <button id="deleteNodeBtn" class="icon-btn editor-action-btn editor-delete-btn" type="button" aria-label="Delete selected node" title="Delete selected node">
-              <img src="/assets/trash.svg" alt="" aria-hidden="true" />
+              <img src="/assets/delete.svg" alt="" aria-hidden="true" />
             </button>
             <div class="editor-nudge-pad" role="group" aria-label="Move selected node">
               <span class="editor-nudge-spacer editor-nudge-up-spacer"></span>
@@ -69,7 +136,7 @@
             
             <div class="actions">
               <!-- <button id="runQuery">Run Query</button> -->
-              <button id="resetTree" class="secondary">Reset Tree</button>
+              <!-- <button id="resetTree" class="secondary">Reset Tree</button> -->
               <button id="randomTreeBtn" class="secondary">Random Tree</button>
             </div>
 
@@ -87,16 +154,23 @@
       <section class="right-panel">
         <div class="section-head">
           <div class="results-head-left">
-            <h2 id="resultsHeading">Results</h2>
-            <label for="resultsThumbMode" class="toggle-label">
-              <span>Thumbnail display:</span>
-              <select id="resultsThumbMode" aria-label="Results thumbnail type">
-                <option value="cp">Crease pattern</option>
-                <option value="tree">Tree</option>
-                <option value="packing">Packing</option>
-                <!-- <option value="fold">Folded state</option> -->
-              </select>
-            </label>
+            <!-- <h2 id="resultsHeading">Results</h2> -->
+            <div class="thumb-mode-container toggle-label">
+              <!-- <span>Thumbnail:</span> -->
+              <input type="hidden" id="resultsThumbMode" value="cp" />
+              
+              <div class="thumb-mode-group" role="group" aria-label="Thumbnail display mode">
+                <button type="button" class="thumb-mode-btn active" data-mode="cp" aria-label="Crease pattern" title="Crease pattern">
+                  <img src="/assets/crease_pattern.svg" alt="" aria-hidden="true" />
+                </button>
+                <button type="button" class="thumb-mode-btn" data-mode="tree" aria-label="Tree" title="Tree">
+                  <img src="/assets/tree.svg" alt="" aria-hidden="true" />
+                </button>
+                <button type="button" class="thumb-mode-btn" data-mode="packing" aria-label="Packing" title="Packing">
+                  <img src="/assets/packing.svg" alt="" aria-hidden="true" />
+                </button>
+              </div>
+            </div>
           </div>
           <span id="resultSummary">No query run yet.</span>
         </div>

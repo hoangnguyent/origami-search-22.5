@@ -11,30 +11,99 @@
   <div class="app-shell about-shell">
     <header class="top-bar">
       <div class="top-bar-left">
-        <h1 id="appTitle"><a href="/index.html" style="text-decoration: none; color: inherit;">SEARCH 22.5</a></h1>
+        <h1 id="appTitle">SEARCH 22.5</h1>
       </div>
       <div class="top-bar-actions">
-        <a href="/index.html" class="header-link">Open App</a>
+        <button id="donateBtn" class="icon-btn action-icon" type="button" aria-label="Donate" title="Donate">
+          <img src="/assets/donate.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="discordBtn" class="icon-btn action-icon" type="button" aria-label="Join Discord" title="Join Discord">
+          <img src="/assets/discord.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="themeToggleBtn" class="icon-btn action-icon" type="button" aria-label="Toggle light/dark mode" title="Toggle Theme">
+          <img src="/assets/light-dark.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="languageBtn" class="icon-btn action-icon" type="button" aria-label="Change Language" title="Change Language">
+          <img src="/assets/language.svg" alt="" aria-hidden="true" />
+        </button>
+        <a href="/about.html" target="_blank" class="icon-btn action-icon" aria-label="Help and Documentation" title="Help & About">
+          <img src="/assets/info.svg" alt="" aria-hidden="true" />
+        </a>
       </div>
     </header>
+
+
+    <div id="donateModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeDonateModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header">
+          <h2>Donate</h2>
+        </div>
+        <div class="settings-panel">
+          <p class="modal-meta" style="text-align: left; max-width: none;">If you find SEARCH 22.5 useful, consider supporting its continued development!</p>
+          <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
+
+            <!-- <button type="button">Support on Ko-fi</button>
+            <button type="button" class="secondary">GitHub Sponsors</button> -->
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="discordModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeDiscordModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header">
+          <h2>Community and development</h2>
+        </div>
+        <div class="settings-panel">
+          <p class="modal-meta" style="text-align: left; max-width: none;">Join our Discord server to get tech support, report bugs, and request new features. You can also join the development team, chat about computational origami in general, and share your creations!</p>
+          <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
+            <a href="https://discord.gg/5YcGh8b9yC">
+              <button type="button">Join the community</button>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="languageModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeLanguageModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header">
+          <h2>Select Language</h2>
+        </div>
+        <div class="settings-panel">
+          <div class="language-grid">
+            <button type="button" class="lang-btn" data-lang="en">🇺🇸 English</button>
+            <button type="button" class="lang-btn secondary" data-lang="es">🇪🇸 Español</button>
+            <button type="button" class="lang-btn secondary" data-lang="ja">🇯🇵 日本語</button>
+            <button type="button" class="lang-btn secondary" data-lang="zh">🇨🇳 中文</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+
 
     <main class="about-content">
       <section class="hero">
         <h1 class="hero-title">SEARCH 22.5</h1>
         <p class="hero-subtitle">
-          [A fast, interactive tool for discovering and designing 22.5-degree uniaxial computational origami bases.]
+          World's first 22.5 origami design tool.
         </p>
         <a href="/index.html" class="cta-button">Launch Workspace</a>
       </section>
 
       <section class="doc-section">
-        <h2>How to use this tool</h2>
-        <p class="doc-intro">[Brief introduction explaining the general workflow of the application, similar to a quick-start guide.]</p>
+        <!-- <h2>How to use this tool</h2>
+        <p class="doc-intro">[Brief introduction explaining the general workflow of the application, similar to a quick-start guide.]</p> -->
         
         <div class="step-grid">
           <div class="step-card">
             <div class="step-number">1</div>
-            <h3>Define your tree</h3>
+            <h3>Define your search</h3>
             <p>[Explain how to use the canvas: click to select nodes, drag to pan, pinch to zoom, and use the UI or arrow keys to nudge vertices into place.]</p>
           </div>
           
@@ -72,7 +141,7 @@
       </section>
 
       <footer class="about-footer">
-        <p>Created by [Your Name/Lab]. Powered by [Algorithm/Technology name].</p>
+        <p>Created by <a href="https://www.instagram.com/theplantpsychologist/">Brandon Wong</a>.</p>
       </footer>
     </main>
   </div>

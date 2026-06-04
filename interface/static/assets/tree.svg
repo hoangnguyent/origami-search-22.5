@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+
+<svg
+   width="278.58591"
+   height="278.47485"
+   viewBox="0 0 8.3575771 8.3542454"
+   fill="none"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="tree.svg"
+   inkscape:version="1.4.2 (ebf0e940, 2025-05-08)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <marker
+       style="overflow:visible"
+       id="marker4"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="Dot"
+       markerWidth="0.69999999"
+       markerHeight="0.69999999"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         d="M 5,0 C 5,2.76 2.76,5 0,5 -2.76,5 -5,2.76 -5,0 c 0,-2.76 2.3,-5 5,-5 2.76,0 5,2.24 5,5 z"
+         sodipodi:nodetypes="sssss"
+         id="path4" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="Dot"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="Dot"
+       markerWidth="0.69999999"
+       markerHeight="0.69999999"
+       viewBox="0 0 1 1"
+       inkscape:isstock="true"
+       inkscape:collect="always"
+       preserveAspectRatio="xMidYMid">
+      <path
+         transform="scale(0.5)"
+         style="fill:context-stroke;fill-rule:evenodd;stroke:none"
+         d="M 5,0 C 5,2.76 2.76,5 0,5 -2.76,5 -5,2.76 -5,0 c 0,-2.76 2.3,-5 5,-5 2.76,0 5,2.24 5,5 z"
+         sodipodi:nodetypes="sssss"
+         id="path17" />
+    </marker>
+  </defs>
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.4283557"
+     inkscape:cx="161.72442"
+     inkscape:cy="136.52062"
+     inkscape:window-width="1472"
+     inkscape:window-height="957"
+     inkscape:window-x="150"
+     inkscape:window-y="30"
+     inkscape:window-maximized="0"
+     inkscape:current-layer="svg1"
+     showgrid="false">
+    <inkscape:grid
+       id="grid1"
+       units="px"
+       originx="-0.34414675"
+       originy="-0.75722774"
+       spacingx="0.03"
+       spacingy="0.029999999"
+       empcolor="#0099e5"
+       empopacity="0.30196078"
+       color="#0099e5"
+       opacity="0.14901961"
+       empspacing="5"
+       enabled="true"
+       visible="false" />
+  </sodipodi:namedview>
+  <path
+     style="fill:none;stroke:#000000;stroke-width:0.6;stroke-linejoin:round;stroke-dasharray:none;marker-start:url(#marker4);marker-end:url(#Dot);paint-order:fill markers stroke"
+     d="M 1.0498414,1.0465095 4.2318218,4.2284898"
+     id="path2" />
+  <path
+     style="fill:none;stroke:#000000;stroke-width:0.6;stroke-linejoin:round;stroke-dasharray:none;marker-start:url(#marker4);marker-end:url(#Dot);paint-order:fill markers stroke"
+     d="M 4.2318218,4.2284898 7.3077361,7.3044041"
+     id="path2-3"
+     sodipodi:nodetypes="cc" />
+  <path
+     style="fill:none;stroke:#000000;stroke-width:0.6;stroke-linejoin:round;stroke-dasharray:none;marker-start:url(#marker4);marker-end:url(#Dot);paint-order:fill markers stroke"
+     d="M 4.2318218,4.2284898 7.3031925,1.1086009"
+     id="path3"
+     sodipodi:nodetypes="cc" />
+  <path
+     style="fill:none;stroke:#000000;stroke-width:0.6;stroke-linejoin:round;stroke-dasharray:none;marker-start:url(#marker4);marker-end:url(#Dot);paint-order:fill markers stroke"
+     d="M 1.0676539,7.2940772 4.2318218,4.2284898"
+     id="path3-7"
+     sodipodi:nodetypes="cc" />
+</svg>
