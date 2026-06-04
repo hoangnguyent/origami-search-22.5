@@ -63,7 +63,9 @@ function buildDetailPane({ side, activeValue, options, renderActive }) {
 
   const body = document.createElement("div");
   body.className = "detail-panel-body";
-  const svg = makeSvg("svg", { viewBox: "0 0 420 260", class: "detail-svg" });
+  
+  // UPDATE: Change viewBox to a square 400x400
+  const svg = makeSvg("svg", { viewBox: "0 0 400 400", class: "detail-svg" });
   renderActive(svg, activeValue);
   body.appendChild(svg);
 
@@ -88,9 +90,11 @@ export function renderDetail(result, index) {
     options: [ { value: "cp", label: "Crease pattern" }, { value: "packing", label: "Packing" } ],
     renderActive: (svg, currentValue) => {
       if (currentValue === "packing" && result.packing) {
-        renderPackingSvg(svg, result.packing, 420, 260);
+        // UPDATE: Pass 400, 400
+        renderPackingSvg(svg, result.packing, 400, 400);
       } else {
-        renderCpSvg(svg, result.cp, 420, 260);
+        // UPDATE: Pass 400, 400
+        renderCpSvg(svg, result.cp, 400, 400);
       }
     },
   });
@@ -101,9 +105,10 @@ export function renderDetail(result, index) {
     options: [ { value: "tree", label: "Tree" }, { value: "fold", label: "Folded form" } ],
     renderActive: (svg, currentValue) => {
       if (currentValue === "fold" && result.fold) {
-        renderFoldSvg(svg, result.fold);
+        // Pass 400, 400 so it matches the viewBox square
+        renderFoldSvg(svg, result.fold, 400, 400); 
       } else {
-        renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1", width: 420, height: 260 });
+        renderGraphSvg(svg, result.tree, { nodeFill: "#8cffc1", width: 400, height: 400 });
       }
     },
   });
@@ -160,7 +165,7 @@ export function exportCurrentCp() {
   const sym = state.currentDetailResult.symmetry || "sym";
   const tilingId = state.currentDetailResult.tiling_id || "unknown";
   a.href = url;
-  a.download = `cp${N}${sym}${tilingId}.fold`;
+  a.download = `${N}${sym=="diag"?"d":sym=="book"?"b":"n"}-${tilingId}.fold`;
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);

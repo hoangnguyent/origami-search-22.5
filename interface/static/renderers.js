@@ -30,14 +30,23 @@ export function boundsFromFaces(faces) {
   faces.forEach(f => f.forEach(p => { xs.push(p[0]); ys.push(p[1]); }));
   return boundsFromArrays(xs, ys);
 }
-
 export function fitScale(b, w, h) {
-  const pad = 20, dx = Math.max(b.maxX - b.minX, 1e-6), dy = Math.max(b.maxY - b.minY, 1e-6);
+  const pad = 10;
+  const dx = Math.max(b.maxX - b.minX, 1e-6);
+  const dy = Math.max(b.maxY - b.minY, 1e-6);
   return Math.min((w - pad * 2) / dx, (h - pad * 2) / dy);
 }
 
-export function transformX(x, b, s, w) { return 20 + (x - b.minX) * s + (w - 40 - (b.maxX - b.minX) * s) / 2; }
-export function transformY(y, b, s, h) { return h - (20 + (y - b.minY) * s + (h - 40 - (b.maxY - b.minY) * s) / 2); }
+export function transformX(x, b, s, w) { 
+  const pad = 10;
+  return pad + (x - b.minX) * s + (w - pad * 2 - (b.maxX - b.minX) * s) / 2; 
+}
+
+export function transformY(y, b, s, h) { 
+  const pad = 10;
+  return h - (pad + (y - b.minY) * s + (h - pad * 2 - (b.maxY - b.minY) * s) / 2); 
+}
+
 export function pointForNode(g, id) { const f = g.nodes.find(n => n.id === id); return f && f.pos ? f.pos : [0, 0]; }
 
 export function renderCpSvg(svg, cp, width, height, options = {}) {
@@ -82,10 +91,10 @@ export function renderPackingSvg(svg, cp, width, height, options = {}) {
   }
 }
 
-export function renderFoldSvg(svg, fold) {
+export function renderFoldSvg(svg, fold, width = 400, height = 400) {
   const faces = fold.faces || [];
   const bounds = boundsFromFaces(faces);
-  const scale = fitScale(bounds, 420, 240);
+  const scale = fitScale(bounds, width, height);
   const BASE_ALPHA = 0.12; 
   
   faces.forEach((face, index) => {
@@ -93,7 +102,7 @@ export function renderFoldSvg(svg, fold) {
     const alphaVal = 1 - Math.pow(1 - BASE_ALPHA, mult);
     
     svg.appendChild(makeSvg("polygon", {
-      points: face.map((point) => `${transformX(point[0], bounds, scale, 420)},${transformY(point[1], bounds, scale, 240)}`).join(" "),
+      points: face.map((point) => `${transformX(point[0], bounds, scale, width)},${transformY(point[1], bounds, scale, height)}`).join(" "),
       fill: `rgba(122, 211, 255, ${alphaVal})`,
       stroke: "rgba(255,255,255,0.30)", 
       "stroke-width": 0.5, 

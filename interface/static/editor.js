@@ -1,22 +1,109 @@
 import { state } from './state.js';
 import { makeSvg } from './renderers.js';
 import { setStatus } from './utils.js';
+import { isMobileLayout } from './layout.js';
 
 const editorSvg = document.getElementById("editorSvg");
+const deleteNodeBtn = document.getElementById("deleteNodeBtn");
+const mobileEditorControls = document.getElementById("mobileEditorControls");
+const moveNodeUpBtn = document.getElementById("moveNodeUpBtn");
+const moveNodeDownBtn = document.getElementById("moveNodeDownBtn");
+const moveNodeLeftBtn = document.getElementById("moveNodeLeftBtn");
+const moveNodeRightBtn = document.getElementById("moveNodeRightBtn");
 const PAN_DRAG_THRESHOLD = 4;
 const MIN_ZOOM = 0.35;
 const MAX_ZOOM = 2.8;
 const ZOOM_STEP = 1.12;
 
+const activePointers = new Map();
+let activeDragPointerId = null;
+let pinchGesture = null;
+
 function clamp(value, minValue, maxValue) {
   return Math.min(Math.max(value, minValue), maxValue);
 }
 
-function getWorldPointFromScreen(screenX, screenY) {
+// Replace getWorldPointFromScreen with an SVG-aware version
+function getWorldPointFromSvg(svgX, svgY) {
   return {
-    x: (screenX - state.panOffset.x) / state.zoom,
-    y: (screenY - state.panOffset.y) / state.zoom,
+    x: (svgX - state.panOffset.x) / state.zoom,
+    y: (svgY - state.panOffset.y) / state.zoom,
   };
+}
+
+function updateTrackedPointer(event) {
+  activePointers.set(event.pointerId, {
+    pointerId: event.pointerId,
+    pointerType: event.pointerType,
+    clientX: event.clientX,
+    clientY: event.clientY,
+  });
+}
+
+function removeTrackedPointer(pointerId) {
+  activePointers.delete(pointerId);
+  if (activeDragPointerId === pointerId) {
+    activeDragPointerId = null;
+  }
+}
+
+function getActiveTouchPointers() {
+  return [...activePointers.values()].filter((pointer) => pointer.pointerType === "touch");
+}
+// Convert touch coordinates to SVG space before calculating the pinch center
+function getPinchCenter(pointerA, pointerB) {
+  const ptA = getSvgPoint(pointerA);
+  const ptB = getSvgPoint(pointerB);
+  return {
+    x: (ptA.x + ptB.x) / 2,
+    y: (ptA.y + ptB.y) / 2,
+  };
+}
+
+// Add a helper to calculate pinch distance in SVG space
+function getPinchDistance(pointerA, pointerB) {
+  const ptA = getSvgPoint(pointerA);
+  const ptB = getSvgPoint(pointerB);
+  return Math.hypot(ptB.x - ptA.x, ptB.y - ptA.y);
+}
+
+function beginPinchGesture() {
+  const touchPointers = getActiveTouchPointers();
+  if (touchPointers.length < 2) return;
+  const [pointerA, pointerB] = touchPointers;
+  const center = getPinchCenter(pointerA, pointerB);
+  pinchGesture = {
+    startDistance: getPinchDistance(pointerA, pointerB),
+    startZoom: state.zoom,
+    anchorWorld: getWorldPointFromSvg(center.x, center.y),
+  };
+  state.backgroundGesture = null;
+  state.draggingNode = null;
+  activeDragPointerId = null;
+  state.isPanning = true;
+  renderEditor();
+}
+
+function updatePinchGesture() {
+  const touchPointers = getActiveTouchPointers();
+  if (!pinchGesture || touchPointers.length < 2) {
+    pinchGesture = null;
+    return;
+  }
+
+  const [pointerA, pointerB] = touchPointers;
+  const center = getPinchCenter(pointerA, pointerB);
+  const currentDistance = getPinchDistance(pointerA, pointerB);
+  const nextZoom = clamp(pinchGesture.startZoom * (currentDistance / pinchGesture.startDistance), MIN_ZOOM, MAX_ZOOM);
+
+  state.zoom = nextZoom;
+  state.panOffset.x = center.x - pinchGesture.anchorWorld.x * state.zoom;
+  state.panOffset.y = center.y - pinchGesture.anchorWorld.y * state.zoom;
+  renderEditor();
+}
+
+function shouldUseDirectDrag() {
+  return !isMobileLayout();
 }
 
 export function getSvgPoint(event) {
@@ -39,24 +126,39 @@ export function getClosestNode(x, y, hitRadius = 18) {
   }
   return closest;
 }
-
 export function onEditorMouseDown(event) {
-  if (event.button !== 0) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  updateTrackedPointer(event);
+  if (editorSvg && editorSvg.setPointerCapture) {
+    try { editorSvg.setPointerCapture(event.pointerId); } catch {}
+  }
   const { x, y } = getSvgPoint(event);
-  const { x: worldX, y: worldY } = getWorldPointFromScreen(x, y);
+  const { x: worldX, y: worldY } = getWorldPointFromSvg(x, y);
   const hit = getClosestNode(worldX, worldY);
+  
   if (hit) {
     state.selectedNode = hit.id;
-    state.draggingNode = hit.id;
     state.backgroundGesture = null;
     state.isPanning = false;
+    if (shouldUseDirectDrag() && event.pointerType !== "touch") {
+      state.draggingNode = hit.id;
+      activeDragPointerId = event.pointerId;
+    } else {
+      state.draggingNode = null;
+      activeDragPointerId = null;
+    }
     renderEditor();
+    if (event.pointerType === "touch") {
+      beginPinchGesture();
+    }
     return;
   }
 
   state.backgroundGesture = {
-    startClientX: event.clientX,
+    startClientX: event.clientX, // Kept for threshold checking
     startClientY: event.clientY,
+    startSvgX: x,                // New: SVG-specific start coordinates
+    startSvgY: y,
     startPanX: state.panOffset.x,
     startPanY: state.panOffset.y,
     worldX,
@@ -67,12 +169,24 @@ export function onEditorMouseDown(event) {
   if (state.selectedNode !== null) {
     event.preventDefault();
   }
+
+  if (event.pointerType === "touch") {
+    beginPinchGesture();
+  }
 }
 
 export function onEditorMouseMove(event) {
+  updateTrackedPointer(event);
+
+  if (pinchGesture) {
+    updatePinchGesture();
+    return;
+  }
+
   if (state.draggingNode !== null) {
+    if (event.pointerType === "touch" || event.pointerId !== activeDragPointerId) return;
     const { x, y } = getSvgPoint(event);
-    const { x: worldX, y: worldY } = getWorldPointFromScreen(x, y);
+    const { x: worldX, y: worldY } = getWorldPointFromSvg(x, y);
     state.nodes[state.draggingNode].x = worldX;
     state.nodes[state.draggingNode].y = worldY;
     renderEditor();
@@ -81,14 +195,20 @@ export function onEditorMouseMove(event) {
 
   if (!state.backgroundGesture) return;
 
-  const dx = event.clientX - state.backgroundGesture.startClientX;
-  const dy = event.clientY - state.backgroundGesture.startClientY;
-  const movedEnough = Math.hypot(dx, dy) >= PAN_DRAG_THRESHOLD;
+  // Threshold check remains in screen pixels for consistent feel across zoom levels
+  const dxClient = event.clientX - state.backgroundGesture.startClientX;
+  const dyClient = event.clientY - state.backgroundGesture.startClientY;
+  const movedEnough = Math.hypot(dxClient, dyClient) >= PAN_DRAG_THRESHOLD;
   if (!state.isPanning && !movedEnough) return;
 
+  // Actual pan offset must be applied using SVG coordinates
+  const { x, y } = getSvgPoint(event);
+  const dxSvg = x - state.backgroundGesture.startSvgX;
+  const dySvg = y - state.backgroundGesture.startSvgY;
+
   state.isPanning = true;
-  state.panOffset.x = state.backgroundGesture.startPanX + dx;
-  state.panOffset.y = state.backgroundGesture.startPanY + dy;
+  state.panOffset.x = state.backgroundGesture.startPanX + dxSvg;
+  state.panOffset.y = state.backgroundGesture.startPanY + dySvg;
   renderEditor();
 }
 
@@ -96,18 +216,30 @@ export function onEditorWheel(event) {
   if (!editorSvg) return;
   event.preventDefault();
 
-  const { x: screenX, y: screenY } = getSvgPoint(event);
-  const worldPoint = getWorldPointFromScreen(screenX, screenY);
+  const { x: svgX, y: svgY } = getSvgPoint(event);
+  const worldPoint = getWorldPointFromSvg(svgX, svgY);
   const zoomDirection = event.deltaY < 0 ? ZOOM_STEP : 1 / ZOOM_STEP;
   const nextZoom = clamp(state.zoom * zoomDirection, MIN_ZOOM, MAX_ZOOM);
 
   state.zoom = nextZoom;
-  state.panOffset.x = screenX - worldPoint.x * state.zoom;
-  state.panOffset.y = screenY - worldPoint.y * state.zoom;
+  state.panOffset.x = svgX - worldPoint.x * state.zoom;
+  state.panOffset.y = svgY - worldPoint.y * state.zoom;
   renderEditor();
 }
 
-export function onEditorMouseUp() {
+export function onEditorMouseUp(event) {
+  if (event) {
+    removeTrackedPointer(event.pointerId);
+    if (editorSvg && editorSvg.releasePointerCapture) {
+      try { editorSvg.releasePointerCapture(event.pointerId); } catch {}
+    }
+  }
+
+  if (pinchGesture && getActiveTouchPointers().length < 2) {
+    pinchGesture = null;
+    state.isPanning = false;
+  }
+
   const shouldCreateNode = state.backgroundGesture && !state.isPanning && state.selectedNode !== null;
 
   if (state.draggingNode !== null) {
@@ -131,13 +263,22 @@ export function onEditorMouseUp() {
 }
 
 export function makeSvgLocal(tag, attrs = {}) { return makeSvg(tag, attrs); }
-
 export function renderEditor() {
   editorSvg.replaceChildren();
   editorSvg.classList.toggle("is-panning", state.isPanning);
   editorSvg.classList.toggle("has-dragged-node", state.draggingNode !== null);
+  editorSvg.classList.toggle("has-selection", state.selectedNode !== null);
+  if (mobileEditorControls) {
+    mobileEditorControls.classList.toggle("has-selection", state.selectedNode !== null);
+  }
+  if (deleteNodeBtn) deleteNodeBtn.disabled = state.selectedNode === null;
+  if (moveNodeUpBtn) moveNodeUpBtn.disabled = state.selectedNode === null;
+  if (moveNodeDownBtn) moveNodeDownBtn.disabled = state.selectedNode === null;
+  if (moveNodeLeftBtn) moveNodeLeftBtn.disabled = state.selectedNode === null;
+  if (moveNodeRightBtn) moveNodeRightBtn.disabled = state.selectedNode === null;
 
-  editorSvg.appendChild(makeSvg("rect", { x: 0, y: 0, width: 800, height: 560, rx: 18, fill: "transparent", class: "editor-background" }));
+  // FIX: Make the background rect span infinitely to support letterboxing/pillarboxing
+  editorSvg.appendChild(makeSvg("rect", { x: -5000, y: -5000, width: 10000, height: 10000, fill: "transparent", class: "editor-background" }));
 
   const content = makeSvg("g", { transform: `translate(${state.panOffset.x} ${state.panOffset.y}) scale(${state.zoom})` });
 

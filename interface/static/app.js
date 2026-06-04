@@ -1,16 +1,95 @@
 import { state } from './state.js';
 import * as Editor from './editor.js';
+import * as TreeActions from './treeActions.js';
 import * as Results from './results.js';
 import * as Detail from './detail.js';
 import * as Utils from './utils.js';
 
-const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
-const settingsModal = document.getElementById("settingsModal");
-const settingsBtn = document.getElementById("settingsBtn");
-const closeSettingsModal = document.getElementById("closeSettingsModal");
+// const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
+// const settingsModal = document.getElementById("settingsModal");
+// const settingsBtn = document.getElementById("settingsBtn");
+// const closeSettingsModal = document.getElementById("closeSettingsModal");
 const themeSelect = document.getElementById("themeSelect");
 const languageSelect = document.getElementById("languageSelect");
 const editorSvgEl = document.getElementById("editorSvg");
+const deleteNodeBtn = document.getElementById("deleteNodeBtn");
+const moveNodeUpBtn = document.getElementById("moveNodeUpBtn");
+const moveNodeDownBtn = document.getElementById("moveNodeDownBtn");
+const moveNodeLeftBtn = document.getElementById("moveNodeLeftBtn");
+const moveNodeRightBtn = document.getElementById("moveNodeRightBtn");
+const NODE_NUDGE_STEP = 12; //for mobile tree editing
+
+const themeToggleBtn = document.getElementById("themeToggleBtn");
+const donateBtn = document.getElementById("donateBtn");
+const discordBtn = document.getElementById("discordBtn");
+const languageBtn = document.getElementById("languageBtn");
+
+const donateModal = document.getElementById("donateModal");
+const discordModal = document.getElementById("discordModal");
+const languageModal = document.getElementById("languageModal");
+function setupModal(openBtn, modalEl, closeBtnId) {
+  if (!openBtn || !modalEl) return;
+  const closeBtn = document.getElementById(closeBtnId);
+  
+  openBtn.addEventListener("click", () => modalEl.classList.remove("hidden"));
+  if (closeBtn) closeBtn.addEventListener("click", () => modalEl.classList.add("hidden"));
+  modalEl.addEventListener("click", (e) => {
+    if (e.target === modalEl) modalEl.classList.add("hidden");
+  });
+}
+// Wire up the Modals
+setupModal(donateBtn, donateModal, "closeDonateModal");
+setupModal(discordBtn, discordModal, "closeDiscordModal");
+setupModal(languageBtn, languageModal, "closeLanguageModal");
+
+// Wire up the 1-click Theme Toggle
+if (themeToggleBtn) {
+  themeToggleBtn.addEventListener("click", () => {
+    // Read the current theme from the HTML tag, default to dark if not explicitly light
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    Utils.applyTheme(nextTheme, true);
+  });
+}
+
+// Language selection logic (placeholder hook)
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    const selectedLang = e.currentTarget.dataset.lang;
+    try { localStorage.setItem('search225-language-preference', selectedLang); } catch {}
+    
+    // Update active button styling visually
+    document.querySelectorAll('.lang-btn').forEach(b => b.classList.add('secondary'));
+    e.currentTarget.classList.remove('secondary');
+    
+    // Close modal
+    if (languageModal) languageModal.classList.add('hidden');
+  });
+});
+
+// NEW SEGMENTED CONTROL LOGIC
+const resultsThumbInput = document.getElementById("resultsThumbMode");
+const thumbModeBtns = document.querySelectorAll(".thumb-mode-btn");
+
+if (resultsThumbInput && thumbModeBtns.length > 0) {
+  thumbModeBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      // 1. Remove active class from all buttons
+      thumbModeBtns.forEach(b => b.classList.remove("active"));
+      
+      // 2. Indent the clicked button
+      btn.classList.add("active");
+      
+      // 3. Sync the hidden input so the renderer knows what to draw
+      resultsThumbInput.value = btn.dataset.mode;
+      
+      // 4. Fire the re-render if we have data
+      if (state.queryResult) {
+        Results.renderResults();
+      }
+    });
+  });
+}
 
 function selectedDbConfigs() {
   const isDiagOnly = !document.getElementById("diagToggle").checked;
@@ -81,6 +160,9 @@ async function runQuery() {
 }
 
 function onKeyDown(event) {
+  // Prevent catching arrow keys if typing in an input
+  if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
+
   const detailModalEl = document.getElementById("detailModal");
   if (event.key === "Escape") {
     if (detailModalEl && !detailModalEl.classList.contains("hidden")) {
@@ -90,36 +172,39 @@ function onKeyDown(event) {
     state.selectedNode = null;
     state.draggingNode = null;
     Editor.renderEditor();
+    return;
   }
 
-  if ((event.key === "Backspace" || event.key === "Delete") && state.selectedNode !== null) {
-    event.preventDefault();
-    const target = state.selectedNode;
-    const incidentEdges = state.edges.filter((edge) => edge.u === target || edge.v === target);
-    if (incidentEdges.length > 2) { Utils.setStatus("Cannot delete a vertex with more than 2 connections", true); return; }
-    if (incidentEdges.length === 2) {
-      const neighbors = incidentEdges.map((edge) => (edge.u === target ? edge.v : edge.u));
-      delete state.nodes[target];
-      state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
-      state.edges.push({ u: neighbors[0], v: neighbors[1] });
-      state.selectedNode = null; state.draggingNode = null; Editor.renderEditor(); Utils.setStatus("Ready"); return;
+  // Hook up physical arrow keys to move the node
+  if (state.selectedNode !== null) {
+    if (event.key === "Backspace" || event.key === "Delete") {
+      event.preventDefault();
+      TreeActions.deleteSelectedNode();
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      TreeActions.moveSelectedNode(0, -NODE_NUDGE_STEP);
+    } else if (event.key === "ArrowDown") {
+      event.preventDefault();
+      TreeActions.moveSelectedNode(0, NODE_NUDGE_STEP);
+    } else if (event.key === "ArrowLeft") {
+      event.preventDefault();
+      TreeActions.moveSelectedNode(-NODE_NUDGE_STEP, 0);
+    } else if (event.key === "ArrowRight") {
+      event.preventDefault();
+      TreeActions.moveSelectedNode(NODE_NUDGE_STEP, 0);
     }
-    if (incidentEdges.length === 1) {
-      const [edge] = incidentEdges;
-      const nextSelected = edge.u === target ? edge.v : edge.u;
-      delete state.nodes[target];
-      state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
-      state.selectedNode = nextSelected ?? null; state.draggingNode = null; Editor.renderEditor(); Utils.setStatus("Ready"); return;
-    }
-    delete state.nodes[target];
-    state.edges = state.edges.filter((edge) => edge.u !== target && edge.v !== target);
-    state.selectedNode = null; state.draggingNode = null; Editor.renderEditor(); Utils.setStatus("Ready");
   }
 }
 
 function onDocumentClick(event) {
   if (!editorSvgEl) return;
+  // Ignore clicks inside the canvas
   if (event.target instanceof Node && editorSvgEl.contains(event.target)) return;
+  
+  // Ignore clicks inside the on-screen arrow controls so it doesn't deselect
+  const controlsEl = document.getElementById("mobileEditorControls");
+  if (controlsEl && event.target instanceof Node && controlsEl.contains(event.target)) return;
+
   if (state.selectedNode === null) return;
   state.selectedNode = null;
   Editor.renderEditor();
@@ -132,17 +217,24 @@ const closeModalBtn = document.getElementById("closeModal"); if (closeModalBtn) 
 const prevBtn = document.getElementById("detailPrevBtn"); if (prevBtn) prevBtn.addEventListener("click", () => Detail.navigateDetail(-1));
 const nextBtn = document.getElementById("detailNextBtn"); if (nextBtn) nextBtn.addEventListener("click", () => Detail.navigateDetail(1));
 const detailModalEl = document.getElementById("detailModal"); if (detailModalEl) detailModalEl.addEventListener("click", (e) => { if (e.target === detailModalEl) Detail.closeDetailModal(); });
-if (settingsBtn) settingsBtn.addEventListener("click", () => settingsModal && settingsModal.classList.remove("hidden"));
-if (closeSettingsModal) closeSettingsModal.addEventListener("click", () => settingsModal && settingsModal.classList.add("hidden"));
-if (settingsModal) settingsModal.addEventListener("click", (e) => { if (e.target === settingsModal) settingsModal.classList.add("hidden"); });
-if (themeSelect) themeSelect.addEventListener("change", () => Utils.applyTheme(themeSelect.value, true));
-if (languageSelect) languageSelect.addEventListener("change", () => { try { localStorage.setItem('search225-language-preference', languageSelect.value); } catch {} });
-if (resultsThumbModeSelect) { resultsThumbModeSelect.addEventListener("change", () => { if (state.queryResult) Results.renderResults(); }); }
+
 document.addEventListener("keydown", onKeyDown);
 document.addEventListener("click", onDocumentClick);
-if (editorSvgEl) { editorSvgEl.addEventListener("mousedown", Editor.onEditorMouseDown); editorSvgEl.addEventListener("wheel", Editor.onEditorWheel, { passive: false }); window.addEventListener("mousemove", Editor.onEditorMouseMove); window.addEventListener("mouseup", Editor.onEditorMouseUp); }
+if (editorSvgEl) {
+  editorSvgEl.addEventListener("pointerdown", Editor.onEditorMouseDown);
+  editorSvgEl.addEventListener("pointermove", Editor.onEditorMouseMove);
+  editorSvgEl.addEventListener("pointerup", Editor.onEditorMouseUp);
+  editorSvgEl.addEventListener("pointercancel", Editor.onEditorMouseUp);
+  editorSvgEl.addEventListener("wheel", Editor.onEditorWheel, { passive: false });
+}
 document.getElementById("randomTreeBtn").addEventListener("click", Editor.generateRandomTree);
+if (deleteNodeBtn) deleteNodeBtn.addEventListener("click", TreeActions.deleteSelectedNode);
+if (moveNodeUpBtn) moveNodeUpBtn.addEventListener("click", () => TreeActions.moveSelectedNode(0, -NODE_NUDGE_STEP));
+if (moveNodeDownBtn) moveNodeDownBtn.addEventListener("click", () => TreeActions.moveSelectedNode(0, NODE_NUDGE_STEP));
+if (moveNodeLeftBtn) moveNodeLeftBtn.addEventListener("click", () => TreeActions.moveSelectedNode(-NODE_NUDGE_STEP, 0));
+if (moveNodeRightBtn) moveNodeRightBtn.addEventListener("click", () => TreeActions.moveSelectedNode(NODE_NUDGE_STEP, 0));
 document.getElementById("downloadCpBtn").addEventListener("click", Detail.exportCurrentCp);
+window.addEventListener("resize", () => Editor.renderEditor());
 
 // Initialize theme, preferences and initial render
 Utils.applyTheme(Utils.readStoredThemePreference() || 'system', false);

@@ -295,6 +295,17 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             html = (STATIC_DIR / "index.html").read_bytes()
             _send_bytes(self, "text/html; charset=utf-8", html)
             return
+            
+        # ADD THESE NEW ROUTES FOR THE ABOUT PAGE
+        if self.path == "/about.html":
+            html = (STATIC_DIR / "about.html").read_bytes()
+            _send_bytes(self, "text/html; charset=utf-8", html)
+            return
+
+        if self.path == "/about.css":
+            css = (STATIC_DIR / "about.css").read_bytes()
+            _send_bytes(self, "text/css; charset=utf-8", css)
+            return
 
         if self.path == "/app.js":
             js = (STATIC_DIR / "app.js").read_bytes()
@@ -305,6 +316,7 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             css = (STATIC_DIR / "styles.css").read_bytes()
             _send_bytes(self, "text/css; charset=utf-8", css)
             return
+        
         if self.path.endswith(".svg"):
             # Construct the full path to the file within the static directory
             file_path = STATIC_DIR / self.path.lstrip("/")
