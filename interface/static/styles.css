@@ -1,33 +1,43 @@
 :root {
   color-scheme: dark;
-  --bg: #0b1020;
-  --bg-elevated: rgba(12, 18, 33, 0.80);
+  /* Neutral Dark Backgrounds */
+  --bg: #121212;
+  --bg-elevated: rgba(18, 18, 18, 0.85);
   --bg-soft: rgba(255, 255, 255, 0.03);
   --bg-panel: rgba(255, 255, 255, 0.02);
   --bg-surface: rgba(255, 255, 255, 0.04);
-  --bg-surface-hover: rgba(122, 211, 255, 0.05);
-  --page-gradient: radial-gradient(circle at top, #18233f 0%, #0b1020 55%, #070b14 100%);
-  --line: #26314f;
-  --line-soft: rgba(255, 255, 255, 0.06);
-  --line-faint: rgba(255, 255, 255, 0.05);
-  --text: #e8edf9;
-  --muted: #9daccc;
-  --accent: #7ad3ff;
+  --bg-surface-hover: rgba(255, 255, 255, 0.08);
+  --page-bg: var(--bg); /* Replaces the old gradient */
+  
+  /* Neutral Lines & Text */
+  --line: #2e2e2e;
+  --line-soft: rgba(255, 255, 255, 0.08);
+  --line-faint: rgba(255, 255, 255, 0.04);
+  --text: #f0f0f0;
+  --muted: #8a8a8a;
+  
+  /* Pure White Accent */
+  --accent: #ffffff;
+  --accent-rgb: 255, 255, 255;
+  --btn-bg: rgba(255, 255, 255, 0.08); /* Replaces button gradient */
   --danger: #ff6b8a;
-  --shadow: 0 12px 48px rgba(0,0,0,.24);
-  --shadow-strong: 0 24px 64px rgba(0,0,0,0.5);
+  
+  --shadow: 0 12px 48px rgba(0,0,0,.4);
+  --shadow-strong: 0 24px 64px rgba(0,0,0,0.6);
   --toolbar-icon-bg: rgba(255, 255, 255, 0.05);
-  --toolbar-icon-hover: rgba(122, 211, 255, 0.16);
+  --toolbar-icon-hover: rgba(255, 255, 255, 0.12);
   --settings-card-bg: rgba(255, 255, 255, 0.02);
-  /* crease pattern colors (dark theme defaults) */
-  --cp-h: #9aa8bf;
-  --cp-v: #4dabf7;
+  
+  /* Crease pattern colors (kept standard, neutralized structural colors) */
+  --cp-h: #888888;
+  --cp-v: #4dabf7; /* Mountain/Valley kept standard to preserve technical meaning */
   --cp-m: #ff6b6b;
-  --cp-b: #f0f3f7;
+  --cp-b: #ffffff;
   --packing-h: #01c8c8;
   --packing-v: #4dabf7;
   --packing-m: #ff6b6b;
-  --packing-b: #f0f3f7;
+  --packing-b: #ffffff;
+  
   --quality-perfect: 28, 184, 112;
   --quality-good: 92, 194, 106;
   --quality-acceptable: 214, 180, 55;
@@ -45,20 +55,22 @@ html[data-theme="light"] {
   --bg-panel: rgba(255, 255, 255, 0.9);
   --bg-surface: rgba(17, 30, 52, 0.05);
   --bg-surface-hover: rgba(19, 108, 160, 0.08);
-  --page-gradient: radial-gradient(circle at top, #ffffff 0%, #edf2f9 55%, #dfe8f2 100%);
+  --page-bg: radial-gradient(circle at top, #ffffff 0%, #edf2f9 55%, #dfe8f2 100%);
   --line: #c7d2e3;
   --line-soft: rgba(15, 23, 42, 0.08);
   --line-faint: rgba(15, 23, 42, 0.05);
   --text: #152033;
   --muted: #51627d;
   --accent: #136ca0;
+  --accent-rgb: 19, 108, 160;
+  --btn-bg: linear-gradient(180deg, rgba(19,108,160,0.12), rgba(19,108,160,0.04));
   --danger: #cf465f;
   --shadow: 0 12px 36px rgba(26, 49, 82, 0.12);
   --shadow-strong: 0 24px 64px rgba(26, 49, 82, 0.18);
   --toolbar-icon-bg: rgba(19, 30, 45, 0.06);
   --toolbar-icon-hover: rgba(19, 108, 160, 0.14);
   --settings-card-bg: rgba(255, 255, 255, 0.72);
-  /* crease pattern colors tuned for light background */
+  
   --cp-h: #b7bbc0;
   --cp-v: #389ce8;
   --cp-m: #ec5151;
@@ -67,6 +79,7 @@ html[data-theme="light"] {
   --packing-v: #389ce8;
   --packing-m: #ec5151;
   --packing-b: #2b3a4a;
+  
   --quality-perfect: 24, 153, 92;
   --quality-good: 76, 167, 88;
   --quality-acceptable: 173, 145, 32;
@@ -77,7 +90,8 @@ html[data-theme="light"] {
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; background: var(--page-gradient); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+/* Tell the body to use our new background variable */
+html, body { margin: 0; min-height: 100%; background: var(--page-bg); color: var(--text); font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
 /* body { min-height: 100dvh; overflow: hidden; } */
 body { min-height: 100dvh; overflow: hidden; margin: 0; }
 .app-shell { height: 100dvh; display: flex; flex-direction: column; }
