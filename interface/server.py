@@ -146,10 +146,12 @@ def _serialize_tree_with_preserved_pos(graph: nx.Graph) -> dict[str, Any]:
         if coord is not None
     }
     if not pos:
+        raw_pos = nx.spring_layout(graph, seed=42)
         pos = {
             node: [float(coord[0]), float(coord[1])]
-            for node, coord in get_proportional_tree_pos(graph).items()
+            for node, coord in raw_pos.items()
         }
+        
     return serialize_tree(graph, pos=pos)
 
 
@@ -296,7 +298,15 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             _send_bytes(self, "text/html; charset=utf-8", html)
             return
             
-        # ADD THESE NEW ROUTES FOR THE ABOUT PAGE
+        if self.path in {"/favicon.png", "/favicon.ico"}:
+            file_path = STATIC_DIR / self.path.lstrip("/")
+            if file_path.exists():
+                body = file_path.read_bytes()
+                ctype = "image/png" if self.path.endswith(".png") else "image/x-icon"
+                _send_bytes(self, ctype, body)
+            else:
+                self.send_error(HTTPStatus.NOT_FOUND, "Favicon not found")
+            return
         if self.path == "/about.html":
             html = (STATIC_DIR / "about.html").read_bytes()
             _send_bytes(self, "text/html; charset=utf-8", html)

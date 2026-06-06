@@ -1354,15 +1354,17 @@ def fold_to_cp(fold: Fold225, inst_graph: nx.Graph = None, mv_reference: Cp225 =
                 continue
             f_verts = reflect_group(*path_geoms[i], f_verts)
 
-        # Map to CP indices
+        # Map to CP indices using O(1) Dictionary Lookups
         f_cp_idxs = []
         for v in f_verts:
-            if v not in cp_verts:
+            if v not in cp_vertex_to_idx:  # O(1) hash map check
+                cp_vertex_to_idx[v] = len(cp_verts)
                 cp_verts.append(v)
-                cp_vertex_to_idx[v] = len(cp_verts) - 1
-            f_cp_idxs.append(cp_verts.index(v))
+            
+            # O(1) hash map retrieval instead of O(N) list.index()
+            f_cp_idxs.append(cp_vertex_to_idx[v]) 
+        
         f_cp_verts = [cp_verts[idx] for idx in f_cp_idxs]
-
         # 4. Process Edges for this Face
         for slot, v1_cp in enumerate(f_cp_verts):
             v2_cp = f_cp_verts[(slot + 1) % len(f_cp_verts)]
