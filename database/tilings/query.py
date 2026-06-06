@@ -31,7 +31,6 @@ from database.tilings.faiss_cache import get_t_scales, compute_hkt_signature, DI
 # FEDERATED QUERY FUNCTION
 # =============================================================================
 
-
 def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')], n=5):
     """
     Lightning fast federated search using cached Z-Scores.
@@ -42,12 +41,9 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
     base_hkt_2d = np.array([base_hkt])
 
     all_raw_hits = []
-    
-    # We fetch significantly more hits from FAISS to act as a buffer 
-    # in case many top results are duplicate CPs across different databases.
     search_buffer = n * 10 
     
-    print(f"Federated Search across {len(db_configs)} databases...")
+    print(f"\nFederated Search across {len(db_configs)} databases...")
     
     for N, sym in db_configs:
         prefix = f"database/tilings/faiss_cache/db_{N}_{sym}"
@@ -64,8 +60,6 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
                 continue
 
             z_query = ((base_hkt_2d - mu) / sigma).astype(np.float32)
-            
-            # Fetch the buffered amount
             D, I = index.search(z_query, search_buffer)
             
             for dist, idx in zip(D[0], I[0]):
@@ -79,9 +73,7 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
         except Exception as e:
             print(f"Warning: Failed to search FAISS cache for DB {N}_{sym}. Error: {e}")
 
-    # Sort ALL hits globally across all databases
     all_raw_hits.sort(key=lambda x: x['distance'])
-    
     print("Filtering top hits for unique Crease Patterns...")
 
     results = []
@@ -103,38 +95,33 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
                 db_uri = f'sqlite:///database/tilings/storage/tilings_{N}_{sym}.db'
                 engine = create_engine(db_uri)
                 active_sessions[(N, sym)] = sessionmaker(bind=engine)()
-                
             session = active_sessions[(N, sym)]
             
             tiling = session.query(Tiling).filter_by(id=t_id).first()
             if not tiling:
                 continue
-                
             topo = session.query(Topology).filter_by(id=tiling.topology_id).first()
-            
             blob = pickle.loads(tiling.tiling_blob)
             loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
+            
+            # Freeze the hashable Vertex4 dictionary alongside the binary edge states
+            cp_hash = (topo.binary_state, frozenset(loaded_pos.items()))
+            
+            if cp_hash in seen_cps:
+                continue
+                
+            seen_cps.add(cp_hash)
+            
+            # Only do the heavy math if we know for a fact it is a unique result
             G_raw = nx.Graph()
             G_raw.add_edges_from(decompress_edges(topo.binary_state, N))
             nx.set_node_attributes(G_raw, {node: node for node in G_raw.nodes()}, 'pos')
             cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=N)
             cp = add_hinges(cp)
             
-            # --- THE UNIQUENESS FILTER ---
-            cp_frozen = canonicalize(cp)
-            if cp_frozen in seen_cps:
-                continue # Skip this hit, it's a duplicate CP!
-                
-            seen_cps.add(cp_frozen)
-            cp = unfreeze(cp_frozen)
-            # -----------------------------
-            
             fold = cp_to_fold(cp)
-            # Packing is basically a cp with all the hinges drawn
             res_tree, packing = fold.get_tree_and_packing(include_packing=True)
-            res_packing = fold_to_cp(packing[0],inst_graph = packing[1], mv_reference = cp)
-            # from src.engine.tree import align_queried_tree
-            # res_tree, _ = align_queried_tree(query_tree, res_tree)
+            res_packing = fold_to_cp(packing[0], inst_graph=packing[1], mv_reference=cp)
             
             results.append({
                 'rank': len(results) + 1,
@@ -154,7 +141,6 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
     finally:
         for s in active_sessions.values():
             s.close()
-            
     return results
 # =============================================================================
 # 4. VISUALIZATION & MEGAPLOT
