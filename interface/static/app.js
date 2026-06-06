@@ -17,7 +17,7 @@ const moveNodeUpBtn = document.getElementById("moveNodeUpBtn");
 const moveNodeDownBtn = document.getElementById("moveNodeDownBtn");
 const moveNodeLeftBtn = document.getElementById("moveNodeLeftBtn");
 const moveNodeRightBtn = document.getElementById("moveNodeRightBtn");
-const NODE_NUDGE_STEP = 12; //for mobile tree editing
+const NODE_NUDGE_STEP = 20; //for mobile tree editing
 
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const donateBtn = document.getElementById("donateBtn");
@@ -138,19 +138,49 @@ async function runQuery() {
     const rawText = await response.text();
     let data = {};
     if (rawText) {
-      try { data = JSON.parse(rawText); } catch { data = { error: rawText.slice(0, 200) }; }
+      try { 
+        data = JSON.parse(rawText); 
+      } catch { 
+        // Gracefully catch HTML timeout pages (e.g., Cloudflare 502/504 errors)
+        const textStart = rawText.trim().toLowerCase();
+        if (textStart.startsWith("<!doctype") || textStart.startsWith("<html")) {
+          data = { error: "The search timed out. Try simplifying the tree or requesting fewer results." };
+        } else {
+          data = { error: "An unexpected server error occurred: " + rawText.slice(0, 100) }; 
+        }
+      }
     }
-    if (!response.ok) throw new Error(data.error || "Query failed");
+    
+    if (!response.ok) throw new Error(data.error || `Query failed (Status: ${response.status})`);
+
+
+    const tf = Date.now();
+    const totalFrontendMs = tf - t0;
+    const prof = data.profiling || {};
+    const backendTotalMs = prof.backend_total_ms || 0;
+    const networkMs = Math.max(0, totalFrontendMs - backendTotalMs);
+
+    // Print detailed breakdown to the browser console
+    console.log("📊 --- Query Profiling Breakdown ---");
+    console.log(`Total Roundtrip Time : ${totalFrontendMs}ms`);
+    console.log(` ├── Network / Browser : ${networkMs.toFixed(1)}ms`);
+    console.log(` └── Backend Server    : ${backendTotalMs.toFixed(1)}ms`);
+    console.log(`      ├── Setup        : ${prof.backend_setup_ms?.toFixed(1)}ms`);
+    console.log(`      ├── DB Query     : ${prof.db_query_ms?.toFixed(1)}ms`);
+    console.log(`      └── Post-Process : ${prof.post_processing_ms?.toFixed(1)}ms`);
+    console.log("----------------------------------");
+    
     state.isQueryLoading = false;
     state.queryResult = data;
     state.queryNodeCount = Math.max(1, tree.nodes.length || 0);
-    const tf = Date.now();
     Results.renderResults();
     const resultSummary = document.getElementById("resultSummary");
     if (resultSummary) resultSummary.textContent = `${data.results.length} result(s) loaded.`;
     const n = Number(document.getElementById("resultCount").value || 5);
     const isDiagOnly = !document.getElementById("diagToggle").checked;
-    Utils.setStatus(`Successfully queried ${n} crease patterns. Database size: ${isDiagOnly? "1,235,954": "1,803,458"}. Query time: ${((tf-t0)/1000).toFixed(2)}s`);
+    
+    // Update UI status to show a quick summary of the bottleneck
+    Utils.setStatus(`Successfully queried ${n} patterns. Total: ${(totalFrontendMs/1000).toFixed(2)}s (Net: ${(networkMs/1000).toFixed(2)}s, DB: ${(prof.db_query_ms/1000).toFixed(2)}s)`);
 
   } catch (error) {
     state.isQueryLoading = false;
