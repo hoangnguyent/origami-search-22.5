@@ -146,7 +146,88 @@ def smart_migrate_and_clean(N, symmetry):
     print(f"Malformed & DELETED:     {deleted_count}")
     print(f"Total Time:              {(time.time() - start_time):.2f} seconds")
     print("-" * 50)
+
+def recompute_all_trees(N, symmetry):
+    db_path = f'database/tilings/storage/tilings_{N}_{symmetry}.db'
+    db_uri = f'sqlite:///{db_path}'
     
+    print(f"\n[{N}_{symmetry}] Connecting to DB...")
+    engine = create_engine(db_uri)
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    total_rows = session.query(Tiling.id).count()
+    if total_rows == 0:
+        print("Database is empty. Skipping.")
+        session.close()
+        return
+
+    print(f"[{N}_{symmetry}] Recomputing trees for ALL {total_rows} tilings...")
+
+    # Generator unconditionally yields every row.
+    # Note: We no longer query Tiling.embedding here to save memory, since we overwrite it.
+    def payload_generator():
+        for tiling in session.query(Tiling.id, Tiling.tiling_blob).yield_per(2000):
+            yield (tiling.id, tiling.tiling_blob, N)
+
+    start_time = time.time()
+    num_cores = max(1, multiprocessing.cpu_count() - 1)
+    
+    processed = 0
+    updated = 0
+    batch_updates = []
+    ids_to_delete = []
+    error_log_path = "recompute_errors.txt"
+
+    with multiprocessing.Pool(processes=num_cores) as pool:
+        with open(error_log_path, "a") as err_file:
+            # Iterates over every row in the database
+            for t_id, tree_bytes, err in pool.imap_unordered(worker_task, payload_generator(), chunksize=100):
+                processed += 1
+                
+                if err:
+                    # Unrecoverable error! Mark for deletion.
+                    ids_to_delete.append(t_id)
+                    error_msg = f"ID: {t_id}, N: {N}, Sym: {symmetry} | FATAL: {err}\n"
+                    err_file.write(error_msg)
+                    err_file.flush()
+                    continue
+                    
+                # Successfully recomputed! Queue for update.
+                updated += 1
+                batch_updates.append({'id': t_id, 'embedding': tree_bytes})
+                
+                # Bulk commit every 500 rows
+                if len(batch_updates) >= 500:
+                    session.bulk_update_mappings(Tiling, batch_updates)
+                    session.commit()
+                    batch_updates = []
+                    print(f"  Processed {processed}/{total_rows} ... Updated {updated} trees so far...")
+
+    # Commit any remaining recovered rows
+    if batch_updates:
+        session.bulk_update_mappings(Tiling, batch_updates)
+        session.commit()
+        
+    # --- THE PURGE ---
+    deleted_count = len(ids_to_delete)
+    if deleted_count > 0:
+        print(f"\n[{N}_{symmetry}] Purging {deleted_count} unrecoverable tilings...")
+        # Delete them safely in one massive query
+        session.query(Tiling).filter(Tiling.id.in_(ids_to_delete)).delete(synchronize_session=False)
+        session.commit()
+
+    session.close()
+    
+    print("-" * 50)
+    print(f"FULL RECOMPUTATION COMPLETE FOR N={N}, Sym={symmetry}")
+    print(f"Total Processed:         {processed}")
+    print(f"Successfully Updated:    {updated}")
+    print(f"Failed & DELETED:        {deleted_count}")
+    print(f"Total Time:              {(time.time() - start_time):.2f} seconds")
+    print("-" * 50)
+
+
 def remove_tiling(tiling_id, N, symmetry):
     db_path = f'database/tilings/storage/tilings_{N}_{symmetry}.db'
     db_uri = f'sqlite:///{db_path}'
@@ -186,19 +267,22 @@ def remove_tiling(tiling_id, N, symmetry):
         session.close()
 
 if __name__ == "__main__":
-    targets = [
-        (2253, 4, 'diag'),
-        (19633, 4, 'diag'),
-        (2249, 4, 'diag'),
-        
-    ]
-    for tiling_id, N, sym in targets:
-        remove_tiling(tiling_id, N, sym)
     with keep.running():
         # smart_migrate_and_clean(N=3, symmetry='diag')
         # smart_migrate_and_clean(N=3, symmetry='none')
         # smart_migrate_and_clean(N=3, symmetry='book')
         # smart_migrate_and_clean(N=4, symmetry='diag')
-        smart_migrate_and_clean(N=4, symmetry='none')
-        smart_migrate_and_clean(N=4, symmetry='book')
-        smart_migrate_and_clean(N=5, symmetry='diag')
+        # smart_migrate_and_clean(N=4, symmetry='none')
+        # smart_migrate_and_clean(N=4, symmetry='book')
+        # smart_migrate_and_clean(N=5, symmetry='diag')
+        recompute_all_trees(N=3, symmetry='diag')
+        recompute_all_trees(N=3, symmetry='none')
+        recompute_all_trees(N=3, symmetry='book')
+
+        recompute_all_trees(N=4, symmetry='diag')
+        recompute_all_trees(N=4, symmetry='none')
+        recompute_all_trees(N=4, symmetry='book')
+
+        recompute_all_trees(N=5, symmetry='diag')
+        recompute_all_trees(N=6, symmetry='book')
+        

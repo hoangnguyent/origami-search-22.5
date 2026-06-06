@@ -127,12 +127,14 @@ def build_zscore_index_for_db(N, symmetry):
 if __name__ == "__main__":
     # Build caches for all DB configurations
     configs = [
-        # (3, 'diag'), 
-        # (3, 'none'),
-        # (4, 'diag'), 
-        # (4, 'book'),
+        (3, 'diag'), 
+        (3, 'none'),
+        (3, 'book'),
+        (4, 'diag'), 
+        (4, 'book'),
         (4, 'none'), 
         (5, 'diag'),
+        (6, 'book')
     ]
     for N, sym in configs:
         build_zscore_index_for_db(N, sym)

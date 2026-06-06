@@ -6,6 +6,7 @@ Reads the serialized exact 4D states, calculates the straight skeleton using a q
 
 import math
 import networkx as nx
+import random
 
 from src.engine.math225_core import Vertex4D, Fraction
 from src.engine.cp225 import Cp225, intersection, vertex_kawasaki, freeze, unfreeze, point_on_line
@@ -59,18 +60,22 @@ def load_frozen_blob(blob):
 # =============================================================================
 # 2. STRAIGHT SKELETON BANDAID
 # =============================================================================
-
+# Helper to remove sequential duplicates
+def remove_seq_dupes(pts):
+    if not pts: return []
+    res = [pts[0]]
+    for p in pts[1:]:
+        if math.hypot(p[0]-res[-1][0], p[1]-res[-1][1]) > 1e-5:
+            res.append(p)
+    if len(res) > 1 and math.hypot(res[0][0]-res[-1][0], res[0][1]-res[-1][1]) < 1e-5:
+        res.pop()
+    return res
 def dedupe_exterior(exterior):
-    """Removes overlapping vertices and antiparallel spikes caused by exact solver merges."""
+    """Removes overlapping vertices and antiparallel spikes."""
     if not exterior: return []
+
+    cleaned = remove_seq_dupes(exterior)
     
-    cleaned = [exterior[0]]
-    for p in exterior[1:]:
-        if math.hypot(p[0]-cleaned[-1][0], p[1]-cleaned[-1][1]) > 1e-5:
-            cleaned.append(p)
-    if len(cleaned) > 1 and math.hypot(cleaned[0][0]-cleaned[-1][0], cleaned[0][1]-cleaned[-1][1]) < 1e-5:
-        cleaned.pop()
-        
     while len(cleaned) >= 3:
         spike_found = False
         for i in range(len(cleaned)):
@@ -85,14 +90,21 @@ def dedupe_exterior(exterior):
                     cleaned.pop(i) 
                     spike_found = True
                     break
-        if not spike_found: break
+                    
+        if spike_found:
+            # Re-run sequence deduplication
+            # Popping the tip of a spike (A -> B -> A) leaves a zero-length edge (A -> A)
+            cleaned = remove_seq_dupes(cleaned)
+        else:
+            break
             
     return cleaned
 
-def compute_skeleton_wrapper(exterior):
+def compute_skeleton_wrapper(exterior, verbose=False):
     """
-    Aggressively quantizes the input to bypass IEEE-754 float singularities 
-    in the py_straight_skeleton library.
+    Aggressively quantizes the input to bypass IEEE-754 float singularities.
+    If CGAL crashes due to simultaneous degenerate collisions, it retries 
+    with a microscopic jitter to break the symmetry.
     """
     d = SkeletonTuning.QUANTIZATION_DECIMALS
     quant_exterior = [(round(p[0], d), round(p[1], d)) for p in exterior]
@@ -107,9 +119,26 @@ def compute_skeleton_wrapper(exterior):
     if len(cleaned) < 3: return None
     
     try:
+        # Attempt 1: Standard Quantized
         return compute_skeleton(exterior=cleaned, holes=[])
-    except Exception:
-        return None
+        
+    except Exception as e1:
+        # Attempt 2: Degeneracy Jitter Fallback
+        jittered = []
+        for p in cleaned:
+            jx = p[0] + random.uniform(-1e-6, 1e-6)
+            jy = p[1] + random.uniform(-1e-6, 1e-6)
+            jittered.append((jx, jy))
+            
+        try:
+            return compute_skeleton(exterior=jittered, holes=[])
+            
+        except Exception as e2:
+            if verbose:
+                print(f"\n[Skeleton Error] C++ Library failed on face (Even with Jitter).")
+                print(f"Exception: {e2}")
+                print(f"Sanitized Coordinates: {cleaned}")
+            return None
 
 def canonical_float(p):
     """Standardizes float coordinates for dictionary hashing."""
@@ -153,8 +182,11 @@ def build_crease_pattern(G, pos_solved_exact, faces, N=4, verbose=False):
     # 2. Process Faces
     for face in faces:
         exterior = [pos_float[n] for n in face]
-        skeleton = compute_skeleton_wrapper(exterior)
-        if skeleton is None: continue
+        skeleton = compute_skeleton_wrapper(exterior, verbose=verbose)
+        if skeleton is None: 
+            if verbose:
+                print("Warning: Skeleton computation failed. Skipping face.")
+            continue
             
         # Build un-directed topological graph of the float skeleton
         skel_graph = {}

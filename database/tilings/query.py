@@ -291,10 +291,11 @@ if __name__ == "__main__":
     tree = random_tree(n=20)
     # random_results = random_pull_from_db(N=4, symmetry='diag', n=5)
     results = query_tilings(tree, db_configs=[
-        (4, 'diag'), 
-        (4, 'none'),
-        (3, 'none'),
-        (5, 'diag')
+        # (4, 'diag'), 
+        # (4, 'none'),
+        # (3, 'none'),
+        # (5, 'diag')
+        (3,"diag")
         ], 
     n=5)
     plot_query_megaplot(results, query_tree = tree)

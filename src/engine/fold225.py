@@ -795,30 +795,47 @@ class Fold225:
             rendered_faces.append(vertices)
         return rendered_faces, multiplicities
 
-    def get_tree_and_packing(self, include_packing=False) -> tuple[nx.Graph, tuple]:
+    def get_tree_and_packing(self, include_packing=False, nonuniaxial=False) -> tuple[nx.Graph, tuple]:
         """
         Computes the uniaxial tree by sweeping the fold along a projection axis.
         """
         # --- 1. Axis Selection ---
         # Check even angles 0, 2, 4, 6 for the largest projected bounding box width
-        best_angles = []
-        max_width = -1.0
+        if nonuniaxial:
+            best_angles = []
+            max_width = -1.0
 
-        for angle in [0, 2, 4, 6]:
-            axis_vec = DIRECTIONS[angle]
-            projections = [float(vert.dot_product(axis_vec)) for vert in self.vertices]
-            width = max(projections) - min(projections)
+            for angle in [0, 2, 4, 6]:
+                axis_vec = DIRECTIONS[angle]
+                projections = [float(vert.dot_product(axis_vec)) for vert in self.vertices]
+                width = max(projections) - min(projections)
 
-            if width > max_width + 1e-9:
-                max_width = width
-                best_angles = [angle]
-            elif abs(width - max_width) < 1e-9:
-                best_angles.append(angle)
+                if width > max_width + 1e-9:
+                    max_width = width
+                    best_angles = [angle]
+                elif abs(width - max_width) < 1e-9:
+                    best_angles.append(angle)
 
-        # If ties, we proceed with the first best angle found. A folded state where the axis is ambiguous is probably not a tree we really want (very simple shape, or highly nonuniaxial. If a uniaxial variant exists, it probably would have been upstream)
-        chosen_angle = best_angles[0]
-        axis_vec = DIRECTIONS[chosen_angle]
-        perp_angle = (chosen_angle + 4) % 8
+            # If ties, we proceed with the first best angle found. A folded state where the axis is ambiguous is probably not a tree we really want (very simple shape, or highly nonuniaxial. If a uniaxial variant exists, it probably would have been upstream)
+            angle = best_angles[0]
+        else: 
+            breakloop = False
+            for f, instance_stack in enumerate(self.instances):
+                for i,inst in enumerate(instance_stack):
+                    for c, conn in enumerate(inst):
+                        if conn is None:
+                            edge_idx = self.faces[f][c]
+                            breakloop = True
+                            break
+                    if breakloop:
+                        break
+                if breakloop:
+                    break
+            v1_idx, v2_idx = self.edges[edge_idx]
+            v1, v2 = self.vertices[v1_idx], self.vertices[v2_idx]
+            angle = v1.angle_to(v2)
+        axis_vec = DIRECTIONS[angle % 8]
+        perp_angle = (angle + 4) % 8
 
         # --- 2. Hinge Point Generation & Slicing ---
         # Project and find unique hinge points along the axis
