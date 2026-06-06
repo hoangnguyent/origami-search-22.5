@@ -180,7 +180,7 @@ async function runQuery() {
     const isDiagOnly = !document.getElementById("diagToggle").checked;
     
     // Update UI status to show a quick summary of the bottleneck
-    Utils.setStatus(`Successfully queried ${n} patterns. Total: ${(totalFrontendMs/1000).toFixed(2)}s (Net: ${(networkMs/1000).toFixed(2)}s, DB: ${(prof.db_query_ms/1000).toFixed(2)}s)`);
+    Utils.setStatus(`Successfully queried ${n} patterns in ${(totalFrontendMs/1000).toFixed(2)}s`);
 
   } catch (error) {
     state.isQueryLoading = false;

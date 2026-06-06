@@ -30,6 +30,26 @@ from interface.serialization import (
     serialize_tree,
 )
 
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
+import time
+
+# 1. Define the scope of access
+scope = [
+    "https://spreadsheets.google.com/feeds",
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive.file",
+    "https://www.googleapis.com/auth/drive"
+]
+
+# 2. Authenticate using the JSON key
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
+
+# 3. Open the specific Google Sheet (Must match the exact title of your sheet)
+sheet = client.open("22.5 logs").sheet1
+
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TOKEN = os.environ.get("SEARCH22_INTERFACE_TOKEN", "").strip()
@@ -395,7 +415,7 @@ class InterfaceHandler(BaseHTTPRequestHandler):
         if not _require_token(self):
             self.send_error(HTTPStatus.UNAUTHORIZED, "Missing or invalid interface token")
             return
-
+        t0 = time.time()
         payload = _read_json(self)
         query_tree = _build_query_graph(payload["tree"])
         if not nx.is_connected(query_tree):
@@ -414,6 +434,19 @@ class InterfaceHandler(BaseHTTPRequestHandler):
         results = query_tilings(query_tree, db_configs=db_configs, n=n_results)
         response = build_response_bundle(query_tree, results, db_configs)
         _send_json(self, HTTPStatus.OK, response)
+
+        # Write to logs
+        try:
+            country = self.headers.get("CF-IPCountry", "Unknown")
+            real_ip = self.headers.get("CF-Connecting-IP", "Unknown")
+            ray_id = self.headers.get("CF-Ray", "Unknown")
+            
+            user_agent = self.headers.get("User-Agent", "Unknown")
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            row_data = [timestamp, n_results, time.time() - t0, country, real_ip, ray_id, user_agent, str(payload["tree"])]
+            sheet.append_row(row_data)
+        except Exception as e:
+            print(f"Failed to log to Google Sheets: {e}")
 
 
 def main() -> None:

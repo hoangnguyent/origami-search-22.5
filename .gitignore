@@ -9,7 +9,7 @@
 bin/
 obj/
 
-
+credentials.json
 # uv
 uv.lock
 
