@@ -13,6 +13,9 @@ credentials.json
 # uv
 uv.lock
 
+interface/server_debug.py
+database/tilings/log_monitor.py
+database/tilings/user_logs.csv
 renders/
 
 # latex stuff
@@ -28,6 +31,7 @@ renders/
 
 .vscode/
 
+*.zip
 *.db
 *.pkl
 *.index

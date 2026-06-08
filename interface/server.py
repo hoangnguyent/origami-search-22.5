@@ -12,11 +12,12 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-
+from urllib.parse import urlparse, parse_qs
 import networkx as nx
 
 from database.tilings.faiss_cache import DIMENSION, compute_hkt_signature, get_t_scales
 from database.tilings.query import query_tilings
+from database.tilings.inspect import pull_specific_tiling
 from src.engine.tree import EIG_COUNT, RESOLUTION, extract_eigenvalues, get_proportional_tree_pos
 from src.engine.fold225 import PLOT_COLORS, ALPHA
 
@@ -313,12 +314,53 @@ class InterfaceHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self) -> None:  # noqa: N802
+
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+
+        # 1. SERVE THE HTML PAGE
+        if path in {"/view", "/view.html"}:
+            html = (STATIC_DIR / "view.html").read_bytes()
+            _send_bytes(self, "text/html; charset=utf-8", html)
+            return
+
+        # 2. SERVE THE EXACT TILING DATA (API)
+        if path == "/api/fetch_tiling":
+            qs = parse_qs(parsed_url.query)
+            try:
+                tiling_id = int(qs.get("id", [0])[0])
+                N = int(qs.get("N", [4])[0])
+                symmetry = qs.get("sym", ["diag"])[0]
+                
+                # Fetch the exact geometry from SQLite
+                results = pull_specific_tiling(tiling_id, N, symmetry)
+                
+                if not results:
+                    self.send_error(HTTPStatus.NOT_FOUND, "Tiling not found")
+                    return
+                
+                # We need to construct a dummy query_tree because build_response_bundle expects one.
+                # Since we bypass FAISS, we just pass an empty graph.
+                dummy_query = nx.Graph() 
+                
+                # Serialize exactly like a normal FAISS query response
+                response = build_response_bundle(
+                    query_tree=dummy_query, 
+                    results=results, 
+                    db_configs=[(N, symmetry)]
+                )
+                
+                _send_json(self, HTTPStatus.OK, response)
+            except Exception as e:
+                self.send_error(HTTPStatus.BAD_REQUEST, f"Invalid parameters: {e}")
+            return
+        
         if self.path in {"/", "/index.html"}:
             html = (STATIC_DIR / "index.html").read_bytes()
             _send_bytes(self, "text/html; charset=utf-8", html)
             return
             
-        if self.path in {"/favicon.png", "/favicon.ico"}:
+        if self.path in {"/assets/favicon.png", "/assets/favicon.ico"}:
             file_path = STATIC_DIR / self.path.lstrip("/")
             if file_path.exists():
                 body = file_path.read_bytes()

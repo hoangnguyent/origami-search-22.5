@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>View Pattern - DiscovOri 22.5</title>
+  <link rel="stylesheet" href="/styles.css" />
+  <link rel="icon" type="image/png" href="./assets/favicon.png" />
+  <style>
+    .view-main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 2rem;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .canvas-container {
+      background: var(--bg-panel, #2b2b2b);
+      border-radius: 8px;
+      padding: 2rem;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+      width: 100%;
+      max-width: 800px;
+      display: flex;
+      justify-content: center;
+    }
+    canvas {
+      width: 100%;
+      max-width: 700px;
+      height: auto;
+      display: block;
+    }
+    #viewTitle {
+      margin-bottom: 1.5rem;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-bar">
+      <div class="top-bar-left">
+        <h1 id="appTitle">
+            <a href="/" style="text-decoration: none; color: inherit;">DiscovOri 22.5</a>
+        </h1>
+      </div>
+      <div class="top-bar-actions">
+        <button id="donateBtn" class="icon-btn action-icon" type="button" aria-label="Donate" title="Donate">
+          <img src="/assets/donate.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="discordBtn" class="icon-btn action-icon" type="button" aria-label="Join Discord" title="Join Discord">
+          <img src="/assets/discord.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="themeToggleBtn" class="icon-btn action-icon" type="button" aria-label="Toggle light/dark mode" title="Toggle Theme">
+          <img src="/assets/light-dark.svg" alt="" aria-hidden="true" />
+        </button>
+        <button id="languageBtn" class="icon-btn action-icon" type="button" aria-label="Change Language" title="Change Language">
+          <img src="/assets/language.svg" alt="" aria-hidden="true" />
+        </button>
+        <a href="/about.html" target="_blank" class="icon-btn action-icon" aria-label="Help and Documentation" title="Help & About">
+          <img src="/assets/info.svg" alt="" aria-hidden="true" />
+        </a>
+      </div>
+    </header>
+
+    <div id="donateModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeDonateModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header"><h2>Donate</h2></div>
+        <div class="settings-panel">
+          <p class="modal-meta" style="text-align: left; max-width: none;">This software is free to use, but costs money to host. If you find SEARCH 22.5 useful, consider supporting financially for its continued development!</p>
+          <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
+            <a href="https://www.paypal.com/paypalme/theplantpsychologist" target="_blank">
+              <button type="button">Donate via PayPal</button>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="discordModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeDiscordModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header"><h2>Community and development</h2></div>
+        <div class="settings-panel">
+          <p class="modal-meta" style="text-align: left; max-width: none;">Join our Discord server to get tech support, report bugs, and request new features.</p>
+          <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
+            <a href="https://discord.gg/5YcGh8b9yC" target="_blank">
+              <button type="button">Join the community</button>
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="languageModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeLanguageModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header"><h2>Select Language</h2></div>
+        <div class="settings-panel">
+          <div class="language-grid">
+            <button type="button" class="lang-btn" data-lang="en">🇺🇸 English</button>
+            <button type="button" class="lang-btn secondary" data-lang="es">🇪🇸 Español</button>
+            <button type="button" class="lang-btn secondary" data-lang="ja">🇯🇵 日本語</button>
+            <button type="button" class="lang-btn secondary" data-lang="zh">🇨🇳 中文</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <main class="view-main">
+      <h2 id="viewTitle">Loading Pattern...</h2>
+      <div class="canvas-container">
+        <canvas id="cpCanvas" width="1000" height="1000"></canvas>
+      </div>
+    </main>
+  </div>
+
+  <script type="module" src="/interface/static/view.js"></script>
+</body>
+</html>
