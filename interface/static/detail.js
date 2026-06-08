@@ -83,7 +83,7 @@ export function renderDetail(result, index) {
   const quality = getMatchQuality(result.distance, state.queryNodeCount);
   modalMeta.dataset.quality = quality;
   modalMeta.classList.add("match-quality");
-  modalMeta.textContent = `Match quality: ${quality} • Normalized distance: ${(result.distance*Math.exp(state.queryNodeCount)/1000).toFixed(4)} • Tiling ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
+  modalMeta.textContent = `Match quality: ${quality} • Distance: ${result.distance.toFixed(4)} • Tiling ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
   const leftPane = buildDetailPane({
     side: "left",
     activeValue: state.detailViewModes.left,

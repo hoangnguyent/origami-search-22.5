@@ -25,7 +25,8 @@ from src.engine.cp225 import canonicalize, unfreeze
 from src.engine.fold225 import cp_to_fold, fold_to_cp
 from src.engine.tree import extract_eigenvalues, get_proportional_tree_pos, EIG_COUNT, RESOLUTION
 from database.tilings.build_tilings import decompress_edges, Topology, Tiling
-from database.tilings.faiss_cache import get_t_scales, compute_hkt_signature, DIMENSION
+# from database.tilings.faiss_cache_hkt import get_t_scales, compute_hkt_signature, DIMENSION
+from database.tilings.faiss_cache_wks import compute_wks_signature, E_SWEEP
 
 # =============================================================================
 # FEDERATED QUERY FUNCTION
@@ -37,7 +38,7 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
     Dynamically connects to SQLite and filters for CP uniqueness.
     """
     raw_query_eig = extract_eigenvalues(query_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
-    base_hkt = compute_hkt_signature(raw_query_eig, dim = DIMENSION).astype('float32')
+    base_hkt = compute_wks_signature(raw_query_eig).astype('float32')
     base_hkt_2d = np.array([base_hkt])
 
     all_raw_hits = []
@@ -46,6 +47,7 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
     print(f"\nFederated Search across {len(db_configs)} databases...")
     
     for N, sym in db_configs:
+        print("hi")
         prefix = f"database/tilings/faiss_cache/db_{N}_{sym}"
         try:
             with open(f"{prefix}_data.pkl", 'rb') as f:
@@ -199,8 +201,8 @@ def plot_query_megaplot(results, query_tree = None):
     col_titles = ["1. Topology", "2. Exact Tiling", "3. Crease Pattern", "4. Folded State", "5. Resulting Tree","6. Profile match"]
     if query_tree is not None:
         raw_query_eig = extract_eigenvalues(query_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
-        query_hkt = compute_hkt_signature(raw_query_eig, dim=DIMENSION)
-    t_scales = get_t_scales(dim=DIMENSION)
+        query_hkt = compute_wks_signature(raw_query_eig)
+    t_scales = E_SWEEP
     for i, res in enumerate(results):
         ax_topo, ax_tile, ax_cp, ax_fold, ax_tree, ax_hkt = axes[i]
         
@@ -254,10 +256,10 @@ def plot_query_megaplot(results, query_tree = None):
             normalized_query_hkt = (query_hkt - mu) / sigma
             ax_hkt.plot(t_scales, normalized_query_hkt, 'k--', label="User Query", alpha=0.7)
         res_eig = extract_eigenvalues(res['tree'], eig_count=EIG_COUNT, resolution=RESOLUTION)
-        res_hkt = compute_hkt_signature(res_eig, dim=DIMENSION)
+        res_hkt = compute_wks_signature(res_eig)
         normalized_res_hkt = (res_hkt - mu) / sigma
         ax_hkt.plot(t_scales, normalized_res_hkt, 'b-', label="Database Result")
-        ax_hkt.set_xscale('log')
+        # ax_hkt.set_xscale('log')
         # ax_hkt.set_title("Heat Kernel Trace Z(t)")
         ax_hkt.set_xlabel("Time (t)")
         ax_hkt.set_ylabel("Normalized Heat Z")

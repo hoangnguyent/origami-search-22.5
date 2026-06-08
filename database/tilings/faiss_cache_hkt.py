@@ -24,7 +24,7 @@ def get_t_scales(dim=DIMENSION):
     t_macro = np.geomspace(1.0, 10.0, num=8)
     return np.concatenate([t_micro, t_action, t_macro])
 
-def compute_hkt_signature(eigenvalues, dim=32):
+def compute_hkt_signature(eigenvalues, dim=DIMENSION):
     """ Converts raw padded eigenvalues to a normalized HKT signature. """
     t_scales = get_t_scales(dim)
     # valid_mask = eigenvalues > 1e-6 
