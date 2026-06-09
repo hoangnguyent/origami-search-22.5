@@ -26,7 +26,7 @@ from src.engine.fold225 import cp_to_fold, fold_to_cp
 from src.engine.tree import extract_eigenvalues, get_proportional_tree_pos, EIG_COUNT, RESOLUTION
 from database.tilings.build_tilings import decompress_edges, Topology, Tiling
 # from database.tilings.faiss_cache_hkt import get_t_scales, compute_hkt_signature, DIMENSION
-from database.tilings.faiss_cache_wks import compute_wks_signature, E_SWEEP
+from database.tilings.faiss_cache import compute_wks_signature, E_SWEEP
 
 # =============================================================================
 # FEDERATED QUERY FUNCTION

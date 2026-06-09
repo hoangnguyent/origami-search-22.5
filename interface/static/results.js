@@ -52,10 +52,12 @@ export function renderResults() {
     thumb.appendChild(svg);
 
     const meta = document.createElement("div");
-    const quality = getMatchQuality(result.distance, state.queryNodeCount);
+    const norm = (Math.sqrt(result.heat.query.reduce((sum, val) => sum + val * val, 0)));
+    const quality = getMatchQuality(result.distance/norm, state.queryNodeCount);
     meta.className = "result-meta";
     meta.dataset.quality = quality;
     meta.classList.add("match-quality");
+
     meta.innerHTML = `
       <div><strong>Option ${result.rank ?? index + 1}</strong></div>
       <div>Match quality: ${quality}</div>
