@@ -439,5 +439,5 @@ export function generateRandomTree() {
   renderEditor();
   
   const finalLeaves = getLeafCount();
-  Utils.setStatus(`Generated random uniaxial tree with ${finalLeaves} leaf nodes.`);
+  setStatus(`Generated random uniaxial tree with ${finalLeaves} leaf nodes.`);
 }

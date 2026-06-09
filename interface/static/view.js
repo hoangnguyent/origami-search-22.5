@@ -1,6 +1,5 @@
 import * as Utils from './js/utils.js';
-import { makeSvg, renderCpSvg, renderPackingSvg, renderFoldSvg, renderGraphSvg, renderHeatSvg } from './js/renderers.js';
-
+import { makeSvg, renderCpSvg, renderPackingSvg, renderFoldSvg, renderGraphSvg, renderHeatSvg, transformX, transformY, fitScale } from './js/renderers.js';
 // --- Global UI & Modal Wiring ---
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const donateBtn = document.getElementById("donateBtn");
@@ -49,27 +48,132 @@ function getCPCoords(event, svgEl) {
         y: 1.0 - normY
     };
 }
+// --- Coordinate Math & Ray Casting ---
+function getSafeBounds(model, compMap = null) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    
+    // 1. Prefer compMap if available (These are guaranteed to be pure [x, y] floats from Python)
+    if (compMap && compMap.length > 0) {
+        for (const facet of compMap) {
+            for (const pt of facet.vertices) {
+                if (pt[0] < minX) minX = pt[0];
+                if (pt[0] > maxX) maxX = pt[0];
+                if (pt[1] < minY) minY = pt[1];
+                if (pt[1] > maxY) maxY = pt[1];
+            }
+        }
+        return { minX, maxX, minY, maxY };
+    }
+
+    // 2. Fallback for Graph Nodes
+    const pts = model.vertices || (model.nodes ? model.nodes.map(n => n.pos || [n.x, n.y]) : []);
+    for (const pt of pts) {
+        if (!pt || typeof pt === 'string') continue; // Skip unparsed stringified Python objects
+        
+        const x = pt[0] !== undefined ? pt[0] : pt.x;
+        const y = pt[1] !== undefined ? pt[1] : pt.y;
+        
+        if (x !== undefined && y !== undefined) {
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+        }
+    }
+    return { minX, maxX, minY, maxY };
+}
+
+function getSvgCoords(event, svgEl) {
+    const pt = svgEl.createSVGPoint();
+    pt.x = event.clientX;
+    pt.y = event.clientY;
+    const svgP = pt.matrixTransform(svgEl.getScreenCTM().inverse());
+    return { x: svgP.x, y: svgP.y };
+}
+
+function isPointInPolygon(point, vs) {
+    let x = point.x, y = point.y;
+    let inside = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        let xi = vs[i][0], yi = vs[i][1];
+        let xj = vs[j][0], yj = vs[j][1];
+        let intersect = ((yi > y) !== (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+        if (intersect) inside = !inside;
+    }
+    return inside;
+}
+
+// --- Interactive Highlighting Logic ---
+function highlightComponent(compId, result) {
+    // 1. Clear previous highlights
+    document.getElementById('packing-highlight-layer')?.remove();
+    document.querySelectorAll('#target-tree line.edge').forEach(line => {
+        line.style.stroke = '';
+        line.style.strokeWidth = '';
+    });
+
+    if (compId === null || compId === undefined) return;
+
+    // 2. Highlight Tree Edge
+    const targetLine = document.querySelector(`#target-tree line.edge[data-comp-id="${compId}"]`);
+    if (targetLine) {
+        targetLine.style.stroke = 'var(--danger, #ff6b8a)';
+        targetLine.style.strokeWidth = '12'; // Thick visual highlight
+        targetLine.parentNode.appendChild(targetLine); // Bring visual line to front
+        
+        // Bring hitbox to the front so it doesn't get buried and remains clickable
+        const hitbox = document.querySelector(`#target-tree line.edge-hitbox[data-comp-id="${compId}"]`);
+        if (hitbox) hitbox.parentNode.appendChild(hitbox);
+    }
+
+    // 3. Highlight Packing Facets
+    const packingSvg = document.querySelector('#target-packing svg');
+    if (packingSvg && result && result.comp_map) {
+        const vb = packingSvg.getAttribute('viewBox').split(' ').map(Number);
+        const w = vb[2] || 1000;
+        const h = vb[3] || 1000;
+
+        const layer = makeSvg('g', { id: 'packing-highlight-layer' });
+        const facets = result.comp_map.filter(f => f.comp_id === compId);
+        
+        // Pass comp_map to guarantee clean float bounds for perfect scaling
+        const bounds = getSafeBounds(result.packing, result.comp_map);
+        const scale = fitScale(bounds, w, h);
+
+        facets.forEach(facet => {
+            const points = facet.vertices.map(v => {
+                const sx = transformX(v[0], bounds, scale, w);
+                const sy = transformY(v[1], bounds, scale, h);
+                return `${sx},${sy}`;
+            }).join(' ');
+
+            layer.appendChild(makeSvg('polygon', {
+                points: points,
+                fill: 'rgba(255, 107, 138, 0.4)',
+                // stroke: 'var(--danger, #ff6b8a)',
+                'stroke-width': '0',
+                'pointer-events': 'none' // Crucial: prevents overlay from blocking future clicks
+            }));
+        });
+        packingSvg.appendChild(layer);
+    }
+}
 
 // --- Dynamic SVG Rendering ---
 function populatePanel(containerId, renderFn, data, options = {}) {
     if (!data) return null;
-    
-    // Find the panel directly by its ID
     const container = document.getElementById(containerId);
     if (!container) return null;
-    
-    // Clear placeholders or previously drawn SVGs
     container.innerHTML = ''; 
     
     let viewBox = options.viewBox || "0 0 1000 1000";
-    if (renderFn === renderHeatSvg) viewBox = "0 0 420 240";
+    // if (renderFn === renderHeatSvg) viewBox = "0 0 420 240";
 
     const svg = makeSvg("svg", { 
         viewBox: viewBox, 
         style: "width: 100%; height: 100%; display: block; overflow: visible;" 
     });
     
-    // Route to the correct renderer signature
     if (renderFn === renderHeatSvg) {
         renderFn(svg, data);
     } else if (renderFn === renderGraphSvg) {
@@ -83,36 +187,52 @@ function populatePanel(containerId, renderFn, data, options = {}) {
 }
 
 function drawAllPanels(result) {
-    // Tier 1 & 2: Interactive SVG Panels
     const cpSvg = populatePanel("target-cp", renderCpSvg, result.cp, {w: 1000, h: 1000});
-    setupInteractiveSvg(cpSvg, "CP");
+    setupInteractiveSvg(cpSvg, "CP", result);
     
     const packingSvg = populatePanel("target-packing", renderPackingSvg, result.packing, {w: 1000, h: 1000});
-    setupInteractiveSvg(packingSvg, "Packing");
+    setupInteractiveSvg(packingSvg, "Packing", result);
     
     const treeSvg = populatePanel("target-tree", renderGraphSvg, result.tree, {w: 1000, h: 1000, nodeFill: "#8cffc1"});
-    setupInteractiveSvg(treeSvg, "Tree");
+    setupInteractiveSvg(treeSvg, "Tree", result);
     
-    // Tier 3: Static Information SVGs
     populatePanel("target-topology", renderGraphSvg, result.topology, {w: 1000, h: 1000, nodeFill: "#a7c7ff"});
     populatePanel("target-tiling", renderGraphSvg, result.solved_tiling, {w: 1000, h: 1000, nodeFill: "#8cffc1"});
     populatePanel("target-fold", renderFoldSvg, result.fold, {w: 1000, h: 1000});
     
-    if (result.heat) {
-        // Assuming you add an id="target-heat" div somewhere in the future
-        populatePanel("target-heat", renderHeatSvg, result.heat);
-    }
+    if (result.heat) populatePanel("target-heat", renderHeatSvg, result.heat);
 }
 
-function setupInteractiveSvg(svg, name) {
+function setupInteractiveSvg(svg, name, result) { 
     if (!svg) return;
     const coordDisplay = document.getElementById("clickCoordDisplay");
     
-    svg.style.cursor = "crosshair";
-    
+    svg.style.cursor = name === "Tree" ? "pointer" : "crosshair";
+
+    // --- MASSIVE CLICK WINDOW FOR TREE EDGES ---
+    if (name === "Tree") {
+        // Wait briefly for the DOM to append the SVG children
+        setTimeout(() => {
+            const edges = svg.querySelectorAll('line.edge');
+            edges.forEach(edge => {
+                // Prevent infinite duplication on re-renders
+                if (edge.nextSibling && edge.nextSibling.classList && edge.nextSibling.classList.contains('edge-hitbox')) return;
+                
+                const fatBox = edge.cloneNode(true);
+                fatBox.setAttribute('stroke', 'transparent');
+                fatBox.setAttribute('stroke-width', '25'); // Invisible 25px wide click target
+                fatBox.setAttribute('class', 'edge-hitbox');
+                fatBox.style.cursor = 'pointer';
+                
+                // Insert directly above the visual line
+                edge.parentNode.insertBefore(fatBox, edge.nextSibling);
+            });
+        }, 50);
+    }
+
     svg.addEventListener("mousemove", (e) => {
-        const pt = getCPCoords(e, svg);
-        if (coordDisplay) coordDisplay.textContent = `(x: ${pt.x.toFixed(4)}, y: ${pt.y.toFixed(4)})`;
+        const pt = getSvgCoords(e, svg);
+        if (coordDisplay) coordDisplay.textContent = `(x: ${pt.x.toFixed(1)}, y: ${pt.y.toFixed(1)})`;
     });
     
     svg.addEventListener("mouseleave", () => {
@@ -120,12 +240,46 @@ function setupInteractiveSvg(svg, name) {
     });
 
     svg.addEventListener("click", (e) => {
-        const pt = getCPCoords(e, svg);
-        console.log(`[${name}] Clicked at exact coords:`, pt);
-        // TODO: Add interactive overlay/highlight logic here
+        const pt = getSvgCoords(e, svg);
+
+        if (name === "Packing" && result && result.comp_map) {
+            const vb = svg.getAttribute('viewBox').split(' ').map(Number);
+            const w = vb[2] || 1000;
+            const h = vb[3] || 1000;
+            
+            // Bypass corrupt Vertex4 strings using the clean comp_map floats
+            const bounds = getSafeBounds(result.packing, result.comp_map);
+            const scale = fitScale(bounds, w, h);
+            
+            let clickedCompId = null;
+
+            for (const facet of result.comp_map) {
+                // Pre-map mathematical vertices to the exact visual SVG coordinates
+                const svgPolygon = facet.vertices.map(v => [
+                    transformX(v[0], bounds, scale, w),
+                    transformY(v[1], bounds, scale, h)
+                ]);
+
+                if (isPointInPolygon(pt, svgPolygon)) {
+                    clickedCompId = facet.comp_id;
+                    break;
+                }
+            }
+            highlightComponent(clickedCompId, result);
+        }
+
+        if (name === "Tree" && result) {
+            // Trigger on either the visual edge OR the invisible fat hitbox
+            const edge = e.target.closest('line.edge, line.edge-hitbox');
+            if (edge) {
+                const compId = parseInt(edge.getAttribute('data-comp-id'));
+                if (!isNaN(compId)) highlightComponent(compId, result);
+            } else {
+                highlightComponent(null, result);
+            }
+        }
     });
 }
-
 // --- View Logic ---
 async function initView() {
     Utils.applyTheme(Utils.readStoredThemePreference() || 'system', false);
@@ -210,7 +364,6 @@ async function initView() {
             const symTitle = sym.charAt(0).toUpperCase() + sym.slice(1);
             titleEl.textContent = `Pattern ${N}${symChar}${tilingId}`;
         }
-        
         // Remove loading spinner and reveal containers and export buttons
         const spinner = document.getElementById('loadingSpinner');
         if (spinner) spinner.remove();

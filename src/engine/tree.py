@@ -56,7 +56,7 @@ def merge_edges(tree):
 
 def get_proportional_tree_pos(G):
     """
-    Tree plot helper
+    Tree plot helper for python debugging, not meant for frontend use. 
     """
     if not G.nodes():
         return {}

@@ -19,7 +19,7 @@ import networkx as nx
 from database.tilings.faiss_cache import DIMENSION, E_SWEEP, compute_wks_signature
 from database.tilings.query import query_tilings
 from database.tilings.inspect import pull_specific_tiling
-from src.engine.tree import EIG_COUNT, RESOLUTION, extract_eigenvalues, get_proportional_tree_pos
+from src.engine.tree import EIG_COUNT, RESOLUTION, extract_eigenvalues
 from src.engine.fold225 import PLOT_COLORS, ALPHA
 
 from interface.serialization import (
@@ -28,8 +28,10 @@ from interface.serialization import (
     serialize_cp,
     serialize_fold,
     serialize_graph,
+    serialize_query_tree,
     serialize_result_pickle,
-    serialize_tree,
+    serialize_solved_tiling,
+    serialize_topology_graph,
 )
 
 import gspread
@@ -49,7 +51,7 @@ scope = [
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 
-# 3. Open the specific Google Sheet (Must match the exact title of your sheet)
+# 3. Open the specific Google Sheet
 sheet = client.open("22.5 logs").sheet1
 
 
@@ -144,67 +146,6 @@ def _normalize_db_configs(payload: dict[str, Any]) -> list[tuple[int, str]]:
     return normalized
 
 
-def _serialize_query_tree(query_tree: nx.Graph) -> dict[str, Any]:
-    pos = {
-        node: [float(coord[0]), float(coord[1])]
-        for node, coord in nx.get_node_attributes(query_tree, "pos").items()
-        if coord is not None
-    }
-    if not pos:
-        pos = {
-            node: [float(coord[0]), float(coord[1])]
-            for node, coord in get_proportional_tree_pos(query_tree).items()
-        }
-    return serialize_tree(query_tree, pos=pos)
-
-
-# def _serialize_tree_with_preserved_pos(graph: nx.Graph) -> dict[str, Any]:
-#     if isinstance(graph, tuple):
-#         graph = graph[0]
-
-#     pos = {
-#         node: [float(coord[0]), float(coord[1])]
-#         for node, coord in nx.get_node_attributes(graph, "pos").items()
-#         if coord is not None
-#     }
-#     if not pos:
-#         raw_pos = nx.planar_layout(graph)
-#         pos = {
-#             node: [float(coord[0]), float(coord[1])]
-#             for node, coord in raw_pos.items()
-#         }
-        
-#     return serialize_tree(graph, pos=pos)
-
-
-def _serialize_topology_graph(graph: nx.Graph, seed: int = 42) -> dict[str, Any]:
-    if graph.number_of_nodes() == 0:
-        return {"nodes": [], "edges": []}
-    # Prefer explicit integer/grid node positions when available (stored in node attribute 'pos')
-    node_pos = nx.get_node_attributes(graph, "pos")
-    if node_pos:
-        # Ensure positions are pairs and usable; otherwise fall back to layout
-        ok = True
-        for v, p in node_pos.items():
-            try:
-                if not (isinstance(p, (list, tuple)) and len(p) >= 2):
-                    ok = False
-                    break
-            except Exception:
-                ok = False
-                break
-        if ok:
-            return serialize_graph(graph, pos=node_pos)
-
-    pos = nx.spring_layout(graph, seed=seed)
-    return serialize_graph(graph, pos=pos)
-
-
-def _serialize_solved_tiling(graph: nx.Graph, pos_solved: dict[Any, Any]) -> dict[str, Any]:
-    pos = {node: _vertex_to_xy(value) for node, value in pos_solved.items()}
-    return serialize_graph(graph, pos=pos)
-
-
 def _sanitize_for_pickle(obj: Any) -> Any:
     """Recursively convert non-pickle-friendly objects to basic Python types."""
     if obj is None or isinstance(obj, (bool, int, float, str)):
@@ -263,7 +204,7 @@ def _build_heat_profile(query_tree: nx.Graph, result_tree: nx.Graph, N: int, sym
     }
 
 def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], db_configs: list[tuple[int, str]]) -> dict[str, Any]:
-    query_tree_payload = _serialize_query_tree(query_tree)
+    query_tree_payload = serialize_query_tree(query_tree)
     ui_results: list[dict[str, Any]] = []
 
     for res in results:
@@ -276,13 +217,14 @@ def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], d
                 "symmetry": res.get("symmetry"),
                 "topology_id": res.get("topology_id"),
                 "tiling_id": res.get("tiling_id"),
-                "topology": _serialize_topology_graph(res["G_raw"]),
-                "solved_tiling": _serialize_solved_tiling(res["G_solved"], res["pos_solved"]),
+                "topology": serialize_topology_graph(res["G_raw"]),
+                "solved_tiling": serialize_solved_tiling(res["G_solved"], res["pos_solved"]),
                 "cp": serialize_cp(res["cp"]),
                 "fold": serialize_fold(res["fold"]),
-                "tree": serialize_tree(tree_graph),
+                "tree": serialize_graph(tree_graph),
                 "packing": serialize_cp(res["packing"]),
                 "heat": _build_heat_profile(query_tree, tree_graph, res["N"], res["symmetry"]),
+                "comp_map": res.get("comp_map", {}),
             }
         )
 

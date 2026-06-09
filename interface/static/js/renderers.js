@@ -133,16 +133,28 @@ export function renderFoldSvg(svg, fold, width = 400, height = 400) {
   const faces = fold.faces || [];
   const bounds = boundsFromFaces(faces);
   const scale = fitScale(bounds, width, height);
-  const BASE_ALPHA = 0.12; 
-  
+  // const BASE_ALPHA = 0.1; 
+  const max_mult = Math.max(fold.multiplicities ? Math.max(...fold.multiplicities) : 1, 1);
+  const BASE_ALPHA = 1- Math.pow(0.7, 1 / (max_mult || 1)); // Adjust base alpha to ensure max multiplicity is fully opaque
+  console.log("Max multiplicity:", max_mult, "Base alpha:", BASE_ALPHA.toFixed(3));
+
   faces.forEach((face, index) => {
     const mult = fold.multiplicities?.[index] || 1;
     const alphaVal = 1 - Math.pow(1 - BASE_ALPHA, mult);
     
     svg.appendChild(makeSvg("polygon", {
       points: face.map((point) => `${transformX(point[0], bounds, scale, width)},${transformY(point[1], bounds, scale, height)}`).join(" "),
-      fill: `rgba(122, 211, 255, ${alphaVal})`,
-      stroke: "rgba(255,255,255,0.30)", 
+      
+      // Pull the solid color from your CSS (with a fallback)
+      fill: "var(--accent)", 
+      
+      // Apply the alpha transparency independently
+      "fill-opacity": alphaVal,
+      
+      // If you want to un-comment the stroke later, you can do the same thing:
+      // stroke: "var(--line)",
+      // "stroke-opacity": 0.20,
+      
       "stroke-width": 0.5, 
     }));
   });
@@ -244,13 +256,20 @@ export function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff", width = 420, 
   for (const edge of graph.edges) {
     const start = pointForNode(graph, edge.u);
     const end = pointForNode(graph, edge.v);
-    svg.appendChild(makeSvg("line", {
+    const attrs = {
       x1: transformX(start[0], bounds, scale, width),
       y1: transformY(start[1], bounds, scale, height),
       x2: transformX(end[0], bounds, scale, width),
       y2: transformY(end[1], bounds, scale, height),
-      class: "edge",
-    }));
+      class: "edge"
+    };
+
+    // for tree edge labeling
+    if (edge.comp_id !== undefined) {
+      attrs["data-comp-id"] = edge.comp_id;
+    }
+    
+    svg.appendChild(makeSvg("line", attrs));
   }
   
   for (const node of graph.nodes) {
@@ -281,43 +300,117 @@ export function makePolyline(xValues, yValues, xMin, xMax, yMin, yMax, width, he
   }).join(" ");
   return makeSvg("polyline", { points, fill: "none", stroke: color, "stroke-width": 2.3, "stroke-linejoin": "round", "stroke-linecap": "round" });
 }
-
 export function renderHeatSvg(svg, heat) {
-  const width = 420, height = 240, margin = 28;
-  const xValues = heat.t_scales || [], query = heat.query || [], result = heat.result || [];
-  if (!xValues.length || !query.length || !result.length) return;
+  // Increased margin to accommodate axis labels and Y-ticks
+  // const width = 420, height = 240, margin = 45; 
+  const width = 1000, height = 1000, margin = 120;
+  const xValues = heat.t_scales || [];
+  const result = heat.result || [];
+  
+  // Require at least xValues and result to proceed
+  if (!xValues.length || !result.length) return; 
   
   const xMin = Math.min(...xValues), xMax = Math.max(...xValues);
-  const yValues = [...query, ...result];
-  const yMin = Math.min(...yValues), yMax = Math.max(...yValues);
-
-  drawAxes(svg, width, height, margin);
-  const safeMin = Math.max(xMin, 1e-12);
-  const logMin = Math.log10(safeMin), logMax = Math.log10(Math.max(xMax, safeMin * 10));
+  // 1. Centered Integer Y-Bounds (Symmetric around 0)
+  const yMinRaw = Math.min(...result);
+  const yMaxRaw = Math.max(...result);
+  let absMax = Math.max(Math.abs(yMinRaw), Math.abs(yMaxRaw));
+  if (absMax === 0) absMax = 1; // Fallback for flat zero-lines
   
-  for (let p = Math.floor(logMin); p <= Math.ceil(logMax); p++) {
-    const val = Math.pow(10, p);
-    if (val < safeMin || val > xMax) continue;
-    const px = margin + ((Math.log10(val) - logMin) / (logMax - logMin)) * (width - margin * 2);
-    svg.appendChild(makeSvg("line", { x1: px, y1: height - margin, x2: px, y2: height - margin + 6, stroke: "#2b3a4a", "stroke-width": 1 }));
-    svg.appendChild(makeSvg("text", { x: px + 4, y: height - margin + 18, fill: "#9daccc", "font-size": 11 })).textContent = `10^${p}`;
+  // Target ~4 to 6 integer ticks per side
+  let tickStep = Math.ceil(absMax / 4);
+  if (tickStep < 1) tickStep = 1; // Enforce strict integers
+  
+  const yMax = Math.ceil(absMax / tickStep) * tickStep;
+  const yMin = -yMax;
+
+  // 2. CSS Variable Styles (Responsive to Light/Dark Mode)
+  const axisStyle = "stroke: var(--packing-b); stroke-width: 10;";
+  const tickStyle = "stroke: var(--packing-b); stroke-width: 5;";
+  const textStyle = "fill: var(--packing-b); font-size: 30px;";
+  const titleStyle = "fill: var(--packing-b); font-size: 50px;";
+  const curveStyle = "fill: none; stroke: var(--danger); stroke-width: 10; stroke-linejoin: round;";
+
+  // --- Draw Axes Base ---
+  svg.appendChild(makeSvg("line", { x1: margin, y1: height - margin, x2: width - margin, y2: height - margin, style: axisStyle }));
+  svg.appendChild(makeSvg("line", { x1: margin, y1: margin, x2: margin, y2: height - margin, style: axisStyle }));
+
+  // --- X-Axis Ticks (Integer Log ticks) ---
+  for (let p = Math.floor(xMin); p <= Math.ceil(xMax); p++) {
+    const px = margin + ((p - xMin) / (xMax - xMin)) * (width - margin * 2);
+    
+    svg.appendChild(makeSvg("line", { 
+        x1: px, y1: height - margin, 
+        x2: px, y2: height - margin + 12, 
+        style: tickStyle
+    }));
+    
+    const tickText = makeSvg("text", { 
+        x: px, y: height - margin + 40, 
+        "text-anchor": "middle",
+        style: textStyle
+    });
+    tickText.textContent = p;
+    svg.appendChild(tickText);
   }
 
-  const colorQuery = "#5b7b9e";
-  const colorResult = "#7ad3ff";
-  
-  svg.appendChild(makePolyline(xValues, query, xMin, xMax, yMin, yMax, width, height, margin, colorQuery));
-  svg.appendChild(makePolyline(xValues, result, xMin, xMax, yMin, yMax, width, height, margin, colorResult));
+  // --- Y-Axis Ticks (Integers) & Zero Line ---
+  for (let val = yMin; val <= yMax; val += tickStep) {
+    const py = height - margin - ((val - yMin) / (yMax - yMin)) * (height - margin * 2);
+    
+    // Tick Mark
+    svg.appendChild(makeSvg("line", { 
+        x1: margin - 12, y1: py, 
+        x2: margin, y2: py, 
+        style: tickStyle 
+    }));
+    
+    // Tick Text
+    const tickText = makeSvg("text", { 
+        x: margin - 20, y: py + 8, 
+        "text-anchor": "end",
+        style: textStyle
+    });
+    tickText.textContent = val;
+    svg.appendChild(tickText);
 
-  const legend = makeSvg("g", {});
-  legend.appendChild(makeSvg("line", { x1: width - 80, y1: 20, x2: width - 60, y2: 20, stroke: colorQuery, "stroke-width": 2.3 }));
-  const qText = makeSvg("text", { x: width - 55, y: 24, fill: "#9daccc", "font-size": 11 });
-  qText.textContent = "Query";
-  legend.appendChild(qText);
-  legend.appendChild(makeSvg("line", { x1: width - 80, y1: 36, x2: width - 60, y2: 36, stroke: colorResult, "stroke-width": 2.3 }));
-  const rText = makeSvg("text", { x: width - 55, y: 40, fill: "#9daccc", "font-size": 11 });
-  rText.textContent = "Result";
-  legend.appendChild(rText);
+    // Dashed horizontal line strictly at y = 0
+    if (val === 0) {
+        svg.appendChild(makeSvg("line", {
+            x1: margin, y1: py,
+            x2: width - margin, y2: py,
+            style: "stroke: var(--packing-b); stroke-width: 5; stroke-dasharray: 8,8; opacity: 1;"
+        }));
+    }
+  }
 
-  svg.appendChild(legend);
+  // --- Axis Labels ---
+  const xLabel = makeSvg("text", {
+      x: width / 2, y: height - 25,
+      "text-anchor": "middle",
+      style: titleStyle
+  });
+  xLabel.textContent = "Log Eigenvalues (Log t)";
+  svg.appendChild(xLabel);
+
+  const yLabel = makeSvg("text", {
+      x: -(height / 2), y: 35,
+      "text-anchor": "middle",
+      transform: "rotate(-90)",
+      style: titleStyle
+  });
+  yLabel.textContent = "Normalized Intensity";
+  svg.appendChild(yLabel);
+
+  // --- 5. Plot the Manual Polyline ---
+  const points = result.map((y, i) => {
+      const px = margin + ((xValues[i] - xMin) / (xMax - xMin)) * (width - margin * 2);
+      const py = height - margin - ((y - yMin) / (yMax - yMin)) * (height - margin * 2);
+      return `${px},${py}`;
+  }).join(" ");
+
+  svg.appendChild(makeSvg("polyline", {
+      points: points,
+      style: curveStyle
+  }));
 }
