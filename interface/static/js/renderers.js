@@ -49,10 +49,46 @@ export function transformY(y, b, s, h) {
 
 export function pointForNode(g, id) { const f = g.nodes.find(n => n.id === id); return f && f.pos ? f.pos : [0, 0]; }
 
+// --- NEW HELPER: Put this anywhere in renderers.js ---
+export function parseCp4D(cp) {
+  // Graceful fallback just in case old cached payloads pass through
+  if (cp.segments) return cp.segments;
+  
+  const SQRT2_2 = Math.SQRT2 / 2;
+  
+  // 1. Calculate Cartesian Coordinates for all unique vertices
+  const cartesianVertices = (cp.vertices || []).map(v => {
+    // v is [x.num, x.den, y.num, y.den, z.num, z.den, w.num, w.den]
+    const x = v[0] / v[1];
+    const y = v[2] / v[3];
+    const z = v[4] / v[5];
+    const w = v[6] / v[7];
+    
+    return [
+      x + SQRT2_2 * (y - w),
+      z + SQRT2_2 * (y + w)
+    ];
+  });
+
+  // 2. Build the standard segments array format
+  return (cp.edges || []).map(edge => {
+    const [v1_idx, v2_idx, type] = edge;
+    const [x1, y1] = cartesianVertices[v1_idx];
+    const [x2, y2] = cartesianVertices[v2_idx];
+    return { type, x1, y1, x2, y2 };
+  });
+}
+
+
+// --- REPLACEMENT: renderCpSvg ---
 export function renderCpSvg(svg, cp, width, height, options = {}) {
-  const bounds = boundsFromSegments(cp.segments);
+  // Extract segments from the 4D payload
+  const segments = parseCp4D(cp);
+  
+  const bounds = boundsFromSegments(segments);
   const scale = fitScale(bounds, width, height);
-  for (const segment of cp.segments) {
+  
+  for (const segment of segments) {
     const mv = (segment.type == null) ? "" : String(segment.type).trim().toLowerCase();
     const strokeWidth = mv === "h" ? 1 : 2;
     const classes = ["cp-segment", `cp-${mv}`];
@@ -71,9 +107,11 @@ export function renderCpSvg(svg, cp, width, height, options = {}) {
 }
 
 export function renderPackingSvg(svg, cp, width, height, options = {}) {
-  const bounds = boundsFromSegments(cp.segments);
+  const segments = parseCp4D(cp)
+  // const bounds = boundsFromSegments(cp.segments);
+  const bounds = boundsFromSegments(segments);
   const scale = fitScale(bounds, width, height);
-  for (const segment of cp.segments) {
+  for (const segment of segments) {
     const mv = (segment.type == null) ? "" : String(segment.type).trim().toLowerCase();
     const strokeWidth = mv === "h" ? 2.5 : mv === "b"? 2: 0.7;
     const classes = ["cp-segment", `packing-${mv}`];

@@ -72,19 +72,25 @@ def serialize_graph(graph: nx.Graph, pos: dict[Any, Any] | None = None) -> dict[
 
 
 def serialize_cp(cp: Any) -> dict[str, Any]:
+    """
+    Serializes the crease pattern sending exact 4D mathematical coordinates 
+    as integer arrays rather than pre-computing Cartesian floats.
+    """
     return {
-        "segments": [
-            {
-                "type": line_type,
-                "x1": float(x1),
-                "y1": float(y1),
-                "x2": float(x2),
-                "y2": float(y2),
-            }
-            for line_type, x1, y1, x2, y2 in cp.render()
+        "vertices": [
+            [
+                vert.x.num, vert.x.den,
+                vert.y.num, vert.y.den,
+                vert.z.num, vert.z.den,
+                vert.w.num, vert.w.den,
+            ]
+            for vert in cp.vertices
+        ],
+        "edges": [
+            [v1_idx, v2_idx, line_type] 
+            for v1_idx, v2_idx, line_type in cp.edges
         ]
     }
-
 
 def serialize_fold(fold: Any) -> dict[str, Any]:
     faces, multiplicities = fold.render()

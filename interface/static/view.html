@@ -7,33 +7,135 @@
   <link rel="stylesheet" href="/styles.css" />
   <link rel="icon" type="image/png" href="./assets/favicon.png" />
   <style>
-    .view-main {
+    /* --- SCROLLING OVERRIDES --- */
+    html, body {
+      overflow-y: auto !important;
+      height: auto !important;
+      min-height: 100vh;
+    }
+    .app-shell {
+      height: auto !important;
+      min-height: 100vh;
+      overflow-y: auto !important;
       display: flex;
       flex-direction: column;
-      align-items: center;
-      padding: 2rem;
+    }
+
+    /* --- DASHBOARD LAYOUT --- */
+    .dashboard-container {
+      /* Vertical padding: 24px. Horizontal padding: Fluid (min 16px, ideal 8vw, max 120px) */
+      padding: 24px clamp(16px, 8vw, 120px);
+      max-width: 1800px;
+      margin: 0 auto;
       width: 100%;
       box-sizing: border-box;
-    }
-    .canvas-container {
-      background: var(--bg-panel, #2b2b2b);
-      border-radius: 8px;
-      padding: 2rem;
-      box-shadow: 0 4px 12px rgba(0,0,0,0.2);
-      width: 100%;
-      max-width: 800px;
       display: flex;
-      justify-content: center;
+      flex-direction: column;
+      gap: 24px;
+      flex: 1;
     }
-    canvas {
-      width: 100%;
-      max-width: 700px;
-      height: auto;
-      display: block;
-    }
+    
     #viewTitle {
-      margin-bottom: 1.5rem;
+      margin: 0;
       font-weight: 600;
+      font-size: 1.5rem;
+    }
+
+    /* Responsive Grid Rows */
+    /* Responsive Grid Rows */
+    .dash-row {
+      display: grid;
+      gap: 24px;
+      margin-bottom: 24px; /* Ensure spacing between rows */
+    }
+    .dash-row-3col {
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    }
+
+    /* Panel Styling */
+    .panel {
+      background: var(--bg-panel);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+    }
+    .panel-header {
+      margin-top: 0;
+      margin-bottom: 16px; /* Slightly more room before the split */
+      font-size: 1.1rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 8px;
+    }
+
+    /* The New Composite Workspace (Handles the 1fr 1fr split) */
+    .composite-workspace {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      flex: 1;
+    }
+
+    /* Square Canvas/SVG Containers */
+    .canvas-wrapper {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 1 / 1;
+      background: var(--bg-body);
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .canvas-wrapper svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    /* Reference Workspace Placeholder */
+    .refs-workspace {
+      flex: 1;
+      background: var(--bg-body);
+      border-radius: 4px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+      gap: 12px;
+      align-content: start;
+    }
+    .ref-square-placeholder {
+      aspect-ratio: 1 / 1;
+      background: var(--bg-panel);
+      border: 1px dashed var(--border-color);
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.8rem;
+      color: var(--text-color);
+      opacity: 0.5;
+    }
+
+    /* Export Actions */
+    .action-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    /* Responsive Stacking: Collapses the 1fr 1fr split on narrow screens */
+    @media (max-width: 1024px) {
+      .composite-workspace {
+        grid-template-columns: 1fr;
+      }
+      .refs-workspace {
+        min-height: 200px;
+      }
     }
   </style>
 </head>
@@ -46,21 +148,10 @@
         </h1>
       </div>
       <div class="top-bar-actions">
-        <button id="donateBtn" class="icon-btn action-icon" type="button" aria-label="Donate" title="Donate">
-          <img src="/assets/donate.svg" alt="" aria-hidden="true" />
-        </button>
-        <button id="discordBtn" class="icon-btn action-icon" type="button" aria-label="Join Discord" title="Join Discord">
-          <img src="/assets/discord.svg" alt="" aria-hidden="true" />
-        </button>
-        <button id="themeToggleBtn" class="icon-btn action-icon" type="button" aria-label="Toggle light/dark mode" title="Toggle Theme">
-          <img src="/assets/light-dark.svg" alt="" aria-hidden="true" />
-        </button>
-        <button id="languageBtn" class="icon-btn action-icon" type="button" aria-label="Change Language" title="Change Language">
-          <img src="/assets/language.svg" alt="" aria-hidden="true" />
-        </button>
-        <a href="/about.html" target="_blank" class="icon-btn action-icon" aria-label="Help and Documentation" title="Help & About">
-          <img src="/assets/info.svg" alt="" aria-hidden="true" />
-        </a>
+        <button id="donateBtn" class="icon-btn action-icon" type="button" aria-label="Donate" title="Donate"><img src="/assets/donate.svg" alt="" aria-hidden="true" /></button>
+        <button id="discordBtn" class="icon-btn action-icon" type="button" aria-label="Join Discord" title="Join Discord"><img src="/assets/discord.svg" alt="" aria-hidden="true" /></button>
+        <button id="themeToggleBtn" class="icon-btn action-icon" type="button" aria-label="Toggle light/dark mode" title="Toggle Theme"><img src="/assets/light-dark.svg" alt="" aria-hidden="true" /></button>
+        <button id="languageBtn" class="icon-btn action-icon" type="button" aria-label="Change Language" title="Change Language"><img src="/assets/language.svg" alt="" aria-hidden="true" /></button>
       </div>
     </header>
 
@@ -71,9 +162,7 @@
         <div class="settings-panel">
           <p class="modal-meta" style="text-align: left; max-width: none;">This software is free to use, but costs money to host. If you find SEARCH 22.5 useful, consider supporting financially for its continued development!</p>
           <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
-            <a href="https://www.paypal.com/paypalme/theplantpsychologist" target="_blank">
-              <button type="button">Donate via PayPal</button>
-            </a>
+            <a href="https://www.paypal.com/paypalme/theplantpsychologist" target="_blank"><button type="button">Donate via PayPal</button></a>
           </div>
         </div>
       </div>
@@ -86,9 +175,7 @@
         <div class="settings-panel">
           <p class="modal-meta" style="text-align: left; max-width: none;">Join our Discord server to get tech support, report bugs, and request new features.</p>
           <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
-            <a href="https://discord.gg/5YcGh8b9yC" target="_blank">
-              <button type="button">Join the community</button>
-            </a>
+            <a href="https://discord.gg/5YcGh8b9yC" target="_blank"><button type="button">Join the community</button></a>
           </div>
         </div>
       </div>
@@ -109,11 +196,58 @@
       </div>
     </div>
 
-    <main class="view-main">
-      <h2 id="viewTitle">Loading Pattern...</h2>
-      <div class="canvas-container">
-        <canvas id="cpCanvas" width="1000" height="1000"></canvas>
+    <main class="dashboard-container">
+      
+      <div style="display: flex; justify-content: space-between; align-items: baseline;">
+        <h2 id="viewTitle">Loading Pattern...</h2>
+        <span id="clickCoordDisplay" style="font-family: monospace; color: var(--text-color); opacity: 0.7;">(x: -, y: -)</span>
       </div>
+
+      <div class="panel">
+        <h3 class="panel-header">Crease Pattern & References</h3>
+        <div class="composite-workspace">
+          <div class="canvas-wrapper" id="target-cp"></div>
+          <div class="refs-workspace" id="refsWorkspace">
+            <div class="ref-square-placeholder">Step 1</div>
+            <div class="ref-square-placeholder">Step 2</div>
+            <div class="ref-square-placeholder">Step 3</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h3 class="panel-header">Packing & Kinematic Tree</h3>
+        <div class="composite-workspace">
+          <div class="canvas-wrapper" id="target-packing"></div>
+          <div class="canvas-wrapper" id="target-tree" style="cursor: grab;">
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color: var(--text-color); opacity: 0.5;">
+               [Interactive Tree Placeholder]
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="dash-row dash-row-3col">
+        <div class="panel">
+          <h3 class="panel-header">Topology</h3>
+          <div id="target-topology" style="min-height: 150px; color: var(--text-color); opacity: 0.5; display:flex; align-items:center; justify-content:center;"></div>
+        </div>
+        <div class="panel">
+          <h3 class="panel-header">Exact Tiling</h3>
+          <div id="target-tiling" style="min-height: 150px; color: var(--text-color); opacity: 0.5; display:flex; align-items:center; justify-content:center;"></div>
+        </div>
+        <div class="panel">
+          <h3 class="panel-header">Folded State</h3>
+          <div id="target-fold" style="min-height: 150px; color: var(--text-color); opacity: 0.5; display:flex; align-items:center; justify-content:center;"></div>
+        </div>
+      </div>
+
+      <div class="action-row">
+        <button id="exportCpBtn" type="button" class="secondary">Export .CP</button>
+        <button id="exportFoldBtn" type="button" class="secondary">Export .FOLD</button>
+        <button id="exportDebugBtn" type="button" class="secondary">Export Full JSON</button>
+      </div>
+
     </main>
   </div>
 

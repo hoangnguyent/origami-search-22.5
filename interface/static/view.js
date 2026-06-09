@@ -1,6 +1,7 @@
 import * as Utils from './js/utils.js';
+import { makeSvg, renderCpSvg, renderPackingSvg, renderFoldSvg, renderGraphSvg, renderHeatSvg } from './js/renderers.js';
 
-// --- Global UI & Modal Wiring (Matches app.js) ---
+// --- Global UI & Modal Wiring ---
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const donateBtn = document.getElementById("donateBtn");
 const discordBtn = document.getElementById("discordBtn");
@@ -29,39 +30,127 @@ if (themeToggleBtn) {
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
     Utils.applyTheme(nextTheme, true);
-    // Re-draw the canvas so the border color flips if necessary
-    if (window.currentCpData) {
-        drawCP(document.getElementById("cpCanvas"), window.currentCpData);
-    }
+    
+    // NOTE: We do not need to redraw the SVGs here. 
+    // renderers.js assigns CSS classes (e.g., .cp-m, .cp-v), so styles.css handles the light/dark flip natively!
   });
+}
+
+// --- Coordinate Math ---
+function getCPCoords(event, svgEl) {
+    const rect = svgEl.getBoundingClientRect();
+    // Normalize click to 0.0 -> 1.0 based on CSS rendered size
+    const normX = (event.clientX - rect.left) / rect.width;
+    const normY = (event.clientY - rect.top) / rect.height;
+    
+    // Origami unit square is (0,0) at bottom-left. Screen is top-left.
+    return {
+        x: normX,
+        y: 1.0 - normY
+    };
+}
+
+// --- Dynamic SVG Rendering ---
+function populatePanel(containerId, renderFn, data, options = {}) {
+    if (!data) return null;
+    
+    // Find the panel directly by its ID
+    const container = document.getElementById(containerId);
+    if (!container) return null;
+    
+    // Clear placeholders or previously drawn SVGs
+    container.innerHTML = ''; 
+    
+    let viewBox = options.viewBox || "0 0 1000 1000";
+    if (renderFn === renderHeatSvg) viewBox = "0 0 420 240";
+
+    const svg = makeSvg("svg", { 
+        viewBox: viewBox, 
+        style: "width: 100%; height: 100%; display: block; overflow: visible;" 
+    });
+    
+    // Route to the correct renderer signature
+    if (renderFn === renderHeatSvg) {
+        renderFn(svg, data);
+    } else if (renderFn === renderGraphSvg) {
+        renderFn(svg, data, { nodeFill: options.nodeFill || "#8cffc1", width: options.w || 1000, height: options.h || 1000 });
+    } else {
+        renderFn(svg, data, options.w || 1000, options.h || 1000);
+    }
+    
+    container.appendChild(svg);
+    return svg;
+}
+
+function drawAllPanels(result) {
+    // Tier 1 & 2: Interactive SVG Panels
+    const cpSvg = populatePanel("target-cp", renderCpSvg, result.cp, {w: 1000, h: 1000});
+    setupInteractiveSvg(cpSvg, "CP");
+    
+    const packingSvg = populatePanel("target-packing", renderPackingSvg, result.packing, {w: 1000, h: 1000});
+    setupInteractiveSvg(packingSvg, "Packing");
+    
+    const treeSvg = populatePanel("target-tree", renderGraphSvg, result.tree, {w: 1000, h: 1000, nodeFill: "#8cffc1"});
+    setupInteractiveSvg(treeSvg, "Tree");
+    
+    // Tier 3: Static Information SVGs
+    populatePanel("target-topology", renderGraphSvg, result.topology, {w: 1000, h: 1000, nodeFill: "#a7c7ff"});
+    populatePanel("target-tiling", renderGraphSvg, result.solved_tiling, {w: 1000, h: 1000, nodeFill: "#8cffc1"});
+    populatePanel("target-fold", renderFoldSvg, result.fold, {w: 1000, h: 1000});
+    
+    if (result.heat) {
+        // Assuming you add an id="target-heat" div somewhere in the future
+        populatePanel("target-heat", renderHeatSvg, result.heat);
+    }
+}
+
+function setupInteractiveSvg(svg, name) {
+    if (!svg) return;
+    const coordDisplay = document.getElementById("clickCoordDisplay");
+    
+    svg.style.cursor = "crosshair";
+    
+    svg.addEventListener("mousemove", (e) => {
+        const pt = getCPCoords(e, svg);
+        if (coordDisplay) coordDisplay.textContent = `(x: ${pt.x.toFixed(4)}, y: ${pt.y.toFixed(4)})`;
+    });
+    
+    svg.addEventListener("mouseleave", () => {
+        if (coordDisplay) coordDisplay.textContent = `(x: -, y: -)`;
+    });
+
+    svg.addEventListener("click", (e) => {
+        const pt = getCPCoords(e, svg);
+        console.log(`[${name}] Clicked at exact coords:`, pt);
+        // TODO: Add interactive overlay/highlight logic here
+    });
 }
 
 // --- View Logic ---
 async function initView() {
-    // Initialize Theme
     Utils.applyTheme(Utils.readStoredThemePreference() || 'system', false);
 
     const urlParams = new URLSearchParams(window.location.search);
     const fullId = urlParams.get('id') || '';
     const titleEl = document.getElementById("viewTitle");
-    const canvas = document.getElementById("cpCanvas");
-    const container = canvas.parentElement;
+    const container = titleEl.parentElement;
 
     // Reset title styling and text
     titleEl.style.color = ''; 
     titleEl.textContent = "Loading Pattern...";
 
-    // Hide canvas and show loading spinner
-    canvas.style.display = 'none';
+    // Hide all canvases temporarily while loading
+    const canvases = document.querySelectorAll('.canvas-wrapper, .dash-row-3col .panel > div');
+    canvases.forEach(c => c.style.display = 'none');
+
     const loadingImg = document.createElement('img');
     loadingImg.id = 'loadingSpinner';
     loadingImg.src = '/assets/loading.svg';
     loadingImg.style.display = 'block';
     loadingImg.style.margin = '3rem auto';
-    loadingImg.style.width = '400px';
+    loadingImg.style.width = '48px';
     container.appendChild(loadingImg);
 
-    // Helper to gracefully handle and style errors
     const showError = (msg) => {
         titleEl.textContent = msg;
         titleEl.style.color = '#ff5555'; // Danger color
@@ -95,115 +184,21 @@ async function initView() {
 
         // Format a nice title
         const symTitle = sym.charAt(0).toUpperCase() + sym.slice(1);
-        titleEl.textContent = `Crease Pattern ${fullId}`;
+        titleEl.textContent = `Pattern ${tilingId} (N=${N}, ${symTitle})`;
         
-        // Remove loading spinner and reveal canvas
+        // Remove loading spinner and reveal containers
         const spinner = document.getElementById('loadingSpinner');
         if (spinner) spinner.remove();
-        canvas.style.display = 'block';
+        canvases.forEach(c => c.style.display = '');
 
-        // Save globally so theme toggle can re-render it
-        window.currentCpData = result.cp;
-        drawCP(canvas, result.cp);
+        // Save globally
+        window.currentResult = result;
+        drawAllPanels(result);
 
     } catch (err) {
         showError(`Error: ${err.message}`);
     }
 }
-
-function drawCP(canvas, cp) {
-    const ctx = canvas.getContext("2d");
-    const w = canvas.width;
-    const h = canvas.height;
-    
-    ctx.clearRect(0, 0, w, h);
-
-    const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
-
-    // Matches your app.js / python CP color standards
-    const colors = {
-        m: "#ff6b6b",
-        rm: "#ff6b6b",
-        v: "#4dabf7",
-        rv: "#4dabf7",
-        h: "#9aa8bf",
-        b: isDark ? "#f0f3f7" : "#111111" // Adapts bounding box to light/dark mode
-    };
-
-    const segments = cp.segments || [];
-
-    // Sort segments so thick borders draw first (underneath), then hinges, then mountains/valleys on top
-    const sortOrder = { 'b': 0, 'h': 1, 'v': 2, 'rv': 2, 'm': 3, 'rm': 3 };
-    segments.sort((a, b) => sortOrder[a.type || 'h'] - sortOrder[b.type || 'h']);
-
-    segments.forEach(seg => {
-        const type = (seg.type || 'h').toLowerCase();
-        const color = colors[type] || colors.h;
-        
-        // Dynamic Line Weights (Border is thickest)
-        const lw = type === 'b' ? 5 : (['m', 'v', 'rm', 'rv'].includes(type) ? 3 : 1.5);
-
-        ctx.beginPath();
-        // Origami math coords (0,0) are bottom-left. Canvas is top-left.
-        // We invert the Y coordinate mathematically via (1 - y)
-        ctx.moveTo(seg.x1 * w, (1 - seg.y1) * h); 
-        ctx.lineTo(seg.x2 * w, (1 - seg.y2) * h);
-        
-        ctx.strokeStyle = color;
-        ctx.lineWidth = lw;
-        ctx.lineCap = "round";
-        ctx.stroke();
-    });
-}
-
-export function exportCurrentCp() {
-  if (!state.currentDetailResult) return;
-  const cp = state.currentDetailResult.cp;
-  const vertices = [];
-  const vMap = new Map();
-  const edges_vertices = [];
-  const edges_assignment = [];
-  function getVertexId(x, y) {
-    const key = x.toFixed(6) + "," + y.toFixed(6);
-    if (vMap.has(key)) return vMap.get(key);
-    const id = vertices.length;
-    vertices.push([x, y]);
-    vMap.set(key, id);
-    return id;
-  }
-  function getFoldType(rawType) {
-    if (!rawType) return "F";
-    const t = String(rawType).trim().toLowerCase();
-    if (t === "b") return "B";
-    if (t === "rm" || t === "m" || t === "hm") return "M";
-    if (t === "rv" || t === "av" || t === "v" || t === "hv") return "V";
-    if (t === "h" || t === "aux" || t === "ax") return "F";
-    if (t.includes("m")) return "M";
-    if (t.includes("v")) return "V";
-    return "F";
-  }
-  cp.segments.forEach(seg => {
-    const u = getVertexId(seg.x1, seg.y1);
-    const v = getVertexId(seg.x2, seg.y2);
-    edges_vertices.push([u, v]);
-    edges_assignment.push(getFoldType(seg.type));
-  });
-  const foldData = { file_spec: 1.1, file_creator: "SEARCH 22.5", vertices_coords: vertices, edges_vertices: edges_vertices, edges_assignment: edges_assignment };
-  const blob = new Blob([JSON.stringify(foldData, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const rank = state.currentDetailResult.rank || 1;
-  const N = state.currentDetailResult.N || "N";
-  const sym = state.currentDetailResult.symmetry || "sym";
-  const tilingId = state.currentDetailResult.tiling_id || "unknown";
-  a.href = url;
-  a.download = `${N}${sym=="diag"?"d":sym=="book"?"b":"n"}-${tilingId}.fold`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
 
 // Start sequence
 initView();
