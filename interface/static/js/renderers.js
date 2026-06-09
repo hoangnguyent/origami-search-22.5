@@ -135,9 +135,7 @@ export function renderFoldSvg(svg, fold, width = 400, height = 400) {
   const scale = fitScale(bounds, width, height);
   // const BASE_ALPHA = 0.1; 
   const max_mult = Math.max(fold.multiplicities ? Math.max(...fold.multiplicities) : 1, 1);
-  const BASE_ALPHA = 1- Math.pow(0.7, 1 / (max_mult || 1)); // Adjust base alpha to ensure max multiplicity is fully opaque
-  console.log("Max multiplicity:", max_mult, "Base alpha:", BASE_ALPHA.toFixed(3));
-
+  const BASE_ALPHA = 1- Math.pow(0.7, 1 / (max_mult || 1)); // Adjust base alpha to ensure max multiplicity still has some transparency
   faces.forEach((face, index) => {
     const mult = fold.multiplicities?.[index] || 1;
     const alphaVal = 1 - Math.pow(1 - BASE_ALPHA, mult);
@@ -145,16 +143,8 @@ export function renderFoldSvg(svg, fold, width = 400, height = 400) {
     svg.appendChild(makeSvg("polygon", {
       points: face.map((point) => `${transformX(point[0], bounds, scale, width)},${transformY(point[1], bounds, scale, height)}`).join(" "),
       
-      // Pull the solid color from your CSS (with a fallback)
       fill: "var(--accent)", 
-      
-      // Apply the alpha transparency independently
       "fill-opacity": alphaVal,
-      
-      // If you want to un-comment the stroke later, you can do the same thing:
-      // stroke: "var(--line)",
-      // "stroke-opacity": 0.20,
-      
       "stroke-width": 0.5, 
     }));
   });
@@ -335,7 +325,6 @@ export function renderHeatSvg(svg, heat) {
   svg.appendChild(makeSvg("line", { x1: margin, y1: height - margin, x2: width - margin, y2: height - margin, style: axisStyle }));
   svg.appendChild(makeSvg("line", { x1: margin, y1: margin, x2: margin, y2: height - margin, style: axisStyle }));
 
-  // --- X-Axis Ticks (Integer Log ticks) ---
   for (let p = Math.floor(xMin); p <= Math.ceil(xMax); p++) {
     const px = margin + ((p - xMin) / (xMax - xMin)) * (width - margin * 2);
     
@@ -390,7 +379,7 @@ export function renderHeatSvg(svg, heat) {
       "text-anchor": "middle",
       style: titleStyle
   });
-  xLabel.textContent = "Log Eigenvalues (Log t)";
+  xLabel.textContent = "Log Eigenvalues";
   svg.appendChild(xLabel);
 
   const yLabel = makeSvg("text", {

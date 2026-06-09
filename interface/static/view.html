@@ -199,11 +199,33 @@
       </div>
     </div>
 
+    <div id="shareModal" class="modal-overlay hidden">
+      <div class="modal-content settings-content">
+        <button id="closeShareModal" class="close-btn" aria-label="Close">✕</button>
+        <div class="modal-header"><h2>Share</h2></div>
+        <div class="settings-panel">
+          <p class="modal-meta" style="text-align: left; max-width: none;">Share this pattern with others!</p>
+          
+          <div style="display: flex; gap: 8px; margin-top: 16px; align-items: stretch;">
+            <input type="text" id="shareUrlInput" readonly 
+                  style="flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-surface); color: var(--text); font-family: monospace; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+            
+            <button type="button" id="copyLinkBtn" class="icon-btn" style="width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0; background: var(--bg-panel); border: 1px solid var(--line);" aria-label="Copy Link">
+              <img src="/assets/copy.svg" alt="Copy" style="width: 20px; height: 20px; opacity: 0.8;">
+            </button>
+          </div>
+          
+          <p id="copyFeedback" class="status" style="opacity: 0; transition: opacity 0.2s ease; margin: 4px 0 0 4px; color: var(--cp-v);">Copied to clipboard!</p>
+          
+        </div>
+      </div>
+    </div>
+
     <main class="dashboard-container">
       
       <div style="display: flex; justify-content: space-between; align-items: baseline;">
         <h2 id="viewTitle">Loading Pattern...</h2>
-        <span id="clickCoordDisplay" style="font-family: monospace; color: var(--text-color); opacity: 0.7;">(x: -, y: -)</span>
+        <button id="sharebtn" class="icon-btn action-icon" type="button" aria-label="Share" title="Share"><img src="/assets/share.svg" alt="" aria-hidden="true" /></button>
       </div>
 
       <div class="panel">
@@ -250,9 +272,9 @@
       </div>
 
       <div class="action-row">
-        <button id="exportCpBtn" type="button" class="secondary">Export .CP</button>
-        <button id="exportFoldBtn" type="button" class="secondary">Export .FOLD</button>
-        <button id="exportDebugBtn" type="button" class="secondary">Export Full JSON</button>
+        <!-- <button id="exportCpBtn" type="button" class="secondary">Export .CP</button> -->
+        <button id="exportFoldBtn" type="button" class="secondary">Export crease pattern as .FOLD</button>
+        <button id="exportDebugBtn" type="button" class="secondary">Export all details as JSON</button>
       </div>
 
     </main>

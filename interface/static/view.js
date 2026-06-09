@@ -5,10 +5,12 @@ const themeToggleBtn = document.getElementById("themeToggleBtn");
 const donateBtn = document.getElementById("donateBtn");
 const discordBtn = document.getElementById("discordBtn");
 const languageBtn = document.getElementById("languageBtn");
+const shareBtn = document.getElementById("sharebtn");
 
 const donateModal = document.getElementById("donateModal");
 const discordModal = document.getElementById("discordModal");
 const languageModal = document.getElementById("languageModal");
+const shareModal = document.getElementById("shareModal");
 
 function setupModal(openBtn, modalEl, closeBtnId) {
   if (!openBtn || !modalEl) return;
@@ -23,6 +25,33 @@ function setupModal(openBtn, modalEl, closeBtnId) {
 setupModal(donateBtn, donateModal, "closeDonateModal");
 setupModal(discordBtn, discordModal, "closeDiscordModal");
 setupModal(languageBtn, languageModal, "closeLanguageModal");
+setupModal(shareBtn, shareModal, "closeShareModal");
+if (shareBtn && shareUrlInput) {
+    shareBtn.addEventListener("click", () => {
+        shareUrlInput.value = window.location.href; // Grabs the exact current page URL
+        if (copyFeedback) copyFeedback.style.opacity = '0'; // Reset the "copied" text
+    });
+}
+
+// 2. Write to clipboard and show feedback when copied
+if (copyLinkBtn && shareUrlInput) {
+    copyLinkBtn.addEventListener("click", async () => {
+        try {
+            await navigator.clipboard.writeText(shareUrlInput.value);
+            
+            // Show "Copied!" feedback
+            if (copyFeedback) {
+                copyFeedback.style.opacity = '1';
+                setTimeout(() => {
+                    copyFeedback.style.opacity = '0';
+                }, 2500); // Fade out after 2.5 seconds
+            }
+        } catch (err) {
+            console.error("Failed to copy link:", err);
+        }
+    });
+}
+
 
 if (themeToggleBtn) {
   themeToggleBtn.addEventListener("click", () => {
@@ -35,6 +64,19 @@ if (themeToggleBtn) {
   });
 }
 
+
+const exportFoldBtn = document.getElementById("exportFoldBtn");
+const exportDebugBtn = document.getElementById("exportDebugBtn");
+
+if (exportFoldBtn) {
+  exportFoldBtn.addEventListener("click", () => {Utils.exportFold(window.currentResult.cp);});
+}
+
+if (exportDebugBtn) {
+  exportDebugBtn.addEventListener("click", () => {
+      Utils.exportJson(window.currentResult);
+  });
+}
 // --- Coordinate Math ---
 function getCPCoords(event, svgEl) {
     const rect = svgEl.getBoundingClientRect();
@@ -200,13 +242,11 @@ function drawAllPanels(result) {
     populatePanel("target-tiling", renderGraphSvg, result.solved_tiling, {w: 1000, h: 1000, nodeFill: "#8cffc1"});
     populatePanel("target-fold", renderFoldSvg, result.fold, {w: 1000, h: 1000});
     
-    if (result.heat) populatePanel("target-heat", renderHeatSvg, result.heat);
+    populatePanel("target-heat", renderHeatSvg, result.heat);
 }
 
 function setupInteractiveSvg(svg, name, result) { 
     if (!svg) return;
-    const coordDisplay = document.getElementById("clickCoordDisplay");
-    
     svg.style.cursor = name === "Tree" ? "pointer" : "crosshair";
 
     // --- MASSIVE CLICK WINDOW FOR TREE EDGES ---
@@ -229,15 +269,6 @@ function setupInteractiveSvg(svg, name, result) {
             });
         }, 50);
     }
-
-    svg.addEventListener("mousemove", (e) => {
-        const pt = getSvgCoords(e, svg);
-        if (coordDisplay) coordDisplay.textContent = `(x: ${pt.x.toFixed(1)}, y: ${pt.y.toFixed(1)})`;
-    });
-    
-    svg.addEventListener("mouseleave", () => {
-        if (coordDisplay) coordDisplay.textContent = `(x: -, y: -)`;
-    });
 
     svg.addEventListener("click", (e) => {
         const pt = getSvgCoords(e, svg);
@@ -309,6 +340,17 @@ async function initView() {
     // Inject directly into the main element
     if (mainEl) mainEl.appendChild(loadingImg);
 
+    const luckyBtn = document.createElement('button');
+        luckyBtn.id = 'luckyBtn';
+        luckyBtn.textContent = "View random crease pattern";
+        luckyBtn.style.display = 'block';
+        luckyBtn.style.margin = '2rem auto'; 
+        
+        luckyBtn.addEventListener('click', () => {
+            const randomId = Math.floor(Math.random() * 1000000) + 1;
+            window.location.search = `?id=5d${randomId}`;
+        });
+
     const showError = (msg) => {
         if (titleEl) {
             titleEl.textContent = msg;
@@ -320,17 +362,6 @@ async function initView() {
 
         // Inject the "I'm feeling lucky" button directly into the main element
         if (!document.getElementById('luckyBtn') && mainEl) {
-            const luckyBtn = document.createElement('button');
-            luckyBtn.id = 'luckyBtn';
-            luckyBtn.textContent = "View random crease pattern";
-            luckyBtn.style.display = 'block';
-            luckyBtn.style.margin = '2rem auto'; 
-            
-            luckyBtn.addEventListener('click', () => {
-                const randomId = Math.floor(Math.random() * 1000000) + 1;
-                window.location.search = `?id=5d${randomId}`;
-            });
-            
             mainEl.appendChild(luckyBtn);
         }
     };
@@ -372,6 +403,7 @@ async function initView() {
         // Save globally
         window.currentResult = result;
         drawAllPanels(result);
+        mainEl.appendChild(luckyBtn);
 
     } catch (err) {
         showError(`Error: ${err.message}`);
