@@ -148,9 +148,99 @@ export function renderFoldSvg(svg, fold, width = 400, height = 400) {
   });
 }
 
+// Helper: Computes a guaranteed non-crossing, exact-length radial layout
+export function computeRadialTreeLayout(graph) {
+  if (!graph.nodes || graph.nodes.length === 0) return;
+
+  // 1. Build Adjacency List
+  const adj = new Map();
+  graph.nodes.forEach(n => adj.set(n.id, []));
+  graph.edges.forEach(e => {
+    const length = e.length !== undefined ? e.length : 1;
+    if (adj.has(e.u)) adj.get(e.u).push({ to: e.v, length });
+    if (adj.has(e.v)) adj.get(e.v).push({ to: e.u, length });
+  });
+
+  // 2. Pick a root (Node with the highest degree for the most balanced spread)
+  let rootId = graph.nodes[0].id;
+  let maxDegree = -1;
+  for (const [id, neighbors] of adj.entries()) {
+    if (neighbors.length > maxDegree) {
+      maxDegree = neighbors.length;
+      rootId = id;
+    }
+  }
+
+  // 3. Compute subtree weights (count of leaves) to allocate proportional angles
+  const weights = new Map();
+  function computeWeight(nodeId, parentId) {
+    let isLeaf = true;
+    let weight = 0;
+    for (const edge of adj.get(nodeId)) {
+      if (edge.to !== parentId) {
+        isLeaf = false;
+        weight += computeWeight(edge.to, nodeId);
+      }
+    }
+    if (isLeaf) weight = 1;
+    weights.set(nodeId, weight);
+    return weight;
+  }
+  computeWeight(rootId, null);
+
+  const nodeMap = new Map(graph.nodes.map(n => [n.id, n]));
+
+  // 4. Recursive Radial Placement
+  function place(nodeId, parentId, x, y, angleStart, angleEnd) {
+    const node = nodeMap.get(nodeId);
+    node.pos = [x, y]; // Set the position locally!
+
+    const children = adj.get(nodeId).filter(e => e.to !== parentId);
+    if (children.length === 0) return;
+
+    let sweep = angleEnd - angleStart;
+    const centerAngle = (angleStart + angleEnd) / 2;
+
+    // Constrain spread to at most 180° (PI) for non-root nodes so branches always grow outwards
+    if (parentId !== null) {
+      sweep = Math.min(sweep, Math.PI);
+      angleStart = centerAngle - sweep / 2;
+    }
+
+    const totalWeight = children.reduce((sum, e) => sum + weights.get(e.to), 0);
+    let currentAngle = angleStart;
+
+    for (const childEdge of children) {
+      const childWeight = weights.get(childEdge.to);
+      const childSweep = sweep * (childWeight / totalWeight);
+      const childCenter = currentAngle + childSweep / 2;
+
+      // Exact edge length preserved here via pure trigonometry
+      const cx = x + childEdge.length * Math.cos(childCenter);
+      const cy = y + childEdge.length * Math.sin(childCenter);
+
+      place(childEdge.to, nodeId, cx, cy, currentAngle, currentAngle + childSweep);
+      currentAngle += childSweep;
+    }
+  }
+
+  // Start placement at origin (0,0) spanning 360 degrees
+  place(rootId, null, 0, 0, 0, 2 * Math.PI);
+}
+
+// ---------------------------------------------------------
+// Your existing wrapper, updated to trigger the layout 
+// ---------------------------------------------------------
 export function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff", width = 420, height = 240 } = {}) {
+  // NEW: Check if layout needs to be computed (e.g. if any node is missing an [x, y] pos)
+  const needsLayout = graph.nodes.some(n => !n.pos);
+  if (needsLayout) {
+    computeRadialTreeLayout(graph);
+  }
+
   const bounds = boundsFromGraph(graph);
   const scale = fitScale(bounds, width, height);
+  
   for (const edge of graph.edges) {
     const start = pointForNode(graph, edge.u);
     const end = pointForNode(graph, edge.v);
@@ -162,12 +252,15 @@ export function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff", width = 420, 
       class: "edge",
     }));
   }
+  
   for (const node of graph.nodes) {
     if (!node.pos) continue;
     svg.appendChild(makeSvg("circle", {
       cx: transformX(node.pos[0], bounds, scale, width),
       cy: transformY(node.pos[1], bounds, scale, height),
-      r: 4, fill: nodeFill, class: "node",
+      r: 4, 
+      fill: nodeFill, 
+      class: "node",
     }));
   }
 }

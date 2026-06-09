@@ -47,7 +47,6 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
     print(f"\nFederated Search across {len(db_configs)} databases...")
     
     for N, sym in db_configs:
-        print("hi")
         prefix = f"database/tilings/faiss_cache/db_{N}_{sym}"
         try:
             with open(f"{prefix}_data.pkl", 'rb') as f:

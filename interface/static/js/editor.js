@@ -1,5 +1,5 @@
 import { state } from './state.js';
-import { makeSvg } from './renderers.js';
+import { makeSvg, computeRadialTreeLayout } from './renderers.js';
 import { setStatus } from './utils.js';
 import { isMobileLayout } from './layout.js';
 
@@ -325,11 +325,12 @@ export function resetTree() {
   renderEditor();
   setStatus("Tree reset.");
 }
-
 export function generateRandomTree() {
   const targetLeaves = parseInt(document.getElementById("randomNodeCount").value, 10) || 6;
   if (targetLeaves < 2) return;
-  state.nodes = { 0: { id: 0, x: 400, y: 280 } };
+  
+  // Reset Editor State
+  state.nodes = { 0: { id: 0 } };
   state.edges = [];
   state.nextNodeId = 1;
   state.selectedNode = null;
@@ -339,85 +340,104 @@ export function generateRandomTree() {
   state.isPanning = false;
   state.backgroundGesture = null;
 
-  const margin = 40;
-  const width = 800;
-  const height = 560;
-
-  function ccw(A, B, C) { return (C.y - A.y) * (B.x - A.x) > (B.y - A.y) * (C.x - A.x); }
-  function intersects(p1, p2, p3, p4) { 
-    return ccw(p1, p3, p4) !== ccw(p2, p3, p4) && ccw(p1, p2, p3) !== ccw(p1, p2, p4); 
-  }
-
   function getLeafCount() {
     if (state.edges.length === 0) return 1;
     const degrees = {};
-    for (const node of Object.values(state.nodes)) degrees[node.id] = 0;
+    for (const id of Object.keys(state.nodes)) degrees[id] = 0;
     for (const edge of state.edges) { degrees[edge.u]++; degrees[edge.v]++; }
     return Object.values(degrees).filter(deg => deg === 1).length;
   }
 
+  // 1. Generate Abstract Topology & Random Lengths
   let attempts = 0;
   const maxAttempts = 3000;
   while (getLeafCount() < targetLeaves && attempts < maxAttempts) {
     attempts++;
     const existingIds = Object.keys(state.nodes);
-    const parentId = existingIds[Math.floor(Math.random() * existingIds.length)];
-    const parentNode = state.nodes[parentId];
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 30 + Math.random() * 45; 
-    const nx = parentNode.x + dist * Math.cos(angle);
-    const ny = parentNode.y + dist * Math.sin(angle);
-    const newNode = { x: nx, y: ny };
-    if (nx < margin || nx > width - margin || ny < margin || ny > height - margin) continue;
-    let tooClose = false;
-    for (const n of Object.values(state.nodes)) {
-      if (Math.hypot(n.x - nx, n.y - ny) < 25) { tooClose = true; break; }
-    }
-    if (tooClose) continue;
-    let crossing = false;
-    for (const edge of state.edges) {
-      if (edge.u == parentId || edge.v == parentId) continue;
-      const uNode = state.nodes[edge.u];
-      const vNode = state.nodes[edge.v];
-      if (intersects(parentNode, newNode, uNode, vNode)) { crossing = true; break; }
-    }
-    if (crossing) continue;
+    const parentId = parseInt(existingIds[Math.floor(Math.random() * existingIds.length)], 10);
+    
     const newNodeId = state.nextNodeId++;
-    state.nodes[newNodeId] = { id: newNodeId, x: nx, y: ny };
-    state.edges.push({ u: parseInt(parentId, 10), v: newNodeId });
+    state.nodes[newNodeId] = { id: newNodeId };
+    
+    // Assign a random mathematical length (e.g., between 0.5 and 2.5)
+    const length = 0.5 + Math.random() * 2.0; 
+    state.edges.push({ u: parentId, v: newNodeId, length: length });
   }
 
+  // 2. Simplify Degree-2 Nodes (Merge edges and combine lengths)
   let changed = true;
   while (changed) {
     changed = false;
     const degrees = {};
-    const neighbors = {};
-    for (const id of Object.keys(state.nodes)) { degrees[id] = 0; neighbors[id] = []; }
-    for (const edge of state.edges) { degrees[edge.u]++; degrees[edge.v]++; neighbors[edge.u].push(edge.v); neighbors[edge.v].push(edge.u); }
+    const edgeMap = {}; 
+    for (const id of Object.keys(state.nodes)) { degrees[id] = 0; edgeMap[id] = []; }
+    for (const edge of state.edges) { 
+      degrees[edge.u]++; degrees[edge.v]++; 
+      edgeMap[edge.u].push(edge); edgeMap[edge.v].push(edge);
+    }
+    
     for (const idStr of Object.keys(state.nodes)) {
       const id = parseInt(idStr, 10);
       if (degrees[id] === 2) {
-        const u = neighbors[id][0];
-        const v = neighbors[id][1];
+        const e1 = edgeMap[id][0];
+        const e2 = edgeMap[id][1];
+        const u = e1.u === id ? e1.v : e1.u;
+        const v = e2.u === id ? e2.v : e2.u;
+        
+        const combinedLength = (e1.length || 1) + (e2.length || 1);
+        
         delete state.nodes[id];
-        state.edges = state.edges.filter(e => 
-          !( (e.u === id && e.v === u) || (e.u === u && e.v === id) || 
-             (e.u === id && e.v === v) || (e.u === v && e.v === id) )
-        );
-        state.edges.push({ u: u, v: v });
+        state.edges = state.edges.filter(e => e !== e1 && e !== e2);
+        state.edges.push({ u: u, v: v, length: combinedLength });
         changed = true;
         break;
       }
     }
   }
 
+  // 3. Apply the non-crossing Radial Tree Layout
+  const graphToLayout = { 
+    nodes: Object.values(state.nodes), 
+    edges: state.edges 
+  };
+  computeRadialTreeLayout(graphToLayout);
+
+  // 4. Scale and Center to Editor View
+  const margin = 40;
+  const width = 800;
+  const height = 560;
+  
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of graphToLayout.nodes) {
+    if (!n.pos) n.pos = [0, 0]; // Fallback
+    if (n.pos[0] < minX) minX = n.pos[0];
+    if (n.pos[0] > maxX) maxX = n.pos[0];
+    if (n.pos[1] < minY) minY = n.pos[1];
+    if (n.pos[1] > maxY) maxY = n.pos[1];
+  }
+
+  // Calculate the scale needed to fit the bounding box inside the canvas margins
+  const graphWidth = Math.max(maxX - minX, 1);
+  const graphHeight = Math.max(maxY - minY, 1);
+  const scale = Math.min((width - 2 * margin) / graphWidth, (height - 2 * margin) / graphHeight);
+  
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+
+  // Apply scaling and translating to state.nodes
+  for (const n of graphToLayout.nodes) {
+    state.nodes[n.id].x = (width / 2) + (n.pos[0] - cx) * scale;
+    state.nodes[n.id].y = (height / 2) + (n.pos[1] - cy) * scale;
+    // We map .pos back to standard .x and .y for the editor
+    delete state.nodes[n.id].pos; 
+  }
+
+  // 5. Finalize and Render
   const remainingIds = Object.keys(state.nodes);
   state.selectedNode = remainingIds.length > 0 ? parseInt(remainingIds[0], 10) : null;
+  
   renderEditor();
+  
   const finalLeaves = getLeafCount();
-  if (finalLeaves < targetLeaves) {
-    setStatus(`Stopped at ${finalLeaves} leaf nodes (canvas got too crowded).`);
-  } else {
-    setStatus(`Generated random uniaxial tree with ${finalLeaves} leaf nodes.`);
-  }
+  Utils.setStatus(`Generated random uniaxial tree with ${finalLeaves} leaf nodes.`);
 }

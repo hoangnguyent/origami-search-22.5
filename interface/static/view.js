@@ -133,29 +133,52 @@ async function initView() {
     const urlParams = new URLSearchParams(window.location.search);
     const fullId = urlParams.get('id') || '';
     const titleEl = document.getElementById("viewTitle");
-    const container = titleEl.parentElement;
+    const mainEl = document.querySelector("main"); // Target the main body area directly
 
     // Reset title styling and text
-    titleEl.style.color = ''; 
-    titleEl.textContent = "Loading Pattern...";
+    if (titleEl) {
+        titleEl.style.color = ''; 
+        titleEl.textContent = "Loading Pattern...";
+    }
 
-    // Hide all canvases temporarily while loading
-    const canvases = document.querySelectorAll('.canvas-wrapper, .dash-row-3col .panel > div');
-    canvases.forEach(c => c.style.display = 'none');
+    // Hide all layout panels AND export buttons completely so the page is empty
+    const layoutContainers = document.querySelectorAll('.dash-row-2col, .dash-row-3col, .panel, button[id*="download"], button[id*="export"], .export-btn');
+    layoutContainers.forEach(c => c.style.display = 'none');
 
     const loadingImg = document.createElement('img');
     loadingImg.id = 'loadingSpinner';
     loadingImg.src = '/assets/loading.svg';
     loadingImg.style.display = 'block';
-    loadingImg.style.margin = '3rem auto';
-    loadingImg.style.width = '48px';
-    container.appendChild(loadingImg);
+    loadingImg.style.margin = '15vh auto'; // Center heavily in the empty main space
+    loadingImg.style.width = '400px';
+    
+    // Inject directly into the main element
+    if (mainEl) mainEl.appendChild(loadingImg);
 
     const showError = (msg) => {
-        titleEl.textContent = msg;
-        titleEl.style.color = '#ff5555'; // Danger color
+        if (titleEl) {
+            titleEl.textContent = msg;
+            titleEl.style.color = 'var(--danger, #ff6b8a)';
+        }
+        
         const spinner = document.getElementById('loadingSpinner');
         if (spinner) spinner.remove();
+
+        // Inject the "I'm feeling lucky" button directly into the main element
+        if (!document.getElementById('luckyBtn') && mainEl) {
+            const luckyBtn = document.createElement('button');
+            luckyBtn.id = 'luckyBtn';
+            luckyBtn.textContent = "View random crease pattern";
+            luckyBtn.style.display = 'block';
+            luckyBtn.style.margin = '2rem auto'; 
+            
+            luckyBtn.addEventListener('click', () => {
+                const randomId = Math.floor(Math.random() * 1000000) + 1;
+                window.location.search = `?id=5d${randomId}`;
+            });
+            
+            mainEl.appendChild(luckyBtn);
+        }
     };
 
     // 1. Strict Parsing: Checks for [1 digit N][n, b, or d][1+ digit ID]
@@ -183,13 +206,15 @@ async function initView() {
         if (!result || !result.cp) throw new Error("Pattern data is corrupted.");
 
         // Format a nice title
-        const symTitle = sym.charAt(0).toUpperCase() + sym.slice(1);
-        titleEl.textContent = `Pattern ${tilingId} (N=${N}, ${symTitle})`;
+        if (titleEl) {
+            const symTitle = sym.charAt(0).toUpperCase() + sym.slice(1);
+            titleEl.textContent = `Pattern ${N}${symChar}${tilingId}`;
+        }
         
-        // Remove loading spinner and reveal containers
+        // Remove loading spinner and reveal containers and export buttons
         const spinner = document.getElementById('loadingSpinner');
         if (spinner) spinner.remove();
-        canvases.forEach(c => c.style.display = '');
+        layoutContainers.forEach(c => c.style.display = '');
 
         // Save globally
         window.currentResult = result;

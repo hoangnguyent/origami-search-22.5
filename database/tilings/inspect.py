@@ -57,9 +57,6 @@ def pull_specific_tiling(tiling_id, N, symmetry):
         # 3. Extract Tree and Packing strictly from the Folded State
         res_tree, packing = fold.get_tree_and_packing(include_packing=True)
         res_packing = fold_to_cp(packing[0], inst_graph=packing[1], mv_reference=cp)
-        eig_vals = extract_eigenvalues(res_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
-        print(eig_vals.round(3))
-        print(np.log(eig_vals).round(3))
         return [{
             'rank': 1,
             'distance': 0.0,

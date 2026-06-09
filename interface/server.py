@@ -158,23 +158,23 @@ def _serialize_query_tree(query_tree: nx.Graph) -> dict[str, Any]:
     return serialize_tree(query_tree, pos=pos)
 
 
-def _serialize_tree_with_preserved_pos(graph: nx.Graph) -> dict[str, Any]:
-    if isinstance(graph, tuple):
-        graph = graph[0]
+# def _serialize_tree_with_preserved_pos(graph: nx.Graph) -> dict[str, Any]:
+#     if isinstance(graph, tuple):
+#         graph = graph[0]
 
-    pos = {
-        node: [float(coord[0]), float(coord[1])]
-        for node, coord in nx.get_node_attributes(graph, "pos").items()
-        if coord is not None
-    }
-    if not pos:
-        raw_pos = nx.spring_layout(graph, seed=42)
-        pos = {
-            node: [float(coord[0]), float(coord[1])]
-            for node, coord in raw_pos.items()
-        }
+#     pos = {
+#         node: [float(coord[0]), float(coord[1])]
+#         for node, coord in nx.get_node_attributes(graph, "pos").items()
+#         if coord is not None
+#     }
+#     if not pos:
+#         raw_pos = nx.planar_layout(graph)
+#         pos = {
+#             node: [float(coord[0]), float(coord[1])]
+#             for node, coord in raw_pos.items()
+#         }
         
-    return serialize_tree(graph, pos=pos)
+#     return serialize_tree(graph, pos=pos)
 
 
 def _serialize_topology_graph(graph: nx.Graph, seed: int = 42) -> dict[str, Any]:
@@ -280,7 +280,7 @@ def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], d
                 "solved_tiling": _serialize_solved_tiling(res["G_solved"], res["pos_solved"]),
                 "cp": serialize_cp(res["cp"]),
                 "fold": serialize_fold(res["fold"]),
-                "tree": _serialize_tree_with_preserved_pos(tree_graph),
+                "tree": serialize_tree(tree_graph),
                 "packing": serialize_cp(res["packing"]),
                 "heat": _build_heat_profile(query_tree, tree_graph, res["N"], res["symmetry"]),
             }
