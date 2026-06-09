@@ -15,7 +15,8 @@ from typing import Any
 
 import networkx as nx
 
-from database.tilings.faiss_cache import DIMENSION, compute_hkt_signature, get_t_scales
+# from database.tilings.faiss_cache_hkt import DIMENSION, compute_hkt_signature, get_t_scales
+from database.tilings.faiss_cache import DIMENSION, E_SWEEP, compute_wks_signature
 from database.tilings.query import query_tilings
 from src.engine.tree import EIG_COUNT, RESOLUTION, extract_eigenvalues, get_proportional_tree_pos
 from src.engine.fold225 import PLOT_COLORS, ALPHA
@@ -243,23 +244,22 @@ def _build_heat_profile(query_tree: nx.Graph, result_tree: nx.Graph, N: int, sym
     cache_data = load_db_scale_payload(prefix)
     mu = cache_data["mu"]
     sigma = cache_data["sigma"]
-    t_scales = get_t_scales(dim=DIMENSION)
+    # t_scales = get_t_scales(dim=DIMENSION)
 
     query_eigs = extract_eigenvalues(query_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
-    query_hkt = compute_hkt_signature(query_eigs, dim=DIMENSION)
+    query_wks = compute_wks_signature(query_eigs, dim=DIMENSION)
 
     result_eigs = extract_eigenvalues(result_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
-    result_hkt = compute_hkt_signature(result_eigs, dim=DIMENSION)
+    result_wks = compute_wks_signature(result_eigs, dim=DIMENSION)
 
-    normalized_query = ((query_hkt - mu) / sigma).tolist()
-    normalized_result = ((result_hkt - mu) / sigma).tolist()
+    normalized_query = ((query_wks - mu) / sigma).tolist()
+    normalized_result = ((result_wks - mu) / sigma).tolist()
 
     return {
-        "t_scales": [float(value) for value in t_scales],
+        "t_scales": [float(value) for value in E_SWEEP], # Using 't_scales' as the key to prevent frontend refactoring
         "query": [float(value) for value in normalized_query],
         "result": [float(value) for value in normalized_result],
     }
-
 
 def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], db_configs: list[tuple[int, str]]) -> dict[str, Any]:
     query_tree_payload = _serialize_query_tree(query_tree)

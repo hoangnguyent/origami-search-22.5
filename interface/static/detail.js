@@ -80,10 +80,14 @@ export function renderDetail(result, index) {
   modalGrid.replaceChildren();
   if (!result) return;
   modalTitle.textContent = `Option ${result.rank ?? index + 1}`;
-  const quality = getMatchQuality(result.distance, state.queryNodeCount);
+  
+  // how close was the query to the origin? lower magnitude means on average closer L2 distance even if match isn't as good
+  const norm = (Math.sqrt(result.heat.query.reduce((sum, val) => sum + val * val, 0)));
+  const quality = getMatchQuality(result.distance/norm, state.queryNodeCount);
   modalMeta.dataset.quality = quality;
   modalMeta.classList.add("match-quality");
-  modalMeta.textContent = `Match quality: ${quality} • Normalized distance: ${(result.distance*Math.exp(state.queryNodeCount)/1000).toFixed(4)} • Tiling ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
+  modalMeta.textContent = `Match quality: ${quality} • Distance: ${(result.distance/norm).toFixed(4)} • Tiling ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
+  
   const leftPane = buildDetailPane({
     side: "left",
     activeValue: state.detailViewModes.left,
