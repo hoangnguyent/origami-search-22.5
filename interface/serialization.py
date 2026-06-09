@@ -7,6 +7,7 @@ alongside a compressed pickle payload for fidelity and round-tripping.
 from __future__ import annotations
 
 import base64
+import math
 import pickle
 from pathlib import Path
 from typing import Any
@@ -39,6 +40,21 @@ def _pair_to_list(value: Any) -> list[float]:
     raise TypeError(f"Unsupported coordinate value: {type(value)!r}")
 
 
+def _vertex_to_xy(value: Any) -> list[float]:
+    if hasattr(value, "x") and hasattr(value, "y") and hasattr(value, "z") and hasattr(value, "w"):
+        sqrt2 = math.sqrt(2.0) / 2.0
+        x = float(value.x) + sqrt2 * (float(value.y) - float(value.w))
+        y = float(value.z) + sqrt2 * (float(value.y) + float(value.w))
+        return [x, y]
+    if isinstance(value, (list, tuple)) and len(value) >= 2:
+        return [float(value[0]), float(value[1])]
+    if hasattr(value, "to_cartesian"):
+        x, y = value.to_cartesian()
+        return [float(x), float(y)]
+    raise TypeError(f"Unsupported position value: {type(value)!r}")
+
+    
+
 def serialize_graph(graph: nx.Graph, pos: dict[Any, Any] | None = None) -> dict[str, Any]:
     nodes = []
     node_ids = list(graph.nodes())
@@ -66,25 +82,77 @@ def serialize_graph(graph: nx.Graph, pos: dict[Any, Any] | None = None) -> dict[
             edge_payload["length"] = float(data["length"])
         if "weight" in data:
             edge_payload["weight"] = float(data["weight"])
+
+        if "comp_id" in data:
+            edge_payload["comp_id"] = int(data["comp_id"])
         edges.append(edge_payload)
 
     return {"nodes": nodes, "edges": edges}
 
 
+def serialize_query_tree(query_tree: nx.Graph) -> dict[str, Any]:
+    pos = {
+        node: [float(coord[0]), float(coord[1])]
+        for node, coord in nx.get_node_attributes(query_tree, "pos").items()
+        if coord is not None
+    }
+    if not pos:
+        pos = {
+            node: [float(coord[0]), float(coord[1])]
+            for node, coord in query_tree
+        }
+    return serialize_graph(query_tree, pos=pos)
+
+
+def serialize_topology_graph(graph: nx.Graph, seed: int = 42) -> dict[str, Any]:
+    if graph.number_of_nodes() == 0:
+        return {"nodes": [], "edges": []}
+    # Prefer explicit integer/grid node positions when available (stored in node attribute 'pos')
+    node_pos = nx.get_node_attributes(graph, "pos")
+    if node_pos:
+        # Ensure positions are pairs and usable; otherwise fall back to layout
+        ok = True
+        for v, p in node_pos.items():
+            try:
+                if not (isinstance(p, (list, tuple)) and len(p) >= 2):
+                    ok = False
+                    break
+            except Exception:
+                ok = False
+                break
+        if ok:
+            return serialize_graph(graph, pos=node_pos)
+
+    pos = nx.spring_layout(graph, seed=seed)
+    return serialize_graph(graph, pos=pos)
+
+
+def serialize_solved_tiling(graph: nx.Graph, pos_solved: dict[Any, Any]) -> dict[str, Any]:
+    pos = {node: _vertex_to_xy(value) for node, value in pos_solved.items()}
+    return serialize_graph(graph, pos=pos)
+
+
+
 def serialize_cp(cp: Any) -> dict[str, Any]:
+    """
+    Serializes the crease pattern sending exact 4D mathematical coordinates 
+    as integer arrays rather than pre-computing Cartesian floats.
+    """
     return {
-        "segments": [
-            {
-                "type": line_type,
-                "x1": float(x1),
-                "y1": float(y1),
-                "x2": float(x2),
-                "y2": float(y2),
-            }
-            for line_type, x1, y1, x2, y2 in cp.render()
+        "vertices": [
+            [
+                vert.x.num, vert.x.den,
+                vert.y.num, vert.y.den,
+                vert.z.num, vert.z.den,
+                vert.w.num, vert.w.den,
+            ]
+            for vert in cp.vertices
+        ],
+        "edges": [
+            [v1_idx, v2_idx, line_type] 
+            for v1_idx, v2_idx, line_type in cp.edges
         ]
     }
-
 
 def serialize_fold(fold: Any) -> dict[str, Any]:
     faces, multiplicities = fold.render()
@@ -95,10 +163,6 @@ def serialize_fold(fold: Any) -> dict[str, Any]:
         ],
         "multiplicities": [int(value) for value in multiplicities],
     }
-
-
-def serialize_tree(graph: nx.Graph, pos: dict[Any, Any] | None = None) -> dict[str, Any]:
-    return serialize_graph(graph, pos=pos)
 
 
 def serialize_result_pickle(payload: Any) -> str:

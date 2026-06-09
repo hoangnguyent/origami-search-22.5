@@ -5,7 +5,7 @@ import { getMatchQuality, symmetry_abbr } from './utils.js';
 const resultsGrid = document.getElementById("resultsGrid");
 const resultSummary = document.getElementById("resultSummary");
 const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
-const loadingGifUrl = new URL("./assets/loading.svg", import.meta.url).href;
+const loadingGifUrl = new URL("./../assets/loading.svg", import.meta.url).href;
 
 function renderLoadingResults() {
   resultsGrid.replaceChildren();

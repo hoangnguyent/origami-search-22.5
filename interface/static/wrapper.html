@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>BareBones Refs Engine</title>
+<style>
+    body { font-family: sans-serif; background:#222; color:#eee; text-align:center; }
+    canvas { background:#2b2b2b; margin-top:10px; }
+    input { width:60px; margin:3px; }
+    button { margin:5px; }
+    #explain {white-space: pre-line; }
+</style>
+</head>
+<body>
+
+<h3>BareBones Refs Engine</h3>
+
+<div style="display:inline-grid; grid-template-columns: auto auto; align-items:center; gap:8px;">
+    <div style="display:inline-flex; align-items:center; gap:16px;">
+        <span>(x, y) = </span>
+        <span style="font-size:2.5em; font-weight:100;">(</span>
+        <div style="display:inline-flex; flex-direction:column; align-items:center;">
+            <span><input id="a1" style="width:40px"> + <input id="b1" style="width:40px">√2</span>
+            <div style="border-top:1px solid #eee; width:100%; text-align:center;"><input id="c1" style="width:40px"></div>
+        </div>
+        <span>,</span>
+        <div style="display:inline-flex; flex-direction:column; align-items:center;">
+            <span><input id="a2" style="width:40px"> + <input id="b2" style="width:40px">√2</span>
+            <div style="border-top:1px solid #eee; width:100%; text-align:center;"><input id="c2" style="width:40px"></div>
+        </div>
+        <span style="font-size:2.5em; font-weight:100;">)</span>
+    </div>
+    <button onclick="randomize()">Random</button>
+</div>
+
+<br>
+
+<button onclick="run()">Run</button>
+<button onclick="prev()">Prev</button>
+<button onclick="next()">Next</button>
+
+<div id="error" style="color:#ff5555; margin-top:6px;"></div>
+<div id="coords" style="color:#66ffcc;"></div>
+<div id="explain" style="color:#aaaaaa; margin-top:6px; font-size:12px;"></div>
+
+<div id="info"></div>
+
+<canvas id="cv" width="600" height="600"></canvas>
+
+<!-- your real logic lives here -->
+<script src="rbb.js"></script>
+
+<script>
+/* UI layer only */
+document.getElementById("explain").textContent =
+    "Input a point as (x,y) = ((a1 + b1 * rt2) / c1, (a2 + b2 * rt2) / c2); valid region is the unit square.\n"+
+    "The dot in the final step corresponds to your point.  The green and purple lines (if visible) represent the two crossing diagonals which define the reference.\n"+
+    "Use prev and next to see alt. solutions.";
+
+const canvas = document.getElementById("cv");
+const ctx = canvas.getContext("2d");
+
+let solutions = [];
+let index = 0;
+let inputPoint = null;
+
+const CLASS_COLORS = {
+    preCrease: '#888888',
+    diag1: '#00ff66',    
+    diag2: '#c77dff',    
+    final: '#ff0000',
+};
+
+function shorten(x1, y1, x2, y2, amount = 0.03) {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    return [
+        x1 + dx * amount,
+        y1 + dy * amount,
+        x2 - dx * amount,
+        y2 - dy * amount
+    ];
+}
+
+function randomize() {
+    let valid = false;
+    while (!valid) {
+        const a1 = getRandomInt(5), b1 = getRandomInt(3), c1 = getRandomInt(5);
+        const a2 = getRandomInt(5), b2 = getRandomInt(3), c2 = getRandomInt(5);
+        const x = (a1 + b1 * Math.SQRT2) / c1;
+        const y = (a2 + b2 * Math.SQRT2) / c2;
+        if (c1 !== 0 && c2 !== 0 && x >= 0 && x <= 1 && y >= 0 && y <= 1) {
+            document.getElementById("a1").value = a1;
+            document.getElementById("b1").value = b1;
+            document.getElementById("c1").value = c1;
+            document.getElementById("a2").value = a2;
+            document.getElementById("b2").value = b2;
+            document.getElementById("c2").value = c2;
+            valid = true;
+        }
+    }
+    run();
+}
+
+function getRandomInt(max) {
+    return Math.floor(Math.random() * (max * 2 + 1)) - max;
+}
+
+function validatePoint(a1, b1, c1, a2, b2, c2) {
+    const x = (a1 + b1 * Math.SQRT2) / c1;
+    const y = (a2 + b2 * Math.SQRT2) / c2;
+
+    const ok = (x >= 0 && x <= 1 && y >= 0 && y <= 1);
+
+    return { x, y, ok };
+}
+
+function draw(solution) {
+    ctx.clearRect(0,0,600,600);
+    ctx.fillStyle = "#2b2b2b";
+    ctx.fillRect(0,0,600,600);
+
+    const cp = solution.cp;
+
+    const finalDiag1 = cp.filter(c => c.class === "diag1").at(-1);
+    const finalDiag2 = cp.filter(c => c.class === "diag2").at(-1);
+
+    const cols = Math.ceil(Math.sqrt(cp.length));
+    const rows = Math.ceil(cp.length / cols);
+
+    const pad = 10;
+    const cellW = 600 / Math.max(rows, cols);
+    const cellH = 600 / Math.max(rows, cols);
+
+    for (let i = 0; i < cp.length; i++) {
+
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+
+        const ox = col * cellW + pad / 2;
+        const oy = row * cellH + pad / 2;
+        const sx = cellW - pad;
+        const sy = cellH - pad;
+
+        // background cell
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(ox, oy, sx, sy);
+
+        drawUnitBox(ox, oy, sx, sy);
+
+        // cumulative creases (THIS is the key idea)
+        const visible = cp.slice(0, i + 1);
+        const highlight = cp[i];
+
+        for (const c of visible) {
+            const isCurrent = c === highlight;
+
+            // identify final persistent special creases
+            const isFinalDiag1 = c === finalDiag1;
+            const isFinalDiag2 = c === finalDiag2;
+
+            // base geometry
+            let [x1, y1, x2, y2] = [c.x1, c.y1, c.x2, c.y2];
+
+            // shrink only non-current lines
+            if (!isCurrent) {
+                [x1, y1, x2, y2] = shorten(x1, y1, x2, y2, 0.03);
+            }
+
+            // color rules (IMPORTANT ordering)
+            let color = "#ccc";
+
+            if (isCurrent) {
+                color = "red";
+            } else if (isFinalDiag1) {
+                color = "#c77dff"; // purple
+            } else if (isFinalDiag2) {
+                color = "#00ff66"; // green
+            } else {
+                color = "#888888"; // default gray
+            }
+
+            // draw line
+            ctx.strokeStyle = color;
+
+            ctx.lineWidth =
+                isCurrent ? 3.0 : 1.2;
+
+            ctx.beginPath();
+            ctx.moveTo(x1 * sx + ox, (1 - y1) * sy + oy);
+            ctx.lineTo(x2 * sx + ox, (1 - y2) * sy + oy);
+            ctx.stroke();
+        }
+
+        if (i === cp.length - 1 && inputPoint) {
+            ctx.fillStyle = "black";
+            ctx.beginPath();
+            ctx.arc(
+                ox + inputPoint.x * sx,
+                oy + (1 - inputPoint.y) * sy,
+                4,
+                0,
+                Math.PI * 2
+            );
+            ctx.fill();
+        }
+
+    document.getElementById("info").innerText =
+        `Solution ${index+1}/${solutions.length}. Score: ${solution.score}`;
+    }
+}
+
+function computePoint(a1, b1, c1, a2, b2, c2) {
+    return {
+        x: (a1 + b1 * Math.SQRT2) / c1,
+        y: (a2 + b2 * Math.SQRT2) / c2
+    };
+}
+
+function drawUnitBox(ox, oy, sx, sy) {
+    const lines = [
+        [0,0,1,0],
+        [1,0,1,1],
+        [1,1,0,1],
+        [0,1,0,0]
+    ];
+
+    ctx.strokeStyle = "#888888";
+    ctx.lineWidth = 1;
+
+    for (const [x1,y1,x2,y2] of lines) {
+        ctx.beginPath();
+        ctx.moveTo(ox + x1 * sx, oy + (1 - y1) * sy);
+        ctx.lineTo(ox + x2 * sx, oy + (1 - y2) * sy);
+        ctx.stroke();
+    }
+}
+
+function run() {
+    const errorDiv = document.getElementById("error");
+    const coordsDiv = document.getElementById("coords");
+
+    const a1v = +a1.value, b1v = +b1.value, c1v = +c1.value;
+    const a2v = +a2.value, b2v = +b2.value, c2v = +c2.value;
+
+    const result = validatePoint(a1v, b1v, c1v, a2v, b2v, c2v);
+
+    // handle invalid FIRST
+    if (!result.ok) {
+        errorDiv.textContent =
+            `Invalid point: x=${result.x.toFixed(4)}, y=${result.y.toFixed(4)} (must be in [0,1])`;
+        coordsDiv.textContent = "";
+
+        solutions = [];
+        index = 0;
+
+        ctx.clearRect(0,0,600,600);
+        return;
+    }
+
+    // valid case
+    errorDiv.textContent = "";
+    coordsDiv.textContent =
+        `x=${result.x.toFixed(4)}, y=${result.y.toFixed(4)}`;
+
+    solutions = fourOptions(a1v, b1v, c1v, a2v, b2v, c2v);
+
+    inputPoint = { x: result.x, y: result.y };
+
+    index = 0;
+    draw(solutions[index]);
+}
+
+function next() {
+    if (!solutions.length) return;
+    index = (index + 1) % solutions.length;
+    draw(solutions[index]);
+}
+
+function prev() {
+    if (!solutions.length) return;
+    index = (index - 1 + solutions.length) % solutions.length;
+    draw(solutions[index]);
+}
+</script>
+
+</body>
+</html>

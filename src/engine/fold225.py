@@ -795,7 +795,7 @@ class Fold225:
             rendered_faces.append(vertices)
         return rendered_faces, multiplicities
 
-    def get_tree_and_packing(self, include_packing=False, nonuniaxial=False) -> tuple[nx.Graph, tuple]:
+    def get_tree_and_packing(self, nonuniaxial=False,include_packing=False,include_map= False) -> tuple[nx.Graph, tuple]:
         """
         Computes the uniaxial tree by sweeping the fold along a projection axis.
         """
@@ -857,7 +857,7 @@ class Fold225:
             (proj, unique_projections_map[proj]) for proj in sorted_unique_values
         ]
 
-        # Sweep-slice across every hinge point
+        # Sweep-slice across every hinge point. Current_fold is the folded form but sliced up along hinges
         current_fold = self
         for _, v_idx in hinge_points:
             # Re-calculating split info for the modified fold
@@ -905,12 +905,12 @@ class Fold225:
         # --- 4. Tree Construction ---
         tree = nx.Graph()
 
-        # 4.1 Identify Hinge Events (Sorted unique projection values)
+        # 4.1 Identify Hinge locations (Sorted unique projection values)
         # Using AplusBsqrt2 objects as keys for exact comparison
         hinge_positions = [val for val, _ in hinge_points]
 
-        # 4.2 Map Components to Hinge Events
-        # Every component must connect exactly 2 hinge events (or 1 if it's a leaf tip)
+        # 4.2 Map Components to Hinge locations
+        # Every component must connect exactly 2 hinge locations (or 1 if it's a leaf tip)
         component_hinges = (
             []
         )  # for each component, a tuple of (min_hinge_val, max_hinge_val)
@@ -1021,6 +1021,7 @@ class Fold225:
             for idx in comp:
                 inst_to_comp[idx] = c_idx
 
+        # packing is a crease pattern with all the hinges. will build as a graph. annotated because some are marked as invisible (redundant hinges that get merged away in the tree simplification0
         annotated_G = nx.Graph()
 
         # Helper to exactly determine which side of a hinge plane a face sits on.
@@ -1046,7 +1047,7 @@ class Fold225:
                     v = conn
                     e_idx = current_fold.faces[f_idx][slot]
                     if e_idx not in hinge_edges:
-                        # Not a hinge plane at all -> Standard physical fold
+                        # Not a hinge plane -> Standard physical fold
                         annotated_G.add_edge(
                             u, v, edge_idx=e_idx, is_aux=False, is_invisible=False
                         )
@@ -1076,17 +1077,107 @@ class Fold225:
                             is_aux=is_aux,
                             is_invisible=is_invisible,
                         )
+        if not include_map:
+            return tree, (current_fold, annotated_G)
+        
+        # ===========================================
+        unmerged_tree = nx.Graph()
+        for c, (h_start, h_end) in enumerate(component_hinges):
+            u_node = tree_nodes[(c, h_start)]
+            v_node = tree_nodes[(c, h_end)]
+            unmerged_tree.add_edge(u_node, v_node, c_idx=c)
+            
+        # 7.2 Assign new comp_id to simplified tree edges and map c_idx -> new_comp_id
+        c_idx_to_new_comp_id = {}
+        for i, (U, V, data) in enumerate(tree.edges(data=True)):
+            data['comp_id'] = i
+            # Find the path in the unmerged tree to see which original components got merged
+            path = nx.shortest_path(unmerged_tree, U, V)
+            for j in range(len(path) - 1):
+                n1, n2 = path[j], path[j+1]
+                c = unmerged_tree[n1][n2]['c_idx']
+                c_idx_to_new_comp_id[c] = i
+        # 7.3 Unfold the instances exactly as fold_to_cp does to get their 2D coordinates
+        root_node = list(annotated_G.nodes())[0]
+        paths = nx.single_source_shortest_path(annotated_G, root_node)
+        
+        unfolded_insts = {}
+        for node_u, path_nodes in paths.items():
+            f_idx, i_idx = node_u
+            path_info = []
+            for i in range(len(path_nodes) - 1):
+                data = annotated_G[path_nodes[i]][path_nodes[i + 1]]
+                path_info.append((data["edge_idx"], data["is_aux"]))
+                
+            face_edges = current_fold.faces[f_idx]
+            face_verts_idx = []
+            for i, e in enumerate(face_edges):
+                prev_e = face_edges[(i - 1) % len(face_edges)]
+                v1, v2 = current_fold.edges[e]
+                face_verts_idx.append(v1 if v1 in current_fold.edges[prev_e] else v2)
+            
+            f_verts = [current_fold.vertices[v] for v in face_verts_idx]
+            path_geoms = [
+                [current_fold.vertices[v1], current_fold.vertices[v2]]
+                for v1, v2 in [current_fold.edges[eid] for eid, _ in path_info]
+            ]
+            for i in reversed(range(len(path_geoms))):
+                if path_info[i][1]:
+                    continue
+                f_verts = reflect_group(*path_geoms[i], f_verts)
+                
+            unfolded_insts[node_u] = f_verts
 
-        return tree, (current_fold, annotated_G)
+        # 7.4 Extract packing facets (components merged by is_invisible=True)
+        facet_G = nx.Graph()
+        facet_G.add_nodes_from(annotated_G.nodes())
+        for u_node, v_node, data in annotated_G.edges(data=True):
+            if data.get('is_invisible'):
+                facet_G.add_edge(u_node, v_node)
+                
+        facets = list(nx.connected_components(facet_G))
 
-    def goodness(self) -> float:
-        """
-        Heurisic for base quality
-        TODO: better design this. should the denominator be added or multiplied? look at correlation with tree efficiency
-        """
-        num_instances = sum(len(stack) for stack in self.instances)
-        return num_instances / (len(self.faces) + len(self.vertices) + len(self.edges))
-
+        # 7.6 Compute Convex Hull for each facet and map it to its tree comp_id
+        facet_map = []
+        for facet in facets:
+            first_inst = list(facet)[0]
+            c = inst_to_comp[instance_to_idx[first_inst]]
+            comp_id = c_idx_to_new_comp_id[c]
+            
+            unique_verts = set()
+            for inst in facet:
+                unique_verts.update(unfolded_insts[inst])
+                
+            vert_list = list(unique_verts)
+            if len(vert_list) <= 2:
+                hull = vert_list
+            else:
+                # Monotone Chain Convex Hull algorithm
+                vert_list.sort(key=lambda v: v.to_cartesian())  # Sort by (x, y) for 2D hull
+                def cross(o, a, b):
+                    ox, oy = o.to_cartesian()
+                    ax, ay = a.to_cartesian()
+                    bx, by = b.to_cartesian()
+                    return (ax - ox) * (by - oy) - (ay - oy) * (bx - ox)
+                    
+                lower = []
+                for p in vert_list:
+                    while len(lower) >= 2 and cross(lower[-2], lower[-1], p) <= 1e-7:
+                        lower.pop()
+                    lower.append(p)
+                upper = []
+                for p in reversed(vert_list):
+                    while len(upper) >= 2 and cross(upper[-2], upper[-1], p) <= 1e-7:
+                        upper.pop()
+                    upper.append(p)
+                hull = lower[:-1] + upper[:-1]
+                
+            facet_map.append({
+                "comp_id": comp_id,
+                "vertices": [list(vert.to_cartesian()) for vert in hull]  # Returns Vertex4D objects natively
+            })
+            
+        return tree, (current_fold, annotated_G), facet_map
 
 # =============================================================================
 # Canonicalization and Freezing

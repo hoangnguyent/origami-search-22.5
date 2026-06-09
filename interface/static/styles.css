@@ -55,7 +55,7 @@ html[data-theme="light"] {
   --bg-panel: rgba(255, 255, 255, 0.9);
   --bg-surface: rgba(17, 30, 52, 0.05);
   --bg-surface-hover: rgba(19, 108, 160, 0.08);
-  --page-bg: radial-gradient(circle at top, #ffffff 0%, #edf2f9 55%, #dfe8f2 100%);
+  /* --page-bg: radial-gradient(circle at top, #ffffff 0%, #edf2f9 55%, #dfe8f2 100%); */
   --line: #c7d2e3;
   --line-soft: rgba(15, 23, 42, 0.08);
   --line-faint: rgba(15, 23, 42, 0.05);
@@ -373,9 +373,9 @@ svg .packing-b { stroke: var(--packing-b); }
 
 /* Modal Footer */
 .modal-footer { 
-  margin-top: 24px; 
-  padding-top: 24px; 
-  border-top: 1px solid var(--line); 
+  margin-top: 12px; 
+  padding-top: 12px; 
+  /* border-top: 1px solid var(--line);  */
   display: flex; 
   justify-content: flex-end; 
 }

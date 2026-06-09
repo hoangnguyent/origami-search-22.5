@@ -1,9 +1,9 @@
-import { state } from './state.js';
-import * as Editor from './editor.js';
-import * as TreeActions from './treeActions.js';
-import * as Results from './results.js';
-import * as Detail from './detail.js';
-import * as Utils from './utils.js';
+import { state } from './js/state.js';
+import * as Editor from './js/editor.js';
+import * as TreeActions from './js/treeActions.js';
+import * as Results from './js/results.js';
+import * as Detail from './js/detail.js';
+import * as Utils from './js/utils.js';
 
 // const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
 // const settingsModal = document.getElementById("settingsModal");
@@ -263,7 +263,7 @@ if (moveNodeUpBtn) moveNodeUpBtn.addEventListener("click", () => TreeActions.mov
 if (moveNodeDownBtn) moveNodeDownBtn.addEventListener("click", () => TreeActions.moveSelectedNode(0, NODE_NUDGE_STEP));
 if (moveNodeLeftBtn) moveNodeLeftBtn.addEventListener("click", () => TreeActions.moveSelectedNode(-NODE_NUDGE_STEP, 0));
 if (moveNodeRightBtn) moveNodeRightBtn.addEventListener("click", () => TreeActions.moveSelectedNode(NODE_NUDGE_STEP, 0));
-document.getElementById("downloadCpBtn").addEventListener("click", Detail.exportCurrentCp);
+// document.getElementById("downloadCpBtn").addEventListener("click", Detail.exportCurrentCp);
 window.addEventListener("resize", () => Editor.renderEditor());
 
 // Initialize theme, preferences and initial render

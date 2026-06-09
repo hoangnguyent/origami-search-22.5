@@ -56,3 +56,82 @@ export function getMatchQuality(distance, queryNodeCount = 1) {
   if (distance < 4.0) return "Poor";
   return "Terrible";
 }
+export function exportFold(cp) {
+  function getCartesian(v) {
+    const vx = v[0] / v[1];
+    const vy = v[2] / v[3];
+    const vz = v[4] / v[5];
+    const vw = v[6] / v[7];
+    
+    // Math.SQRT1_2 is exactly Math.sqrt(2) / 2
+    const x = vx + Math.SQRT1_2 * (vy - vw);
+    const y = vz + Math.SQRT1_2 * (vy + vw);
+    return [x, y];
+  }
+
+  function getFoldType(rawType) {
+    if (!rawType) return "F";
+    const t = String(rawType).trim().toLowerCase();
+    if (t === "b") return "B";
+    if (t === "rm" || t === "m" || t === "hm") return "M";
+    if (t === "rv" || t === "av" || t === "v" || t === "hv") return "V";
+    if (t === "h" || t === "aux" || t === "ax") return "F";
+    if (t.includes("m")) return "M";
+    if (t.includes("v")) return "V";
+    return "F";
+  }
+
+  // Map exact vertices directly to float coordinates
+  const vertices_coords = cp.vertices.map(getCartesian);
+  
+  const edges_vertices = [];
+  const edges_assignment = [];
+
+  // Edges are already indexed, so we just map the types
+  cp.edges.forEach(edge => {
+    edges_vertices.push([edge[0], edge[1]]);
+    edges_assignment.push(getFoldType(edge[2]));
+  });
+
+  const foldData = { 
+    file_spec: 1.1, 
+    file_creator: "SEARCH-22.5", 
+    vertices_coords: vertices_coords, 
+    edges_vertices: edges_vertices, 
+    edges_assignment: edges_assignment 
+  };
+
+  const blob = new Blob([JSON.stringify(foldData, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  
+  // Pull metadata safely from the global state if it exists
+  const result = window.currentResult || {};
+  const N = result.N || "N";
+  const sym = result.symmetry || "sym";
+  const tilingId = result.tiling_id || "unknown";
+  
+  a.href = url;
+  a.download = `cp${N}${sym}${tilingId}.fold`;
+  document.body.appendChild(a);
+  a.click();
+  
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+export function exportJson(result) {
+  const blob = new Blob([JSON.stringify(result, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  const rank = result.rank || 1;
+  const N = result.N || "N";
+  const sym = result.symmetry || "sym";
+  const tilingId = result.tiling_id || "unknown";
+  a.href = url;
+  a.download = `${N}${sym}${tilingId}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

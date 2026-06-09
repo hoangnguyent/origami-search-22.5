@@ -74,6 +74,7 @@ function buildDetailPane({ side, activeValue, options, renderActive }) {
   return panel;
 }
 
+
 export function renderDetail(result, index) {
   state.currentDetailResult = result;
   state.currentDetailIndex = index;
@@ -120,58 +121,16 @@ export function renderDetail(result, index) {
   modalGrid.appendChild(leftPane);
   modalGrid.appendChild(rightPane);
   updateDetailNavButtons();
+  const viewLink = document.getElementById("viewPatternLink");
+  if (viewLink) {
+    const N = result.N || "4";
+    const sym = result.symmetry || "none";
+    const symChar = sym === "diag" ? "d" : sym === "book" ? "b" : "n";
+    const tilingId = result.tiling_id || "0";
+    viewLink.href = `/view?id=${N}${symChar}${tilingId}`;
+  }
   detailModal.classList.remove("hidden");
   detailModal.setAttribute("aria-hidden", "false");
 }
 
-// Register ourselves with results so clicking thumbnails can open details
 registerDetailRenderer(renderDetail);
-
-// Download handler wired by app.js, but expose an export for convenience
-export function exportCurrentCp() {
-  if (!state.currentDetailResult) return;
-  const cp = state.currentDetailResult.cp;
-  const vertices = [];
-  const vMap = new Map();
-  const edges_vertices = [];
-  const edges_assignment = [];
-  function getVertexId(x, y) {
-    const key = x.toFixed(6) + "," + y.toFixed(6);
-    if (vMap.has(key)) return vMap.get(key);
-    const id = vertices.length;
-    vertices.push([x, y]);
-    vMap.set(key, id);
-    return id;
-  }
-  function getFoldType(rawType) {
-    if (!rawType) return "F";
-    const t = String(rawType).trim().toLowerCase();
-    if (t === "b") return "B";
-    if (t === "rm" || t === "m" || t === "hm") return "M";
-    if (t === "rv" || t === "av" || t === "v" || t === "hv") return "V";
-    if (t === "h" || t === "aux" || t === "ax") return "F";
-    if (t.includes("m")) return "M";
-    if (t.includes("v")) return "V";
-    return "F";
-  }
-  cp.segments.forEach(seg => {
-    const u = getVertexId(seg.x1, seg.y1);
-    const v = getVertexId(seg.x2, seg.y2);
-    edges_vertices.push([u, v]);
-    edges_assignment.push(getFoldType(seg.type));
-  });
-  const foldData = { file_spec: 1.1, file_creator: "SEARCH 22.5", vertices_coords: vertices, edges_vertices: edges_vertices, edges_assignment: edges_assignment };
-  const blob = new Blob([JSON.stringify(foldData, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const rank = state.currentDetailResult.rank || 1;
-  const N = state.currentDetailResult.N || "N";
-  const sym = state.currentDetailResult.symmetry || "sym";
-  const tilingId = state.currentDetailResult.tiling_id || "unknown";
-  a.href = url;
-  a.download = `${N}${sym=="diag"?"d":sym=="book"?"b":"n"}-${tilingId}.fold`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
