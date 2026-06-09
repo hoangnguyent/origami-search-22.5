@@ -17,7 +17,7 @@ from src.engine.cp225 import canonicalize, unfreeze
 from src.engine.fold225 import cp_to_fold, fold_to_cp
 from src.engine.tree import extract_eigenvalues, get_proportional_tree_pos, EIG_COUNT, RESOLUTION
 from database.tilings.build_tilings import decompress_edges, Topology, Tiling
-from database.tilings.faiss_cache import get_t_scales, compute_hkt_signature, DIMENSION
+from database.tilings.faiss_cache_hkt import get_t_scales, compute_hkt_signature, DIMENSION
 from database.tilings.query import draw_cp_ax, draw_fold_ax
 
 def pull_specific_tiling(tiling_id, N, symmetry):
@@ -57,7 +57,9 @@ def pull_specific_tiling(tiling_id, N, symmetry):
         # 3. Extract Tree and Packing strictly from the Folded State
         res_tree, packing = fold.get_tree_and_packing(include_packing=True)
         res_packing = fold_to_cp(packing[0], inst_graph=packing[1], mv_reference=cp)
-        
+        eig_vals = extract_eigenvalues(res_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
+        print(eig_vals.round(3))
+        print(np.log(eig_vals).round(3))
         return [{
             'rank': 1,
             'distance': 0.0,
@@ -163,9 +165,9 @@ if __name__ == "__main__":
     # results = pull_specific_tiling(3342, 4, 'diag')
     # plot_specific_tiling_megaplot(results)
 
-    results = pull_specific_tiling(24603, 4, 'diag')
-    plot_specific_tiling_megaplot(results)
+    # results = pull_specific_tiling(24603, 4, 'diag')
+    # plot_specific_tiling_megaplot(results)
 
-    results = pull_specific_tiling(1003023, 5, 'diag')
-    plot_specific_tiling_megaplot(results)
+    results = pull_specific_tiling(20000, 4, 'none')
+    # plot_specific_tiling_megaplot(results)
     

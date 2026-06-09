@@ -38,7 +38,7 @@
   --packing-m: #ff6b6b;
   --packing-b: #ffffff;
   
-  --quality-perfect: 28, 184, 112;
+  --quality-Great: 28, 184, 112;
   --quality-good: 92, 194, 106;
   --quality-acceptable: 214, 180, 55;
   --quality-poor: 237, 136, 63;
@@ -80,7 +80,7 @@ html[data-theme="light"] {
   --packing-m: #ec5151;
   --packing-b: #2b3a4a;
   
-  --quality-perfect: 24, 153, 92;
+  --quality-Great: 24, 153, 92;
   --quality-good: 76, 167, 88;
   --quality-acceptable: 173, 145, 32;
   --quality-poor: 207, 116, 39;
@@ -274,7 +274,7 @@ html[data-theme="light"] .thumb-mode-btn.active {
 .result-meta { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
 .result-meta strong { color: var(--text); font-size: 14px; }
 .match-quality { --quality-rgb: var(--quality-good); gap: 5px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(var(--quality-rgb), var(--quality-border-alpha)); background: rgba(var(--quality-rgb), 0.06); }
-.match-quality[data-quality="Perfect"] { --quality-rgb: var(--quality-perfect); }
+.match-quality[data-quality="Great"] { --quality-rgb: var(--quality-Great); }
 .match-quality[data-quality="Good"] { --quality-rgb: var(--quality-good); }
 .match-quality[data-quality="Acceptable"] { --quality-rgb: var(--quality-acceptable); }
 .match-quality[data-quality="Poor"] { --quality-rgb: var(--quality-poor); }

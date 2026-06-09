@@ -48,11 +48,11 @@ export function setStatus(message, isError = false) {
 export const symmetry_abbr = { "diag":"d", "book":"b", "none":"n" };
 
 export function getMatchQuality(distance, queryNodeCount = 1) {
-  const value = Number(distance*Math.exp(queryNodeCount))/1000;
-  if (!Number.isFinite(value)) return "unknown";
-  if (value < 5) return "Perfect";
-  if (value < 30) return "Good";
-  if (value < 100) return "Acceptable";
-  if (value < 600) return "Poor";
+  // const value = Number(distance*Math.exp(queryNodeCount))/1000;
+  // if (!Number.isFinite(distance)) return "unknown";
+  if (distance < 0.5) return "Great";
+  if (distance < 1.5) return "Good";
+  if (distance < 3.0) return "Acceptable";
+  if (distance < 4.0) return "Poor";
   return "Terrible";
 }
