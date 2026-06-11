@@ -90,6 +90,13 @@
         <div class="editor-container">
           <svg id="editorSvg" viewBox="0 0 800 560" role="img" aria-label="Interactive tree editor"></svg>
 
+          <div class="editor-top-left-controls" aria-label="Random tree generation">
+            <button id="randomTreeBtn" class="icon-btn editor-action-btn" type="button" aria-label="Generate random tree" title="Generate random tree">
+              <img src="/assets/shuffle.svg" alt="" aria-hidden="true" />
+            </button>
+            <input id="randomNodeCount" type="number" min="4" max="50" value="10" title="Target number of nodes" aria-label="Number of nodes" />
+          </div>
+
           <button id="resetTree" class="icon-btn editor-action-btn editor-reset-btn" type="button" aria-label="Reset tree" title="Reset entire tree">
             <img src="/assets/trash.svg" alt="" aria-hidden="true" />
           </button>
@@ -100,66 +107,60 @@
             </button>
             <div class="editor-nudge-pad" role="group" aria-label="Move selected node">
               <span class="editor-nudge-spacer editor-nudge-up-spacer"></span>
-              <button id="moveNodeUpBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-up" type="button" aria-label="Move selected node up" title="Move selected node up">
-                <img src="/assets/arrow-up.svg" alt="" aria-hidden="true" />
-              </button>
+              <button id="moveNodeUpBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-up" type="button"><img src="/assets/arrow-up.svg" alt="" /></button>
               <span class="editor-nudge-spacer editor-nudge-right-spacer"></span>
-              <button id="moveNodeLeftBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-left" type="button" aria-label="Move selected node left" title="Move selected node left">
-                <img src="/assets/arrow-left.svg" alt="" aria-hidden="true" />
-              </button>
+              <button id="moveNodeLeftBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-left" type="button"><img src="/assets/arrow-left.svg" alt="" /></button>
               <span class="editor-nudge-spacer editor-nudge-center-spacer"></span>
-              <button id="moveNodeRightBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-right" type="button" aria-label="Move selected node right" title="Move selected node right">
-                <img src="/assets/arrow-right.svg" alt="" aria-hidden="true" />
-              </button>
+              <button id="moveNodeRightBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-right" type="button"><img src="/assets/arrow-right.svg" alt="" /></button>
               <span class="editor-nudge-spacer editor-nudge-left-spacer"></span>
-              <button id="moveNodeDownBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-down" type="button" aria-label="Move selected node down" title="Move selected node down">
-                <img src="/assets/arrow-down.svg" alt="" aria-hidden="true" />
-              </button>
+              <button id="moveNodeDownBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-down" type="button"><img src="/assets/arrow-down.svg" alt="" /></button>
               <span class="editor-nudge-spacer editor-nudge-down-spacer"></span>
             </div>
           </div>
         </div>
-          <div class="controls-container">
-            <div class="toggles">
-                <label class="toggle-label" title="If not checked, restricts search to symmetrically diagonal databases.">
-                <input type="checkbox" id="diagToggle" />
-                  <span id="diagToggleLabel">Allow asymmetric solutions</span>
-              </label>
-              <label class="toggle-label">
-                  <span id="topResultsLabel">Top results:</span>
-                <input id="resultCount" type="number" min="1" max="100" value="5" />
-              </label>
-              <label class="toggle-label" style="justify-content: center;">
-                  <input id="randomNodeCount" type="number" min="2" max="50" value="10" title="Target number of nodes" />
-                  <span id="randomLeafNodesLabel">Random leaf nodes</span>
-              </label>
-            </div>
+        
+        <div class="controls-container">
+          <div class="query-action-row">
             
-            <div class="actions">
-              <!-- <button id="runQuery">Run Query</button> -->
-              <!-- <button id="resetTree" class="secondary">Reset Tree</button> -->
-              <button id="randomTreeBtn" class="secondary">Random Tree</button>
+            <div class="query-inputs-group">
+              <div class="config-group">
+                <span class="config-label">Symmetry modes</span>
+                <div class="thumb-mode-group db-toggle-group" role="group" aria-label="Database configurations">
+                  <button type="button" class="thumb-mode-btn active" id="dbDiagBtn" data-db="diag" title="Diagonal Symmetry">
+                    <img src="/assets/diag_sym.svg" alt="" aria-hidden="true" />
+                  </button>
+                  <button type="button" class="thumb-mode-btn" id="dbBookBtn" data-db="book" title="Book Symmetry">
+                    <img src="/assets/book_sym.svg" alt="" aria-hidden="true" />
+                  </button>
+                  <button type="button" class="thumb-mode-btn" id="dbAsymBtn" data-db="none" title="Asymmetric">
+                    <img src="/assets/asymmetric.svg" alt="" aria-hidden="true" />
+                  </button>
+                </div>
+              </div>
+
+              <div class="config-group">
+                <span class="config-label">Search Size</span>
+                <input id="resultCount" class="size-input" type="number" min="1" max="100" value="5" />
+              </div>
             </div>
 
-            <div class="actions" style="margin-top: 12px; grid-template-columns: 1fr;">
-              <button id="runQuery">Run Query</button>
+            <button id="runQuery" class="primary-run-btn icon-btn"><img src="/assets/send.svg" alt=""></button>
 
-            </div>
-            
-            <p id="status" class="status">Ready.</p>
           </div>
-          <!-- <p id="status" class="status">Ready.</p>
-        </div> -->
+          
+          <p id="status" class="status">Ready.</p>
+        </div>
       </section>
 
       <section class="right-panel">
         <div class="section-head">
           <div class="results-head-left">
             <!-- <h2 id="resultsHeading">Results</h2> -->
-            <div class="thumb-mode-container toggle-label">
+            <div class="thumb-mode-container toggle-label config-group">
               <!-- <span>Thumbnail:</span> -->
+              <span class="config-label">Thumbnail display</span>
               <input type="hidden" id="resultsThumbMode" value="cp" />
-              
+
               <div class="thumb-mode-group" role="group" aria-label="Thumbnail display mode">
                 <button type="button" class="thumb-mode-btn active" data-mode="cp" aria-label="Crease pattern" title="Crease pattern">
                   <img src="/assets/crease_pattern.svg" alt="" aria-hidden="true" />

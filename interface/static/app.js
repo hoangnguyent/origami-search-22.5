@@ -52,6 +52,7 @@ if (themeToggleBtn) {
   });
 }
 
+
 // Language selection logic (placeholder hook)
 document.querySelectorAll('.lang-btn').forEach(btn => {
   btn.addEventListener('click', (e) => {
@@ -67,48 +68,85 @@ document.querySelectorAll('.lang-btn').forEach(btn => {
   });
 });
 
-// NEW SEGMENTED CONTROL LOGIC
+// =====================================================================
+// 1. Thumbnail Display Mode (Single-Select / Radio Logic)
+// =====================================================================
 const resultsThumbInput = document.getElementById("resultsThumbMode");
-const thumbModeBtns = document.querySelectorAll(".thumb-mode-btn");
+// STRICT SCOPE: Only target buttons inside the results header
+const displayModeBtns = document.querySelectorAll(".results-head-left .thumb-mode-btn"); 
 
-if (resultsThumbInput && thumbModeBtns.length > 0) {
-  thumbModeBtns.forEach(btn => {
+if (resultsThumbInput && displayModeBtns.length > 0) {
+  displayModeBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-      // 1. Remove active class from all buttons
-      thumbModeBtns.forEach(b => b.classList.remove("active"));
+      // Remove active class from ONLY the display mode buttons
+      displayModeBtns.forEach(b => b.classList.remove("active"));
       
-      // 2. Indent the clicked button
       btn.classList.add("active");
-      
-      // 3. Sync the hidden input so the renderer knows what to draw
       resultsThumbInput.value = btn.dataset.mode;
       
-      // 4. Fire the re-render if we have data
-      if (state.queryResult) {
+      if (typeof state !== 'undefined' && state.queryResult && typeof Results !== 'undefined') {
         Results.renderResults();
       }
     });
   });
 }
 
+// =====================================================================
+// 2. Database Selection (Multi-Select Logic)
+// =====================================================================
+// STRICT SCOPE: Only target buttons inside the database settings group
+const dbBtns = document.querySelectorAll('.db-toggle-group .thumb-mode-btn'); 
+
+if (dbBtns.length > 0) {
+  dbBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isActive = btn.classList.contains('active');
+      // Count how many DB buttons are currently active
+      const activeCount = document.querySelectorAll('.db-toggle-group .thumb-mode-btn.active').length;
+      
+      // Prevent the user from unchecking the very last active database
+      if (isActive && activeCount === 1) {
+        // Optional: you could trigger a tiny CSS shake animation or warning toast here
+        return; 
+      }
+      
+      // Otherwise, independently toggle this specific button
+      btn.classList.toggle('active');
+    });
+  });
+}
+
 function selectedDbConfigs() {
-  const isDiagOnly = !document.getElementById("diagToggle").checked;
-  if (isDiagOnly) {
-    return [
+  const configs = [];
+  
+  const isDiag = document.getElementById("dbDiagBtn")?.classList.contains("active");
+  const isBook = document.getElementById("dbBookBtn")?.classList.contains("active");
+  const isAsym = document.getElementById("dbAsymBtn")?.classList.contains("active");
+
+  if (isDiag) {
+    configs.push(
       { N: 3, symmetry: "diag" },
       { N: 4, symmetry: "diag" },
       { N: 5, symmetry: "diag" }
-    ];
-  } else {
-    return [
-      { N: 3, symmetry: "diag" },
-      { N: 3, symmetry: "none" },
-      { N: 4, symmetry: "diag" },
-      { N: 4, symmetry: "none" },
-      { N: 4, symmetry: "book" },
-      { N: 5, symmetry: "diag" }
-    ];
+    );
   }
+  
+  if (isBook) {
+    configs.push(
+      { N: 3, symmetry: "book" },
+      { N: 4, symmetry: "book" },
+      { N: 6, symmetry: "book" }
+    );
+  }
+  
+  if (isAsym) {
+    configs.push(
+      { N: 3, symmetry: "none" },
+      { N: 4, symmetry: "none" }
+    );
+  }
+
+  return configs;
 }
 
 async function runQuery() {
@@ -177,7 +215,6 @@ async function runQuery() {
     const resultSummary = document.getElementById("resultSummary");
     if (resultSummary) resultSummary.textContent = `${data.results.length} result(s) loaded.`;
     const n = Number(document.getElementById("resultCount").value || 5);
-    const isDiagOnly = !document.getElementById("diagToggle").checked;
     
     // Update UI status to show a quick summary of the bottleneck
     Utils.setStatus(`Successfully queried ${n} patterns in ${(totalFrontendMs/1000).toFixed(2)}s`);
