@@ -1,4 +1,5 @@
 import { state } from './state.js';
+import { Locales } from './locales.js';
 
 export const THEME_STORAGE_KEY = "search225-theme-preference";
 export const DETAIL_LEFT_VIEW_KEY = "search225-detail-left-view";
@@ -48,14 +49,16 @@ export function setStatus(message, isError = false) {
 export const symmetry_abbr = { "diag":"d", "book":"b", "none":"n" };
 
 export function getMatchQuality(distance, queryNodeCount = 1) {
-  // const value = Number(distance*Math.exp(queryNodeCount))/1000;
-  // if (!Number.isFinite(distance)) return "unknown";
-  if (distance < 0.5) return "Great";
-  if (distance < 1.5) return "Good";
-  if (distance < 3.0) return "Acceptable";
-  if (distance < 4.0) return "Poor";
-  return "Terrible";
+  const lang = localStorage.getItem('explori_lang') || 'en';
+  const dict = Locales[lang] || Locales['en'];
+
+  if (distance < 0.5) return { key: "Great", label: dict.qualityGreat };
+  if (distance < 1.5) return { key: "Good", label: dict.qualityGood };
+  if (distance < 3.0) return { key: "Acceptable", label: dict.qualityAcceptable };
+  if (distance < 4.0) return { key: "Poor", label: dict.qualityPoor };
+  return { key: "Terrible", label: dict.qualityTerrible };
 }
+
 export function exportFold(cp) {
   function getCartesian(v) {
     const vx = v[0] / v[1];

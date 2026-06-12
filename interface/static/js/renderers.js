@@ -1,3 +1,4 @@
+import { Locales } from './locales.js';
 const SVG_NS = "http://www.w3.org/2000/svg";
 
 export function makeSvg(tag, attrs = {}) {
@@ -374,12 +375,16 @@ export function renderHeatSvg(svg, heat) {
   }
 
   // --- Axis Labels ---
+  const lang = localStorage.getItem('explori_lang') || 'en';
+  const dict = Locales[lang] || Locales['en'];
+
+  // --- Axis Labels ---
   const xLabel = makeSvg("text", {
       x: width / 2, y: height - 25,
       "text-anchor": "middle",
       style: titleStyle
   });
-  xLabel.textContent = "Log Eigenvalues";
+  xLabel.textContent = dict.logEigenvalues;
   svg.appendChild(xLabel);
 
   const yLabel = makeSvg("text", {
@@ -388,7 +393,7 @@ export function renderHeatSvg(svg, heat) {
       transform: "rotate(-90)",
       style: titleStyle
   });
-  yLabel.textContent = "Normalized Intensity";
+  yLabel.textContent = dict.normIntensity;
   svg.appendChild(yLabel);
 
   // --- 5. Plot the Manual Polyline ---
