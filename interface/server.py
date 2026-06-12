@@ -52,8 +52,8 @@ creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", sco
 client = gspread.authorize(creds)
 
 # 3. Open the specific Google Sheet
-sheet = client.open("22.5 logs").sheet1
-
+sheet1 = client.open("22.5 logs").worksheets()[0]
+sheet2 = client.open("22.5 logs").worksheets()[1]
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TOKEN = os.environ.get("SEARCH22_INTERFACE_TOKEN", "").strip()
@@ -268,6 +268,7 @@ class InterfaceHandler(BaseHTTPRequestHandler):
 
         # 2. SERVE THE EXACT TILING DATA (API)
         if path == "/api/fetch_tiling":
+            t0 = time.time()
             qs = parse_qs(parsed_url.query)
             try:
                 tiling_id = int(qs.get("id", [0])[0])
@@ -295,6 +296,20 @@ class InterfaceHandler(BaseHTTPRequestHandler):
                 _send_json(self, HTTPStatus.OK, response)
             except Exception as e:
                 self.send_error(HTTPStatus.BAD_REQUEST, f"Invalid parameters: {e}")
+
+            # Write to logs
+            try:
+                country = self.headers.get("CF-IPCountry", "Unknown")
+                real_ip = self.headers.get("CF-Connecting-IP", "Unknown")
+                ray_id = self.headers.get("CF-Ray", "Unknown")
+                
+                user_agent = self.headers.get("User-Agent", "Unknown")
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                row_data = [timestamp,N, symmetry,tiling_id,time.time() - t0, country, real_ip, ray_id, user_agent,]
+                sheet2.append_row(row_data)
+            except Exception as e:
+                print(f"Failed to log to Google Sheets: {e}")
+
             return
         
         if self.path in {"/", "/index.html"}:
@@ -412,7 +427,7 @@ class InterfaceHandler(BaseHTTPRequestHandler):
 
         db_configs = _normalize_db_configs(payload)
         if not db_configs:
-            db_configs = [(4, "diag"), (4, "none"), (3, "none"), (5, "diag")]
+            db_configs = [(4, "diag"), (4,"book"), (4, "none"), (5, "diag"), (6, "book")]
 
         n_results = int(payload.get("n", 5))
         results = query_tilings(query_tree, db_configs=db_configs, n=n_results)
@@ -427,8 +442,8 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             
             user_agent = self.headers.get("User-Agent", "Unknown")
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            row_data = [timestamp, n_results, time.time() - t0, country, real_ip, ray_id, user_agent, str(payload["tree"])]
-            sheet.append_row(row_data)
+            row_data = [timestamp, n_results, time.time() - t0, country, real_ip, ray_id, user_agent, str(payload["tree"]), str(db_configs)]
+            sheet1.append_row(row_data)
         except Exception as e:
             print(f"Failed to log to Google Sheets: {e}")
 
