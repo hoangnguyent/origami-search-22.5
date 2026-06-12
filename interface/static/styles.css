@@ -249,6 +249,7 @@ html[data-theme="light"] { --gear-filter: invert(14%) sepia(13%) saturate(1434%)
   box-shadow: 0 0 0 3px rgba(122, 211, 255, 0.16);
 }
 
+
 /* Emphasize the Run button */
 .primary-run-btn {
   flex: 0 0 auto; /* CRITICAL: Do not grow, do not shrink. Stay rigid. */
@@ -258,7 +259,7 @@ html[data-theme="light"] { --gear-filter: invert(14%) sepia(13%) saturate(1434%)
   padding: 13px;
   border-radius: 40px;
   letter-spacing: 0.02em;
-  background: var(--cp-v);
+  background: rgba(122,211,255,0.7);
   border: none;
   cursor: pointer;
   transition: 0.15s ease;
@@ -442,7 +443,7 @@ svg .packing-b { stroke: var(--packing-b); }
 .close-btn { position: absolute; top: 24px; right: 24px; background: var(--toolbar-icon-bg); border: none; width: 40px; height: 40px; border-radius: 20px; font-size: 18px; display: flex; align-items: center; justify-content: center; padding: 0; transition: 0.2s; }
 .close-btn:hover { background: var(--danger); color: white; }
 .detail-modal-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding-right: 24px;}
-.modal-title-group { min-width: 0; }
+
 .modal-kicker { margin: 0 0 6px; color: var(--muted); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; }
 .modal-header h2 { margin: 0; color: var(--text); font-size: 26px; line-height: 1.15; padding-bottom:25px; }
 .modal-meta { margin: 0; color: var(--muted); font-size: 16px; text-align: right; max-width: 40ch; line-height: 1.6}

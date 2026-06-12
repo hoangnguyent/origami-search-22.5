@@ -83,8 +83,6 @@ export function renderDetail(result, index) {
   state.currentDetailIndex = index;
   modalGrid.replaceChildren();
   if (!result) return;
-  modalTitle.textContent = `${dict.option} ${result.rank ?? index + 1}`;
-  
   const norm = (Math.sqrt(result.heat.query.reduce((sum, val) => sum + val * val, 0)));
   const quality = getMatchQuality(result.distance/norm, state.queryNodeCount);
   
@@ -93,7 +91,8 @@ export function renderDetail(result, index) {
   modalMeta.classList.add("match-quality");
   
   // Use the translated label for the display text
-  modalMeta.textContent = `${dict.matchQuality}: ${quality.label} • ${dict.distance}: ${(result.distance/norm).toFixed(4)} • ${dict.tilingId}: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
+  // modalMeta.textContent = `${dict.matchQuality}: ${quality.label} • ${dict.distance}: ${(result.distance/norm).toFixed(4)} • ${dict.tilingId}: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
+  modalMeta.textContent = `${dict.tilingId}: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id} • ${dict.matchQuality}: ${quality.label}`;
   
   const leftPane = buildDetailPane({
     side: "left",
