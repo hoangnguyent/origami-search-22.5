@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { makeSvg, computeRadialTreeLayout } from './renderers.js';
 import { setStatus } from './utils.js';
 import { isMobileLayout } from './layout.js';
+import { Locales } from './locales.js';
 
 const editorSvg = document.getElementById("editorSvg");
 const deleteNodeBtn = document.getElementById("deleteNodeBtn");
@@ -439,5 +440,12 @@ export function generateRandomTree() {
   renderEditor();
   
   const finalLeaves = getLeafCount();
-  setStatus(`Generated random uniaxial tree with ${finalLeaves} leaf nodes.`);
+  const lang = localStorage.getItem('explori_lang') || 'en';
+  const dict = Locales[lang] || Locales['en'];
+  
+  if (finalLeaves < targetLeaves) {
+    Utils.setStatus(`Stopped at ${finalLeaves} leaf nodes (canvas got too crowded).`);
+  } else {
+    Utils.setStatus(`${dict.treeGen1}${finalLeaves}${dict.treeGen2}`);
+  }
 }

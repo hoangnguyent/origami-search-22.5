@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { makeSvg, renderCpSvg, renderPackingSvg, renderFoldSvg, renderGraphSvg } from './renderers.js';
 import { persistDetailView, getMatchQuality, symmetry_abbr } from './utils.js';
 import { registerDetailRenderer } from './results.js';
+import { Locales } from './locales.js';
 
 const detailModal = document.getElementById("detailModal");
 const modalGrid = document.getElementById("modalGrid");
@@ -74,31 +75,34 @@ function buildDetailPane({ side, activeValue, options, renderActive }) {
   return panel;
 }
 
-
 export function renderDetail(result, index) {
+  const lang = localStorage.getItem('explori_lang') || 'en';
+  const dict = Locales[lang] || Locales['en'];
+
   state.currentDetailResult = result;
   state.currentDetailIndex = index;
   modalGrid.replaceChildren();
   if (!result) return;
-  modalTitle.textContent = `Option ${result.rank ?? index + 1}`;
-  
-  // how close was the query to the origin? lower magnitude means on average closer L2 distance even if match isn't as good
   const norm = (Math.sqrt(result.heat.query.reduce((sum, val) => sum + val * val, 0)));
   const quality = getMatchQuality(result.distance/norm, state.queryNodeCount);
-  modalMeta.dataset.quality = quality;
+  
+  // Use the universal English key for the CSS styling
+  modalMeta.dataset.quality = quality.key; 
   modalMeta.classList.add("match-quality");
-  modalMeta.textContent = `Match quality: ${quality} • Distance: ${(result.distance/norm).toFixed(4)} • Tiling ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
+  
+  // Use the translated label for the display text
+  // modalMeta.textContent = `${dict.matchQuality}: ${quality.label} • ${dict.distance}: ${(result.distance/norm).toFixed(4)} • ${dict.tilingId}: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
+  modalMeta.textContent = `${dict.tilingId}: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id} • ${dict.matchQuality}: ${quality.label}`;
   
   const leftPane = buildDetailPane({
     side: "left",
     activeValue: state.detailViewModes.left,
-    options: [ { value: "cp", label: "Crease pattern" }, { value: "packing", label: "Packing" } ],
+    // Note: Reusing the dict.thumbCp and dict.thumbPacking translations here!
+    options: [ { value: "cp", label: dict.thumbCp }, { value: "packing", label: dict.thumbPacking } ],
     renderActive: (svg, currentValue) => {
       if (currentValue === "packing" && result.packing) {
-        // UPDATE: Pass 400, 400
         renderPackingSvg(svg, result.packing, 400, 400);
       } else {
-        // UPDATE: Pass 400, 400
         renderCpSvg(svg, result.cp, 400, 400);
       }
     },
@@ -107,7 +111,7 @@ export function renderDetail(result, index) {
   const rightPane = buildDetailPane({
     side: "right",
     activeValue: state.detailViewModes.right,
-    options: [ { value: "tree", label: "Tree" }, { value: "fold", label: "Folded form" } ],
+    options: [ { value: "tree", label: dict.thumbTree }, { value: "fold", label: dict.thumbFold } ],
     renderActive: (svg, currentValue) => {
       if (currentValue === "fold" && result.fold) {
         // Pass 400, 400 so it matches the viewBox square
