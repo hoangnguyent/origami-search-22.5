@@ -347,15 +347,15 @@ def harvest_candidates(faces, pos_init, symmetry, N=4, exhaustive=False):
             continue
 
         # reject symmetric redundancy
+
         if symmetry == "diag" and not any(
             pos_init[v][1] < pos_init[v][0] - 1e-5 for v in face
         ):
             continue
         if symmetry == "book" and not any(
-            pos_init[v][0] > N / 2 + 1e-5 for v in face
+            pos_init[v][0] > 0.5 + 1e-5 for v in face
         ):
             continue
-
         edge_data = get_edge_data(face, pos_init)
         quad_indices = set()
         reflex_pairs = set()
@@ -533,6 +533,7 @@ def run_milp_selection(
                 elif symmetry == "book":
                     prob += x_vars[u] == N - x_vars[u_sym]
                     prob += y_vars[u] == y_vars[u_sym]
+                    
 
     if (0, 0) in nodes:
         prob += x_vars[(0, 0)] == 0
@@ -933,12 +934,10 @@ def solve_tiling(G_in, symmetry="none", N=4,verbose=False, time_limit = 10, dive
     heuristic_candidates = harvest_candidates(
         faces, pos_init, symmetry, N, exhaustive=False
     )
-    
     applied_list = run_milp_selection(
         G, pos_init, nodes, faces, heuristic_candidates, symmetry, N, 
         diversity_threshold=diversity_threshold, num_solutions=num_solutions
     )
-
     valid_solutions = []
     t0 = time.time()
     
@@ -1128,6 +1127,7 @@ def canonicalize_tiling_geometry(G, pos_solved_exact, N):
 # #     ax.set_aspect("equal")
 # #     ax.axis("off")
 # from src.engine.tiling2cp import draw_cp_ax, build_crease_pattern, load_frozen_blob
+# from src.engine.topology225 import plot_multiple_graphs
 # def debug_plot_diverse_tilings(db_id=None, db_name="topologies_4_none.db", N=4, 
 #                                symmetry="none", diversity_threshold=2, num_solutions=5):
 #     """
@@ -1143,6 +1143,8 @@ def canonicalize_tiling_geometry(G, pos_solved_exact, N):
 #     G_raw = extract_topology(db_id, db_name=db_name, N=N)
 #     if G_raw is None:
 #         return
+#     # print(f"Extracted topology: {G_raw.nodes()}")
+#     # plot_multiple_graphs([G_raw])
 
 #     # Solve with multi-solution requirements
 #     # Note: solve_tiling now returns a list of (G, pos_init, pos_solved_exact, faces, n2i)
@@ -1151,7 +1153,7 @@ def canonicalize_tiling_geometry(G, pos_solved_exact, N):
 #         symmetry=symmetry, 
 #         N=N, 
 #         verbose=True, 
-#         time_limit=15, 
+#         time_limit=20, 
 #         diversity_threshold=diversity_threshold, 
 #         num_solutions=num_solutions
 #     )
@@ -1196,7 +1198,7 @@ def canonicalize_tiling_geometry(G, pos_solved_exact, N):
   
 #     # Example: solve for 5 diverse solutions with a threshold of 2 cuts
 #     debug_plot_diverse_tilings(
-#         db_id=13936, 
+#         db_id=100, 
 #         db_name="topologies_4_book.db", 
 #         N=4, 
 #         symmetry="book", 
@@ -1205,9 +1207,9 @@ def canonicalize_tiling_geometry(G, pos_solved_exact, N):
 #     )
 
 
-"""
-for 4 diag: threshold 4, count 6
+# """
+# for 4 diag: threshold 4, count 6
 
 
-for 4 book: 24680,13936 is applying asymmetric constraint
-"""
+# for 4 book: 24680,13936 is applying asymmetric constraint
+# """

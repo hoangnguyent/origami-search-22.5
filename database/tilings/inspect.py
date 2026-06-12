@@ -166,6 +166,6 @@ if __name__ == "__main__":
     # results = pull_specific_tiling(24603, 4, 'diag')
     # plot_specific_tiling_megaplot(results)
 
-    results = pull_specific_tiling(20000, 4, 'none')
-    # plot_specific_tiling_megaplot(results)
+    results = pull_specific_tiling(80000, 4, 'book')
+    plot_specific_tiling_megaplot(results)
     
