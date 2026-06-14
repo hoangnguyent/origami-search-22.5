@@ -66,9 +66,9 @@ def _frac(n, d=1): return Fraction(n, d)
 _HALF = _frac(1, 2)
 
 def unpack_vertex(b: bytes) -> Vertex4D:
-    """Unpack a 6-int64 z2 blob into a Vertex4D (matches cp_tree.pack_vertex)."""
-    from cp_tree import z2_to_v4d
-    return z2_to_v4d(*struct.unpack(">6q", b))
+    """Unpack a variable-length z2 blob into a Vertex4D (matches cp_tree.pack_vertex)."""
+    from cp_tree import unpack_vertex as _uv
+    return _uv(b)
 
 # ---------------------------------------------------------------------------
 # Coordinate conversion

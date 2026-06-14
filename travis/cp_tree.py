@@ -58,30 +58,65 @@ def _z2_reduce(p,q,d):
     return (p//g,q//g,d//g)
 
 def v4d_to_z2(v):
-    """Vertex4D -> (px,qx,dx, py,qy,dy) reduced."""
+    """Vertex4D -> (px,qx,dx, py,qy,dy) reduced.
+    
+    Uses Python's built-in Fraction reduction to keep numbers small,
+    then converts to the z2 [p,q,d] form.
+    cx = Ax + Bx*sqrt(2)  where Ax=v.x (Fraction), Bx=(v.y-v.w)/2 (Fraction)
+    cy = Ay + By*sqrt(2)  where Ay=v.z (Fraction), By=(v.y+v.w)/2 (Fraction)
+    """
     from math import gcd
-    def lcm(a,b): return a*b//gcd(a,b) if a and b else (a or b)
-    Ax=v.x; Bx=(v.y-v.w)*Fraction(1,2)
-    Ay=v.z; By=(v.y+v.w)*Fraction(1,2)
-    dx=lcm(abs(int(Ax.den)),abs(int(Bx.den))) if Bx.den else abs(int(Ax.den))
-    qx=Bx.num*(dx//Bx.den) if Bx.den else 0
-    px=Ax.num*(dx//Ax.den)
-    dy=lcm(abs(int(Ay.den)),abs(int(By.den))) if By.den else abs(int(Ay.den))
-    qy=By.num*(dy//By.den) if By.den else 0
-    py=Ay.num*(dy//Ay.den)
-    return _z2_reduce(px,qx,dx)+_z2_reduce(py,qy,dy)
+    # Get fully reduced Fractions first
+    Ax = v.x          # already a reduced Fraction
+    Bx = (v.y - v.w) * Fraction(1, 2)   # Fraction arithmetic keeps it reduced
+    Ay = v.z
+    By = (v.y + v.w) * Fraction(1, 2)
+
+    # Convert pair (A, B) of Fractions to [p,q,d] with common denominator
+    # d = lcm(Ax.den, Bx.den),  p = Ax.num*(d/Ax.den),  q = Bx.num*(d/Bx.den)
+    def fracs_to_z2(A, B):
+        # Reduce each Fraction first (they should already be reduced,
+        # but be defensive)
+        an, ad = int(A.num), int(A.den)
+        bn, bd = int(B.num), int(B.den)
+        g = gcd(abs(an), ad); an //= g; ad //= g
+        g = gcd(abs(bn), bd); bn //= g; bd //= g
+        # Common denominator via lcm, but reduce first to keep small
+        g2 = gcd(ad, bd)
+        d = ad * (bd // g2)
+        p = an * (d // ad)
+        q = bn * (d // bd)
+        return _z2_reduce(p, q, d)
+
+    return fracs_to_z2(Ax, Bx) + fracs_to_z2(Ay, By)
 
 def z2_to_v4d(px,qx,dx,py,qy,dy):
     """(px,qx,dx, py,qy,dy) -> Vertex4D."""
-    x=Fraction(px,dx); z=Fraction(py,dy)
-    y=Fraction(qx,dx)+Fraction(qy,dy); w=Fraction(qy,dy)-Fraction(qx,dx)
+    # math225_core.Fraction requires int64 range
+    INT64 = (1<<63)-1
+    for n in (px,qx,dx,py,qy,dy):
+        if abs(int(n)) > INT64:
+            raise OverflowError(f'z2 component {n} exceeds int64 — vertex too deep')
+    x=Fraction(int(px),int(dx)); z=Fraction(int(py),int(dy))
+    y=Fraction(int(qx),int(dx))+Fraction(int(qy),int(dy))
+    w=Fraction(int(qy),int(dy))-Fraction(int(qx),int(dx))
     return Vertex4D(x,y,z,w)
 
 def pack_vertex(v):
-    return struct.pack(">6q",*v4d_to_z2(v))
+    """Pack a single Vertex4D as variable-length blob."""
+    out = b''
+    for n in v4d_to_z2(v):
+        out += _pack_int(n)
+    return out
 
 def unpack_vertex(b):
-    return z2_to_v4d(*struct.unpack(">6q",b))
+    """Unpack a single Vertex4D from variable-length blob."""
+    offset = 0
+    z2 = []
+    for _ in range(6):
+        val, offset = _unpack_int(b, offset)
+        z2.append(val)
+    return z2_to_v4d(*z2)
 
 def vertex_to_list(v):
     return list(v4d_to_z2(v))
@@ -93,14 +128,39 @@ def list_to_vertex(lst):
 #               edges as 4-byte count + N*9-byte (int32,int32,uint8)
 _LT_ENC={'b':0,'m':1,'v':2,'a':3}; _LT_DEC={0:'b',1:'m',2:'v',3:'a'}
 
+def _pack_int(n):
+    """Pack a Python int as 2-byte length + big-endian signed bytes."""
+    n = int(n)
+    if n == 0:
+        return b'\x00\x01\x00'
+    byte_len = (n.bit_length() + 8) // 8  # +8 for sign bit headroom
+    nb = n.to_bytes(byte_len, 'big', signed=True)
+    return len(nb).to_bytes(2, 'big') + nb
+
+def _unpack_int(b, offset):
+    """Unpack a variable-length int from b at offset. Returns (value, new_offset)."""
+    byte_len = int.from_bytes(b[offset:offset+2], 'big')
+    val = int.from_bytes(b[offset+2:offset+2+byte_len], 'big', signed=True)
+    return val, offset+2+byte_len
+
 def _pack_vertices(verts):
-    out=struct.pack(">I",len(verts))
-    for v in verts: out+=struct.pack(">6q",*v4d_to_z2(v))
+    out = struct.pack(">I", len(verts))
+    for v in verts:
+        for n in v4d_to_z2(v):
+            out += _pack_int(n)
     return out
 
 def _unpack_vertices(b):
-    n=struct.unpack(">I",b[:4])[0]
-    return [z2_to_v4d(*struct.unpack(">6q",b[4+i*48:4+(i+1)*48])) for i in range(n)]
+    n = struct.unpack(">I", b[:4])[0]
+    offset = 4
+    verts = []
+    for _ in range(n):
+        z2 = []
+        for _ in range(6):
+            val, offset = _unpack_int(b, offset)
+            z2.append(val)
+        verts.append(z2_to_v4d(*z2))
+    return verts
 
 def _pack_edges(edges):
     out=struct.pack(">I",len(edges))
@@ -718,19 +778,34 @@ def _expand_parent_worker(args):
     # Serialize children — return only what main process needs
     out = []
     for child in children:
-        vb, eb = cp_to_blobs(child['cp'])
-        chash = fast_canonical_hash(child['cp'])
+        try:
+            # Compute z2 tuples for all vertices — catches overflow early
+            cp = child['cp']
+            vertex_z2_list = [v4d_to_z2(v) for v in cp.vertices]
+            # Validate all fit in int64
+            INT64 = (1<<63)-1
+            for z2 in vertex_z2_list:
+                for n in z2:
+                    if abs(int(n)) > INT64:
+                        raise OverflowError('int64 overflow')
+            vb, eb = cp_to_blobs(cp)
+            chash = fast_canonical_hash(cp)
+            ncv1 = pack_vertex(child['new_crease_v1'])
+            ncv2 = pack_vertex(child['new_crease_v2'])
+        except (OverflowError, struct.error):
+            continue  # vertex coordinates exceed int64 — skip this child
         out.append({
-            'parent_id':       pid,
-            'function_name':   child['function_name'],
-            'new_crease_v1':   pack_vertex(child['new_crease_v1']),
-            'new_crease_v2':   pack_vertex(child['new_crease_v2']),
-            'refs':            encode_refs(child['refs']),
-            'new_vertex_idxs': json.dumps(sorted(child['new_vertex_idxs'])),
-            'chash':           chash,
-            'depth':           depth + 1,   # child depth = parent depth + 1
-            'vertices_blob':   vb,
-            'edges_blob':      eb,
+            'parent_id':        pid,
+            'function_name':    child['function_name'],
+            'new_crease_v1':    ncv1,
+            'new_crease_v2':    ncv2,
+            'refs':             encode_refs(child['refs']),
+            'new_vertex_idxs':  json.dumps(sorted(child['new_vertex_idxs'])),
+            'chash':            chash,
+            'depth':            depth + 1,
+            'vertices_blob':    vb,
+            'edges_blob':       eb,
+            'vertex_z2_list':   vertex_z2_list,
         })
     return out
 
@@ -782,7 +857,7 @@ class CpTreeBuilder:
 
     # ── main build ────────────────────────────────────────────────────────
 
-    def build(self, max_depth=4, verbose=True, max_db_mb=None):
+    def build(self, max_depth=4, verbose=True, max_db_mb=None, resume_from=None, skip_parents=0):
         import time
         conn   = self._db()
         zero_v = _v(0,0)
@@ -800,7 +875,11 @@ class CpTreeBuilder:
             if verbose: print(f"[depth 0] root present (id={row[0]})")
 
         # ── find resume point ─────────────────────────────────────────────
-        start_depth = self._max_depth_in_db() + 1
+        if resume_from is not None:
+            start_depth = resume_from
+            if verbose: print(f"Resuming from depth {start_depth} (forced)")
+        else:
+            start_depth = self._max_depth_in_db() + 1
         if start_depth > max_depth:
             total = conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
             if verbose: print(f"DB already at depth {start_depth-1} >= requested {max_depth}. "
@@ -814,6 +893,9 @@ class CpTreeBuilder:
             depth_start = time.perf_counter()
             parent_ids=[r[0] for r in conn.execute(
                 "SELECT id FROM nodes WHERE depth=?",(depth-1,))]
+            if skip_parents > 0 and depth == resume_from:
+                if verbose: print(f"  Skipping first {skip_parents:,} parents")
+                parent_ids = parent_ids[skip_parents:]
 
             total_before = conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
             if verbose:
@@ -873,7 +955,7 @@ class CpTreeBuilder:
 
             p_num = 0
             if use_mp:
-                CHUNK = max(1, len(worker_args) // (n_workers * 4))
+                CHUNK = max(1, min(50, len(worker_args) // (n_workers * 4)))
                 with _mp.Pool(processes=n_workers) as pool:
                     _process_results(pool.imap_unordered(
                         _expand_parent_worker, worker_args, chunksize=CHUNK))
@@ -933,16 +1015,13 @@ class CpTreeBuilder:
     def _flush_serialized(self,conn,pending):
         """
         Flush pre-serialized child dicts from worker processes.
-        Each child dict already has blobs, packed refs, etc.
+        Reads vertex z2 tuples directly from the blob — never reconstructs
+        Vertex4D objects, so no int64 overflow risk here.
         """
         with conn:
             for child in pending:
                 vblob = child['vertices_blob']
                 eblob = child['edges_blob']
-                # Insert into vertex_index
-                cp = blobs_to_cp(vblob, eblob)
-                vi_rows = [(None, *v4d_to_z2(v), child['depth'])
-                           for v in cp.vertices]
                 cur = conn.execute(
                     "INSERT INTO nodes(parent_id,function_name,"
                     "new_crease_v1,new_crease_v2,refs,new_vertex_idxs,"
@@ -954,8 +1033,9 @@ class CpTreeBuilder:
                      child['chash'], child['depth'],
                      vblob, eblob))
                 nid = cur.lastrowid
-                vi_rows = [(nid, *v4d_to_z2(v), child['depth'])
-                           for v in cp.vertices]
+                # Extract z2 tuples directly from blob without Vertex4D
+                vi_rows = [(nid, *z2, child['depth'])
+                           for z2 in child['vertex_z2_list']]
                 conn.executemany(
                     "INSERT INTO vertex_index VALUES(?,?,?,?,?,?,?,?)",
                     vi_rows)
@@ -1032,6 +1112,8 @@ if __name__=="__main__":
 
     import os as _os
     max_mb = float(sys.argv[3]) if len(sys.argv) > 3 else None
+    resume_from = int(sys.argv[4]) if len(sys.argv) > 4 else None
+    skip_parents = int(sys.argv[5]) if len(sys.argv) > 5 else 0
     builder=CpTreeBuilder(db_path)
-    try: builder.build(max_depth=max_depth,verbose=True,max_db_mb=max_mb)
-    finally: builder.close()
+    try: builder.build(max_depth=max_depth,verbose=True,max_db_mb=max_mb,resume_from=resume_from,skip_parents=skip_parents)
+    finally: builder.close
