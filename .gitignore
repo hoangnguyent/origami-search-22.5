@@ -26,9 +26,18 @@ renders/
 *.xml
 *.gz
 
+
+interface/server_debug.py
+database/tilings/log_monitor.py
+
 .vscode/
 
+*.zip
+*.csv
+
 *.db
+*.db-wal
+*.db-shm
 *.pkl
 *.index
 *.npy
