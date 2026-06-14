@@ -1,0 +1,6 @@
+﻿__pycache__/
+*.db
+*.db-shm
+*.db-wal
+cp_diagnose.py
+cp_viewer.py
