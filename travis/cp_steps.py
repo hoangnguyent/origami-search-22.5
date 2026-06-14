@@ -23,9 +23,8 @@ def _tx_row(row8, tfn):
     return _v4d_xy_from_obj(tfn(v))
 
 def _tx_lst(lst, tfn):
-    from math225_core import Vertex4D, Fraction
-    v = Vertex4D(Fraction(lst[0],lst[1]),Fraction(lst[2],lst[3]),
-                 Fraction(lst[4],lst[5]),Fraction(lst[6],lst[7]))
+    from cp_tree import z2_to_v4d
+    v = z2_to_v4d(*lst)   # lst is now 6-int z2 format
     return _v4d_xy_from_obj(tfn(v))
 
 # ── canvas coords ─────────────────────────────────────────────────────────
@@ -60,21 +59,21 @@ def _parse_refs(refs_raw, tfn):
     return out
 
 def _load_steps(conn, ancestry, tfn):
+    from cp_tree import blobs_to_cp
     steps = []
     for entry in ancestry:
         fn = entry["function_name"]
         if fn == "root": continue
         nid = entry["id"]
 
-        vrows = conn.execute(
-            "SELECT xn,xd,yn,yd,zn,zd,wn,wd,vertex_index"
-            " FROM cp_vertices WHERE node_id=? ORDER BY vertex_index", (nid,)
-        ).fetchall()
-        erows = conn.execute(
-            "SELECT v1_idx,v2_idx,line_type FROM cp_edges WHERE node_id=?", (nid,)
-        ).fetchall()
+        # Load CP from blobs stored in nodes table
+        row = conn.execute(
+            "SELECT vertices_blob, edges_blob FROM nodes WHERE id=?", (nid,)
+        ).fetchone()
+        cp = blobs_to_cp(row[0], row[1])
 
-        vxy = [_tx_row(r[:8], tfn) for r in vrows]
+        vxy = [_v4d_xy_from_obj(tfn(v)) for v in cp.vertices]
+        erows = [(v1,v2,lt) for v1,v2,lt in cp.edges]
         nc1 = _v4d_xy_from_obj(tfn(entry["new_crease_v1"]))
         nc2 = _v4d_xy_from_obj(tfn(entry["new_crease_v2"]))
 

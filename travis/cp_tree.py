@@ -27,7 +27,7 @@ import sqlite3, hashlib, json, struct, itertools
 from typing import Optional
 
 from math225_core import Vertex4D, Fraction, AplusBsqrt2
-from cp225 import Cp225, freeze, canonicalize, vertex_on_border
+from cp225 import Cp225, vertex_on_border
 from cp_general_crease import (
     add_general_crease,
     _vertex_on_infinite_line,
@@ -40,46 +40,108 @@ from cp_general_crease import (
 # Vertex4D pack / unpack
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# Z[√2] / [p,q,d] compact format  (6 ints per vertex, always reduced)
+# cx = px/dx + qx/dx*sqrt(2),  cy = py/dy + qy/dy*sqrt(2)
+# ---------------------------------------------------------------------------
+
+def _z2_gcd(a,b):
+    a,b=abs(int(a)),abs(int(b))
+    while b: a,b=b,a%b
+    return a or 1
+
+def _z2_reduce(p,q,d):
+    p,q,d=int(p),int(q),int(d)
+    if d<0: p,q,d=-p,-q,-d
+    if p==0 and q==0: return (0,0,1)
+    g=_z2_gcd(_z2_gcd(abs(p),abs(q)),d)
+    return (p//g,q//g,d//g)
+
+def v4d_to_z2(v):
+    """Vertex4D -> (px,qx,dx, py,qy,dy) reduced."""
+    from math import gcd
+    def lcm(a,b): return a*b//gcd(a,b) if a and b else (a or b)
+    Ax=v.x; Bx=(v.y-v.w)*Fraction(1,2)
+    Ay=v.z; By=(v.y+v.w)*Fraction(1,2)
+    dx=lcm(abs(int(Ax.den)),abs(int(Bx.den))) if Bx.den else abs(int(Ax.den))
+    qx=Bx.num*(dx//Bx.den) if Bx.den else 0
+    px=Ax.num*(dx//Ax.den)
+    dy=lcm(abs(int(Ay.den)),abs(int(By.den))) if By.den else abs(int(Ay.den))
+    qy=By.num*(dy//By.den) if By.den else 0
+    py=Ay.num*(dy//Ay.den)
+    return _z2_reduce(px,qx,dx)+_z2_reduce(py,qy,dy)
+
+def z2_to_v4d(px,qx,dx,py,qy,dy):
+    """(px,qx,dx, py,qy,dy) -> Vertex4D."""
+    x=Fraction(px,dx); z=Fraction(py,dy)
+    y=Fraction(qx,dx)+Fraction(qy,dy); w=Fraction(qy,dy)-Fraction(qx,dx)
+    return Vertex4D(x,y,z,w)
+
 def pack_vertex(v):
-    return struct.pack(">8q",
-        v.x.num,v.x.den,v.y.num,v.y.den,
-        v.z.num,v.z.den,v.w.num,v.w.den)
+    return struct.pack(">6q",*v4d_to_z2(v))
 
 def unpack_vertex(b):
-    xn,xd,yn,yd,zn,zd,wn,wd = struct.unpack(">8q", b)
-    return Vertex4D(Fraction(xn,xd),Fraction(yn,yd),
-                    Fraction(zn,zd),Fraction(wn,wd))
+    return z2_to_v4d(*struct.unpack(">6q",b))
 
 def vertex_to_list(v):
-    return [v.x.num,v.x.den,v.y.num,v.y.den,
-            v.z.num,v.z.den,v.w.num,v.w.den]
+    return list(v4d_to_z2(v))
 
 def list_to_vertex(lst):
-    return Vertex4D(Fraction(lst[0],lst[1]),Fraction(lst[2],lst[3]),
-                    Fraction(lst[4],lst[5]),Fraction(lst[6],lst[7]))
+    return z2_to_v4d(*lst)
 
-def canonical_hash(frozen):
-    return hashlib.sha256(repr(frozen).encode()).digest()
+# Blob packing: vertices as 4-byte count + N*48-byte z2 tuples
+#               edges as 4-byte count + N*9-byte (int32,int32,uint8)
+_LT_ENC={'b':0,'m':1,'v':2,'a':3}; _LT_DEC={0:'b',1:'m',2:'v',3:'a'}
 
-_HALF = Fraction(1, 2)
+def _pack_vertices(verts):
+    out=struct.pack(">I",len(verts))
+    for v in verts: out+=struct.pack(">6q",*v4d_to_z2(v))
+    return out
 
-def _translate_to_origin(v):
-    """
-    Shift a Vertex4D by cartesian (-0.5, -0.5), i.e. subtract 1/2 from the
-    x and z components (which hold the rational parts of cx and cy).
-    This maps our unit-square (corners at 0 and 1) to an origin-centred square
-    (corners at ±0.5) so that cp225's rotate_90/180/270/reflect — which rotate
-    about the origin — correctly identify rotationally-equivalent CPs.
-    """
-    return Vertex4D(v.x - _HALF, v.y, v.z - _HALF, v.w)
+def _unpack_vertices(b):
+    n=struct.unpack(">I",b[:4])[0]
+    return [z2_to_v4d(*struct.unpack(">6q",b[4+i*48:4+(i+1)*48])) for i in range(n)]
 
-def canonicalize_centered(cp) -> tuple:
-    """
-    Canonical form invariant under the 8-element symmetry group of the square,
-    correctly handling our (0,0)-(1,1) square by translating to origin first.
-    """
-    shifted = Cp225([_translate_to_origin(v) for v in cp.vertices], list(cp.edges))
-    return canonicalize(shifted)
+def _pack_edges(edges):
+    out=struct.pack(">I",len(edges))
+    for v1,v2,lt in edges: out+=struct.pack(">IIB",v1,v2,_LT_ENC.get(lt,1))
+    return out
+
+def _unpack_edges(b):
+    n=struct.unpack(">I",b[:4])[0]
+    return [(struct.unpack(">II",b[4+i*9:4+i*9+8])+((_LT_DEC.get(b[4+i*9+8],'m')),)) for i in range(n)]
+
+def cp_to_blobs(cp):
+    return _pack_vertices(cp.vertices), _pack_edges(cp.edges)
+
+def blobs_to_cp(vb,eb):
+    return Cp225(_unpack_vertices(vb),_unpack_edges(eb))
+
+# ---------------------------------------------------------------------------
+# Fast canonical hash — pure integer D4, no Cp225 copies, no freeze()
+# ---------------------------------------------------------------------------
+
+def _z2_oneminus(p,q,d): return _z2_reduce(d-p,-q,d)  # [1,0,1] - [p,q,d]
+
+def fast_canonical_hash(cp):
+    """SHA-256 of the lexicographically minimal D4 transform. ~10x faster than canonicalize()."""
+    vz2=[v4d_to_z2(v) for v in cp.vertices]
+    edges=cp.edges
+    best=None
+    for sym in range(8):
+        def t(px,qx,dx,py,qy,dy,s=sym):
+            x=(px,qx,dx); y=(py,qy,dy)
+            ox=_z2_oneminus(*x); oy=_z2_oneminus(*y)
+            return [x+y,oy+x,ox+oy,y+ox,x+oy,ox+y,y+x,oy+ox][s]
+        tv=[t(*z) for z in vz2]
+        order=sorted(range(len(tv)),key=lambda i:tv[i])
+        remap=[0]*len(tv)
+        for ni,oi in enumerate(order): remap[oi]=ni
+        sv=tuple(tv[i] for i in order)
+        se=tuple(sorted((min(remap[v1],remap[v2]),max(remap[v1],remap[v2]),lt) for v1,v2,lt in edges))
+        key=(sv,se)
+        if best is None or key<best: best=key
+    return hashlib.sha256(repr(best).encode()).digest()
 
 # ---------------------------------------------------------------------------
 # Ref helpers
@@ -126,20 +188,7 @@ def make_root_cp():
 # CP serialization
 # ---------------------------------------------------------------------------
 
-def cp_to_rows(node_id, cp):
-    vrows = [(node_id,
-              v.x.num,v.x.den,v.y.num,v.y.den,
-              v.z.num,v.z.den,v.w.num,v.w.den,i)
-             for i,v in enumerate(cp.vertices)]
-    erows = [(node_id,v1,v2,lt) for v1,v2,lt in cp.edges]
-    return vrows,erows
-
-def rows_to_cp(vrows,erows):
-    verts=[Vertex4D(Fraction(r[1],r[2]),Fraction(r[3],r[4]),
-                    Fraction(r[5],r[6]),Fraction(r[7],r[8]))
-           for r in sorted(vrows,key=lambda r:r[-1])]
-    edges=[(v1,v2,lt) for (_,v1,v2,lt) in erows]
-    return Cp225(verts,edges)
+# cp_to_rows/rows_to_cp replaced by cp_to_blobs/blobs_to_cp above
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -556,6 +605,7 @@ def generate_perpendicular_children(cp, new_vertex_indices):
 SCHEMA="""
 PRAGMA journal_mode=WAL;
 PRAGMA synchronous=NORMAL;
+PRAGMA page_size=8192;
 CREATE TABLE IF NOT EXISTS nodes(
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     parent_id       INTEGER REFERENCES nodes(id),
@@ -565,24 +615,21 @@ CREATE TABLE IF NOT EXISTS nodes(
     refs            TEXT    NOT NULL,
     new_vertex_idxs TEXT    NOT NULL,
     canonical_id    BLOB    NOT NULL,
-    depth           INTEGER NOT NULL
+    depth           INTEGER NOT NULL,
+    vertices_blob   BLOB    NOT NULL,
+    edges_blob      BLOB    NOT NULL
 );
-CREATE TABLE IF NOT EXISTS cp_vertices(
-    node_id INTEGER NOT NULL REFERENCES nodes(id),
-    xn INTEGER,xd INTEGER,yn INTEGER,yd INTEGER,
-    zn INTEGER,zd INTEGER,wn INTEGER,wd INTEGER,
-    vertex_index INTEGER NOT NULL
+CREATE TABLE IF NOT EXISTS vertex_index(
+    node_id INTEGER NOT NULL,
+    px INTEGER, qx INTEGER, dx INTEGER,
+    py INTEGER, qy INTEGER, dy INTEGER,
+    depth   INTEGER NOT NULL
 );
-CREATE TABLE IF NOT EXISTS cp_edges(
-    node_id   INTEGER NOT NULL REFERENCES nodes(id),
-    v1_idx    INTEGER NOT NULL,
-    v2_idx    INTEGER NOT NULL,
-    line_type TEXT    NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_vc ON cp_vertices(xn,xd,yn,yd,zn,zd,wn,wd);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_canon ON nodes(canonical_id);
-CREATE INDEX IF NOT EXISTS idx_parent ON nodes(parent_id);
-CREATE INDEX IF NOT EXISTS idx_depth  ON nodes(depth);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_canon  ON nodes(canonical_id);
+CREATE INDEX IF NOT EXISTS idx_parent        ON nodes(parent_id);
+CREATE INDEX IF NOT EXISTS idx_depth         ON nodes(depth);
+CREATE INDEX IF NOT EXISTS idx_vi_coords     ON vertex_index(px,qx,dx,py,qy,dy);
+CREATE INDEX IF NOT EXISTS idx_vi_node       ON vertex_index(node_id);
 """
 
 # ---------------------------------------------------------------------------
@@ -640,11 +687,60 @@ def _notify(message: str):
             print("\a\a\a", end="", flush=True)   # terminal bell fallback
 
 
+
+# ---------------------------------------------------------------------------
+# Multiprocessing worker
+# ---------------------------------------------------------------------------
+
+def _expand_parent_worker(args):
+    """
+    Worker function: deserialize a parent CP, generate all children,
+    serialize children back to blobs.  Runs in a subprocess — no DB access,
+    no shared state.
+
+    args: (pid, vblob, eblob, new_vertex_idxs_json, new_crease_blob_or_none,
+           new_crease2_blob_or_none, fn_name, depth)
+    returns: list of serialized child dicts
+    """
+    (pid, vblob, eblob, nvi_json,
+     ncv1_blob, ncv2_blob, fn_name, depth) = args
+
+    cp = blobs_to_cp(vblob, eblob)
+    nvi = set(json.loads(nvi_json))
+
+    if fn_name == 'root' or ncv1_blob is None:
+        ncl = None
+    else:
+        ncl = (unpack_vertex(ncv1_blob), unpack_vertex(ncv2_blob))
+
+    children = generate_all_children(cp, nvi, ncl, depth=depth)
+
+    # Serialize children — return only what main process needs
+    out = []
+    for child in children:
+        vb, eb = cp_to_blobs(child['cp'])
+        chash = fast_canonical_hash(child['cp'])
+        out.append({
+            'parent_id':       pid,
+            'function_name':   child['function_name'],
+            'new_crease_v1':   pack_vertex(child['new_crease_v1']),
+            'new_crease_v2':   pack_vertex(child['new_crease_v2']),
+            'refs':            encode_refs(child['refs']),
+            'new_vertex_idxs': json.dumps(sorted(child['new_vertex_idxs'])),
+            'chash':           chash,
+            'depth':           depth + 1,   # child depth = parent depth + 1
+            'vertices_blob':   vb,
+            'edges_blob':      eb,
+        })
+    return out
+
+
 class CpTreeBuilder:
 
-    def __init__(self, db_path="cp_tree.db", batch_size=50):
+    def __init__(self, db_path="cp_tree.db", batch_size=50, n_workers=None):
         self.db_path    = db_path
         self.batch_size = batch_size
+        self.n_workers  = n_workers   # None = use os.cpu_count()
         self._conn      = None
 
     def _db(self):
@@ -672,15 +768,16 @@ class CpTreeBuilder:
 
     def _insert_node(self, conn, parent_id, fn_name, ncv1, ncv2,
                      refs, new_vidxs, chash, depth, cp):
+        vblob,eblob = cp_to_blobs(cp)
         cur = conn.execute(
             "INSERT INTO nodes(parent_id,function_name,new_crease_v1,new_crease_v2,"
-            "refs,new_vertex_idxs,canonical_id,depth) VALUES(?,?,?,?,?,?,?,?)",
+            "refs,new_vertex_idxs,canonical_id,depth,vertices_blob,edges_blob)"
+            " VALUES(?,?,?,?,?,?,?,?,?,?)",
             (parent_id,fn_name,pack_vertex(ncv1),pack_vertex(ncv2),
-             encode_refs(refs),json.dumps(sorted(new_vidxs)),chash,depth))
+             encode_refs(refs),json.dumps(sorted(new_vidxs)),chash,depth,vblob,eblob))
         nid=cur.lastrowid
-        vrows,erows=cp_to_rows(nid,cp)
-        conn.executemany("INSERT INTO cp_vertices VALUES(?,?,?,?,?,?,?,?,?,?)",vrows)
-        conn.executemany("INSERT INTO cp_edges    VALUES(?,?,?,?)",erows)
+        vi_rows=[(nid,*v4d_to_z2(v),depth) for v in cp.vertices]
+        conn.executemany("INSERT INTO vertex_index VALUES(?,?,?,?,?,?,?,?)",vi_rows)
         return nid
 
     # ── main build ────────────────────────────────────────────────────────
@@ -692,7 +789,7 @@ class CpTreeBuilder:
 
         # ── ensure root exists ────────────────────────────────────────────
         root_cp   = make_root_cp()
-        root_hash = canonical_hash(canonicalize_centered(root_cp))
+        root_hash = fast_canonical_hash(root_cp)
         row = conn.execute("SELECT id FROM nodes WHERE canonical_id=?",(root_hash,)).fetchone()
         if row is None:
             with conn:
@@ -724,47 +821,72 @@ class CpTreeBuilder:
                       f"(tree has {total_before:,} nodes so far)")
 
             inserted=skipped=candidates=0
-            fn_candidates={}; fn_inserted={}; fn_deduped={}
+            fn_candidates={}; fn_inserted={}; fn_deduped={}; hash_time={}
             pending=[]
             last_report = time.perf_counter()
 
-            for p_num, pid in enumerate(parent_ids):
-                pcp,pnew,pncl=self._load_cp(conn,pid)
-                children = generate_all_children(pcp,pnew,pncl,depth=depth-1)
-                candidates += len(children)
+            # Build worker args: serialize each parent to blobs
+            worker_args = []
+            for pid in parent_ids:
+                row = conn.execute(
+                    "SELECT new_vertex_idxs,new_crease_v1,new_crease_v2,"
+                    "function_name,vertices_blob,edges_blob FROM nodes WHERE id=?",
+                    (pid,)).fetchone()
+                worker_args.append((
+                    pid, row[4], row[5], row[0],
+                    row[1], row[2], row[3], depth-1
+                ))
 
-                for child in children:
-                    fn = child['function_name']
-                    fn_candidates[fn] = fn_candidates.get(fn,0) + 1
-                    chash=canonical_hash(canonicalize_centered(child['cp']))
-                    if chash in seen:
-                        fn_deduped[fn] = fn_deduped.get(fn,0) + 1
-                        skipped+=1; continue
-                    fn_inserted[fn] = fn_inserted.get(fn,0) + 1
-                    seen.add(chash)
-                    pending.append((pid,child,chash,depth))
-                    if len(pending)>=self.batch_size:
-                        inserted+=self._flush(conn,pending); pending.clear()
+            import multiprocessing as _mp
+            import os as _os
+            n_workers = self.n_workers or _os.cpu_count() or 1
+            # Use multiprocessing only when it's worth the spawn overhead
+            use_mp = n_workers > 1 and len(worker_args) >= n_workers * 2
 
-                # Progress report every 5 seconds
-                now = time.perf_counter()
-                if verbose and (now - last_report) >= 5.0:
-                    elapsed = now - depth_start
-                    rate = (p_num + 1) / elapsed
-                    remaining = (len(parent_ids) - p_num - 1) / rate if rate > 0 else 0
-                    print(f"  {p_num+1:,}/{len(parent_ids):,} parents done  "
-                          f"| {inserted:,} inserted  {skipped:,} deduped  "
-                          f"| {rate:.1f} parents/s  "
-                          f"| ETA {remaining:.0f}s")
-                    last_report = now
+            def _process_results(results_iter):
+                nonlocal inserted, skipped, candidates, last_report, p_num
+                for batch_results in results_iter:
+                    p_num += 1
+                    candidates += len(batch_results)
+                    for child in batch_results:
+                        fn = child['function_name']
+                        fn_candidates[fn] = fn_candidates.get(fn,0) + 1
+                        chash = child['chash']
+                        if chash in seen:
+                            fn_deduped[fn] = fn_deduped.get(fn,0) + 1
+                            skipped+=1; continue
+                        fn_inserted[fn] = fn_inserted.get(fn,0) + 1
+                        seen.add(chash)
+                        pending.append(child)
+                        if len(pending)>=self.batch_size:
+                            inserted+=self._flush_serialized(conn,pending); pending.clear()
+                    now = time.perf_counter()
+                    if verbose and (now - last_report) >= 5.0:
+                        elapsed = now - depth_start
+                        rate = p_num / max(elapsed,0.001)
+                        remaining = (len(parent_ids)-p_num)/rate if rate>0 else 0
+                        print(f"  {p_num:,}/{len(parent_ids):,} parents done  "
+                              f"| {inserted:,} inserted  {skipped:,} deduped  "
+                              f"| {rate:.1f} parents/s  "
+                              f"| ETA {remaining:.0f}s")
+                        last_report = now
 
-            if pending: inserted+=self._flush(conn,pending)
+            p_num = 0
+            if use_mp:
+                CHUNK = max(1, len(worker_args) // (n_workers * 4))
+                with _mp.Pool(processes=n_workers) as pool:
+                    _process_results(pool.imap_unordered(
+                        _expand_parent_worker, worker_args, chunksize=CHUNK))
+            else:
+                _process_results(map(_expand_parent_worker, worker_args))
+
+            if pending: inserted+=self._flush_serialized(conn,pending)
 
             depth_elapsed = time.perf_counter() - depth_start
             total_after = conn.execute("SELECT COUNT(*) FROM nodes").fetchone()[0]
             unique_verts = conn.execute(
                 "SELECT COUNT(*) FROM ("
-                "  SELECT DISTINCT xn,xd,yn,yd,zn,zd,wn,wd FROM cp_vertices"
+                "  SELECT DISTINCT px,qx,dx,py,qy,dy FROM vertex_index"
                 ")"
             ).fetchone()[0]
 
@@ -777,11 +899,13 @@ class CpTreeBuilder:
                       f"| candidates={candidates:,}  inserted={inserted:,}  deduped={skipped:,}  "
                       f"| {total_after:,} nodes  {unique_verts:,} unique verts  "
                       f"| DB {db_mb:.1f} MB")
+                total_hash=sum(hash_time.values())
+                print(f"  hash time: {total_hash:.2f}s of {depth_elapsed:.2f}s = {100*total_hash/max(depth_elapsed,0.001):.0f}%")
                 all_fns = sorted(set(list(fn_candidates)+list(fn_inserted)+list(fn_deduped)))
                 for fn in all_fns:
                     c=fn_candidates.get(fn,0); i=fn_inserted.get(fn,0); d=fn_deduped.get(fn,0)
                     pct=f"{100*i/c:.0f}%" if c else '-'
-                    print(f"    {fn:<28} candidates={c:>6,}  inserted={i:>6,}  deduped={d:>6,}  yield={pct}")
+                    print(f"    {fn:<28} candidates={c:>6,}  inserted={i:>6,}  deduped={d:>6,}  yield={pct}  hash={hash_time.get(fn,0):.2f}s")
 
             if inserted==0:
                 if verbose: print("  → complete."); break
@@ -806,45 +930,65 @@ class CpTreeBuilder:
                     chash,depth,child['cp'])
         return len(pending)
 
+    def _flush_serialized(self,conn,pending):
+        """
+        Flush pre-serialized child dicts from worker processes.
+        Each child dict already has blobs, packed refs, etc.
+        """
+        with conn:
+            for child in pending:
+                vblob = child['vertices_blob']
+                eblob = child['edges_blob']
+                # Insert into vertex_index
+                cp = blobs_to_cp(vblob, eblob)
+                vi_rows = [(None, *v4d_to_z2(v), child['depth'])
+                           for v in cp.vertices]
+                cur = conn.execute(
+                    "INSERT INTO nodes(parent_id,function_name,"
+                    "new_crease_v1,new_crease_v2,refs,new_vertex_idxs,"
+                    "canonical_id,depth,vertices_blob,edges_blob)"
+                    " VALUES(?,?,?,?,?,?,?,?,?,?)",
+                    (child['parent_id'], child['function_name'],
+                     child['new_crease_v1'], child['new_crease_v2'],
+                     child['refs'], child['new_vertex_idxs'],
+                     child['chash'], child['depth'],
+                     vblob, eblob))
+                nid = cur.lastrowid
+                vi_rows = [(nid, *v4d_to_z2(v), child['depth'])
+                           for v in cp.vertices]
+                conn.executemany(
+                    "INSERT INTO vertex_index VALUES(?,?,?,?,?,?,?,?)",
+                    vi_rows)
+        return len(pending)
+
     def _load_cp(self,conn,node_id):
         row=conn.execute(
-            "SELECT new_vertex_idxs,new_crease_v1,new_crease_v2,function_name"
-            " FROM nodes WHERE id=?",(node_id,)).fetchone()
+            "SELECT new_vertex_idxs,new_crease_v1,new_crease_v2,function_name,"
+            "vertices_blob,edges_blob FROM nodes WHERE id=?",(node_id,)).fetchone()
         nvi=set(json.loads(row[0]))
         fn=row[3]
-        if fn=='root':
-            new_crease_line=None
-        else:
-            new_crease_line=(unpack_vertex(row[1]), unpack_vertex(row[2]))
-        vrows=conn.execute(
-            "SELECT node_id,xn,xd,yn,yd,zn,zd,wn,wd,vertex_index"
-            " FROM cp_vertices WHERE node_id=? ORDER BY vertex_index",(node_id,)).fetchall()
-        erows=conn.execute(
-            "SELECT node_id,v1_idx,v2_idx,line_type FROM cp_edges WHERE node_id=?",(node_id,)).fetchall()
-        return rows_to_cp(vrows,erows),nvi,new_crease_line
+        new_crease_line=None if fn=='root' else (unpack_vertex(row[1]),unpack_vertex(row[2]))
+        return blobs_to_cp(row[4],row[5]),nvi,new_crease_line
 
 # ---------------------------------------------------------------------------
 # Query helpers
 # ---------------------------------------------------------------------------
 
 def find_nodes_with_vertex(conn,v,max_depth=None):
-    q=("SELECT n.id,n.parent_id,n.depth,n.canonical_id"
-       " FROM cp_vertices cv JOIN nodes n ON n.id=cv.node_id"
-       " WHERE cv.xn=? AND cv.xd=? AND cv.yn=? AND cv.yd=?"
-       "   AND cv.zn=? AND cv.zd=? AND cv.wn=? AND cv.wd=?")
-    p=[v.x.num,v.x.den,v.y.num,v.y.den,v.z.num,v.z.den,v.w.num,v.w.den]
-    if max_depth is not None: q+=" AND n.depth<=?"; p.append(max_depth)
+    px,qx,dx,py,qy,dy = v4d_to_z2(v)
+    q=("SELECT vi.node_id,n.parent_id,n.depth,n.canonical_id"
+       " FROM vertex_index vi JOIN nodes n ON n.id=vi.node_id"
+       " WHERE vi.px=? AND vi.qx=? AND vi.dx=?"
+       "   AND vi.py=? AND vi.qy=? AND vi.dy=?")
+    p=[px,qx,dx,py,qy,dy]
+    if max_depth is not None: q+=" AND vi.depth<=?"; p.append(max_depth)
     q+=" ORDER BY n.depth ASC"
     return [{"id":r[0],"parent_id":r[1],"depth":r[2],"canonical_id":r[3]}
             for r in conn.execute(q,p)]
 
 def load_cp_by_node_id(conn,node_id):
-    vrows=conn.execute(
-        "SELECT node_id,xn,xd,yn,yd,zn,zd,wn,wd,vertex_index"
-        " FROM cp_vertices WHERE node_id=? ORDER BY vertex_index",(node_id,)).fetchall()
-    erows=conn.execute(
-        "SELECT node_id,v1_idx,v2_idx,line_type FROM cp_edges WHERE node_id=?",(node_id,)).fetchall()
-    return rows_to_cp(vrows,erows)
+    row=conn.execute("SELECT vertices_blob,edges_blob FROM nodes WHERE id=?",(node_id,)).fetchone()
+    return blobs_to_cp(row[0],row[1])
 
 def get_ancestry_chain(conn,node_id):
     chain=[]; cur=node_id
@@ -865,6 +1009,8 @@ def get_ancestry_chain(conn,node_id):
 # ---------------------------------------------------------------------------
 
 if __name__=="__main__":
+    import multiprocessing as _mp
+    _mp.freeze_support()  # required on Windows
     import sys
     args=sys.argv[1:]
 

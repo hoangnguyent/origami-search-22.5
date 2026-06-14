@@ -66,9 +66,9 @@ def _frac(n, d=1): return Fraction(n, d)
 _HALF = _frac(1, 2)
 
 def unpack_vertex(b: bytes) -> Vertex4D:
-    xn,xd,yn,yd,zn,zd,wn,wd = struct.unpack(">8q", b)
-    return Vertex4D(Fraction(xn,xd), Fraction(yn,yd),
-                    Fraction(zn,zd), Fraction(wn,wd))
+    """Unpack a 6-int64 z2 blob into a Vertex4D (matches cp_tree.pack_vertex)."""
+    from cp_tree import z2_to_v4d
+    return z2_to_v4d(*struct.unpack(">6q", b))
 
 # ---------------------------------------------------------------------------
 # Coordinate conversion
@@ -193,16 +193,17 @@ class LookupResult:
 def _query_vertex(conn: sqlite3.Connection, v: Vertex4D,
                   max_depth: Optional[int] = None) -> list[dict]:
     """Find all nodes containing exactly vertex v, ordered by depth."""
-    q = ("SELECT n.id, n.parent_id, n.depth, n.canonical_id"
-         " FROM cp_vertices cv JOIN nodes n ON n.id = cv.node_id"
-         " WHERE cv.xn=? AND cv.xd=? AND cv.yn=? AND cv.yd=?"
-         "   AND cv.zn=? AND cv.zd=? AND cv.wn=? AND cv.wd=?")
-    p = [v.x.num, v.x.den, v.y.num, v.y.den,
-         v.z.num, v.z.den, v.w.num, v.w.den]
+    from cp_tree import v4d_to_z2
+    px,qx,dx,py,qy,dy = v4d_to_z2(v)
+    q = ("SELECT vi.node_id, n.parent_id, n.depth, n.canonical_id"
+         " FROM vertex_index vi JOIN nodes n ON n.id = vi.node_id"
+         " WHERE vi.px=? AND vi.qx=? AND vi.dx=?"
+         "   AND vi.py=? AND vi.qy=? AND vi.dy=?")
+    p = [px,qx,dx,py,qy,dy]
     if max_depth is not None:
-        q += " AND n.depth <= ?"
+        q += " AND vi.depth <= ?"
         p.append(max_depth)
-    q += " ORDER BY n.depth ASC, n.id ASC"
+    q += " ORDER BY n.depth ASC, vi.node_id ASC"
     return [{"id": r[0], "parent_id": r[1], "depth": r[2], "canonical_id": r[3]}
             for r in conn.execute(q, p)]
 
