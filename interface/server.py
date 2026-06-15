@@ -225,6 +225,7 @@ def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], d
                 "packing": serialize_cp(res["packing"]),
                 "heat": _build_heat_profile(query_tree, tree_graph, res["N"], res["symmetry"]),
                 "comp_map": res.get("comp_map", {}),
+                "refs": res.get("refs", {}),
             }
         )
 

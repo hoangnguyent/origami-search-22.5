@@ -1,492 +1,247 @@
-function gcd(a, b) {
-  while (b) [a, b] = [b, a % b];
-  return a;
-}
+import { Locales } from './locales.js';
 
-function simplify(num, den) {
-  const g = gcd(num, den);
-  return [num / g, den / g];
-}
 
-// Source - https://stackoverflow.com/a/60368757
-// Posted by David Figatner, modified by community. See post 'Timeline' for change history
-// Retrieved 2026-06-03, License - CC BY-SA 4.0
-// line intercept math by Paul Bourke http://paulbourke.net/geometry/pointlineplane/
-// Determine the intersection point of two line segments
-// Return FALSE if the lines don't intersect
-function intersect(x1, y1, x2, y2, x3, y3, x4, y4) {
-
-  // Check if none of the lines are of length 0
-    if ((x1 === x2 && y1 === y2) || (x3 === x4 && y3 === y4)) {
-        return false
+/**
+ * Helper to create an SVG element with attributes
+ */
+function makeSvg(tag, attrs) {
+    const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+    for (const k in attrs) {
+        el.setAttribute(k, attrs[k]);
     }
+    return el;
+}
 
-    denominator = ((y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1))
-
-  // Lines are parallel
-    if (denominator === 0) {
-        return false
+// 1. Normalizes the Python keys (v, v1, v2) to the JS render keys (xy, xy1, xy2), and extends reference creases to boundaries
+function normalizeRefs(rawRefs) {
+    let refs = rawRefs;
+    
+    // Safely parse if it arrived as a string
+    if (typeof refs === 'string') {
+        try { refs = JSON.parse(refs); } 
+        catch (e) { return []; }
     }
+    
+    if (!Array.isArray(refs)) return [];
 
-    let ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denominator
-    let ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denominator
+    // Helper to extend any segment to the borders of the [0, 1] unit square
+    const extendToBoundary = (p1, p2) => {
+        const EPS = 1e-9;
+        const dx = p2[0] - p1[0];
+        const dy = p2[1] - p1[1];
+        
+        // If it's a zero-length line, do nothing
+        if (Math.abs(dx) < EPS && Math.abs(dy) < EPS) return [p1, p2];
 
-  // is the intersection along the segments
-    if (ua < 0 || ua > 1 || ub < 0 || ub > 1) {
-        return false
-    }
-
-  // Return a object with the x and y coordinates of the intersection
-    let x = x1 + ua * (x2 - x1)
-    let y = y1 + ua * (y2 - y1)
-
-    return {x, y}
-}
-
-function isPow2(n) {
-    return Math.log2(n) % 1 == 0;
-}
-
-function continuedFraction(n,d) {
-    const result = [];
-    [n,d] = simplify(n,d);
-
-    while (n !== 0) {
-        if (n > d && isPow2(Math.max(n, d))) {
-            result.push(n/d);
-            break;
-        }
-
-
-        const integer = Math.floor(n/d);
-        result.push(integer);
-
-        n -= integer*d;
-        if (n === 0) break;
-
-        [n,d] = [d,n];
-    }
-
-    return result;
-}
-
-function binaryDecomp(partialDenom) {
-    const result = [];
-
-    if (Number.isInteger(partialDenom)) {
-        while (partialDenom > 0) {
-            const exp = Math.floor(Math.log2(partialDenom));
-            const nearestPowTwo = 2**exp;
-            result.push(nearestPowTwo);
-            partialDenom -= nearestPowTwo;
-        }
-        return result;
-    } else return [partialDenom];
-}
-
-function getDiagonal (n, d) {
-    const continuedFractionArray = continuedFraction(n,d);
-    let counter = 0;
-
-    const ndCreases = [];
-    const diagonalCreases = [];
-
-    for (let i = continuedFractionArray.length-1; i >= 0; i--) {
-        const currentPartialDenominator = continuedFractionArray[i];
-
-        const decomposedCPD = binaryDecomp(currentPartialDenominator);
-        const horizontal = i%2 !== 0; // we want to flip from building off the bottom edge to building off the right edge depending on where we are in the CF.
-
-        for (let j = decomposedCPD.length-1; j >= 0; j--) {
-            const positive = counter == 0 ? !horizontal : horizontal;
-            const currentDCPD = decomposedCPD[j];
-            const creasesToDCPD = buildCrease(currentDCPD, horizontal, positive);
-            if (creasesToDCPD.length === 0) continue;
-
-            ndCreases.push(...creasesToDCPD);
-            diagonalCreases.push(creasesToDCPD[creasesToDCPD.length-1]);
-
-            if (diagonalCreases.length > 1) {
-                const mostRecentDiagonal = diagonalCreases[diagonalCreases.length-1];
-                const secondMRD = diagonalCreases[diagonalCreases.length-2];
-                const intersection = intersect(mostRecentDiagonal[0],mostRecentDiagonal[1],mostRecentDiagonal[2],mostRecentDiagonal[3],secondMRD[0],secondMRD[1],secondMRD[2],secondMRD[3]);
-
-                let intersection2x, intersection2y, intersection3x, intersection3y;
-
-                if (horizontal) {
-                    intersection2x = positive ? 0 : 1;
-                    intersection2y = intersection.y;
-
-                    intersection3x = positive ? 1 : 0;
-                    intersection3y = 0;
-                } else {
-                    intersection2x = intersection.x;
-                    intersection2y = positive ? 0 : 1;
-
-                    intersection3x = 1;
-                    intersection3y = positive ? 1 : 0;
+        const pts = [];
+        const addPoint = (t) => {
+            const x = p1[0] + t * dx;
+            const y = p1[1] + t * dy;
+            // Check if intersection is within the unit square bounds
+            if (x >= -EPS && x <= 1 + EPS && y >= -EPS && y <= 1 + EPS) {
+                // Deduplicate against already found points (handles corner intersections)
+                if (!pts.some(p => Math.hypot(p[0] - x, p[1] - y) < 1e-6)) {
+                    pts.push([x, y]);
                 }
+            }
+        };
 
-                ndCreases.push([intersection.x, intersection.y, intersection2x, intersection2y]);
-                ndCreases.push([intersection3x, intersection3y, intersection2x, intersection2y]);
-                diagonalCreases.push([intersection3x, intersection3y, intersection2x, intersection2y]);
+        // Find intersections with vertical borders (x=0, x=1)
+        if (Math.abs(dx) > EPS) {
+            addPoint(-p1[0] / dx);
+            addPoint((1 - p1[0]) / dx);
+        }
+        // Find intersections with horizontal borders (y=0, y=1)
+        if (Math.abs(dy) > EPS) {
+            addPoint(-p1[1] / dy);
+            addPoint((1 - p1[1]) / dy);
+        }
+
+        // Return the two boundary points, or fallback to original if math fails
+        return pts.length >= 2 ? [pts[0], pts[1]] : [p1, p2];
+    };
+    
+    return refs.map(ref => {
+        if (ref.type === 'vertex') {
+            return { type: 'vertex', xy: ref.xy || ref.v };
+        } else if (ref.type === 'crease' || ref.type === 'edge') {
+            let xy1 = ref.xy1 || ref.v1;
+            let xy2 = ref.xy2 || ref.v2;
+
+            if (xy1 && xy2) {
+                const extended = extendToBoundary(xy1, xy2);
+                xy1 = extended[0];
+                xy2 = extended[1];
             }
 
-            counter++;
+            return { type: ref.type, xy1: xy1, xy2: xy2 };
         }
-    }
-
-    return ndCreases;
+        return ref;
+    });
 }
 
-function buildCrease (binaryCPD, horizontal, positive) {
-    //binaryCPD will be a power of two
-    const creases = [];
-    const target = 1 / binaryCPD;
-
-    let lo = 0;
-    let hi = 1;
-
-    if (target == lo) {
-        return [];
-    }
-
-    if (target != hi) {
-        while (!creases.includes(target)) {
-            const mid = (lo + hi) / 2;
-            creases.push(mid);
-            mid > target ? hi = mid : lo = mid;
-        }
-    }
-
-    for (let i = 0; i < creases.length; i++) {
-        const currentLine = creases[i];
-
-        creases[i] = [0, currentLine, 1, currentLine];
-    }
-
-    const diag = positive ? [0, 0, 1, target] : [1, 0, 0, target];
-
-    creases.push(diag);
-
-    if (!horizontal) {
-        for (let i = 0; i < creases.length; i++) {
-            const currentCrease = creases[i];
-            const rotatedCrease = rotateCCW(currentCrease[0],currentCrease[1],currentCrease[2],currentCrease[3],0.5,0.5,90);
-            creases[i] = rotatedCrease;
-        }
-    }
-
-    return creases;
-}
-
-function rotateCCW(x1, y1, x2, y2, originX, originY, degrees) {
-    x1 -= originX; y1 -= originY;
-    x2 -= originX; y2 -= originY;
-
-    const cos = Math.cos(degrees / 180 * Math.PI);
-    const sin = Math.sin(degrees / 180 * Math.PI);
-
-    const nx1 = x1 * cos - y1 * sin;
-    const ny1 = x1 * sin + y1 * cos;
-    const nx2 = x2 * cos - y2 * sin;
-    const ny2 = x2 * sin + y2 * cos;
-
-    return [nx1 + originX, ny1 + originY, nx2 + originX, ny2 + originY];
-}
-
-function extendToBoundary(x1, y1, x2, y2) {
-    if (x1 === x2) return [x1, 0, x1, 1];
-    if (y1 === y2) return [0, y1, 1, y1];
-
-    // use a single intercept computation, derive everything from it
-    const slope = (y2 - y1) / (x2 - x1);
-    const yAtX0 = y1 - slope * x1;   // y intercept at x=0
-    const yAtX1 = yAtX0 + slope;      // y intercept at x=1, derived from same base
-
-    const candidates = [
-        yAtX0 >= 0 && yAtX0 <= 1 ? [0, yAtX0] : null,
-        yAtX1 >= 0 && yAtX1 <= 1 ? [1, yAtX1] : null,
-        yAtX0 <= 0 ? [-yAtX0 / slope, 0] : null,
-        yAtX0 >= 1 ? [(1 - yAtX0) / slope, 1] : null,
-        yAtX1 <= 0 ? [-yAtX0 / slope, 0] : null,
-        yAtX1 >= 1 ? [(1 - yAtX0) / slope, 1] : null,
-    ].filter(Boolean);
-
-    const pts = [];
-    for (const c of candidates) {
-        if (!pts.some(p => Math.abs(p[0]-c[0]) < 1e-9 && Math.abs(p[1]-c[1]) < 1e-9))
-            pts.push(c);
-    }
-
-    return [...pts[0], ...pts[1]];
-}
-
-function pruneDuplicates(lines, eps = 1e-6) {
-    const canonicalize = ({ x1, y1, x2, y2, class: cls }) => {
-        if (x1 > x2 || (x1 === x2 && y1 > y2)) {
-            [x1, y1, x2, y2] = [x2, y2, x1, y1];
-        }
-        return { x1, y1, x2, y2, class: cls };
-    };
-
-    const nearlyEqual = (a, b) =>
-        Math.abs(a.x1 - b.x1) < eps &&
-        Math.abs(a.y1 - b.y1) < eps &&
-        Math.abs(a.x2 - b.x2) < eps &&
-        Math.abs(a.y2 - b.y2) < eps;
-
-    const isBetter = (a, b) => {
-        if (a.class === "final" && b.class !== "final") return true;
-        if (a.class !== "final" && b.class === "final") return false;
-        return false;
-    };
-
-    const result = [];
-
-    for (const line of lines.map(canonicalize)) {
-        let found = false;
-
-        for (let i = 0; i < result.length; i++) {
-            if (nearlyEqual(result[i], line)) {
-                found = true;
-
-                if (isBetter(line, result[i])) {
-                    result[i] = line;
-                }
-                break;
-            }
-        }
-
-        if (!found) result.push(line);
-    }
-
-    const finalIndex = result.findIndex(l => l.class === "final");
-    if (finalIndex !== -1) {
-        return result.slice(0, finalIndex + 1);
-    }
-
-    return result;
-}
-
-function stretchArray(array, originX, originY, stretchX, stretchY) {
-    for (let i = 0; i < array.length; i++) {
-        let x1 = array[i][0];
-        let y1 = array[i][1];
-        let x2 = array[i][2];
-        let y2 = array[i][3];
-
-        x1 -= originX; x2 -= originX; y1 -= originY; y2 -= originY;
-        x1 *= stretchX; x2 *= stretchX; y1 *= stretchY; y2 *= stretchY;
-        x1 += originX; x2 += originX; y1 += originY; y2 += originY;
-
-        array[i][0] = x1;
-        array[i][1] = y1;
-        array[i][2] = x2;
-        array[i][3] = y2;
-    }
-}
-
-function drawIntersection(d1, n1, r1, d2, n2, r2) {
-    if (n1/d1 < 0 || n2/d2 < 0) {
-        return null;
-    }
-
-    let diag1 = getDiagonal(n1, d1);
-    let diag2 = getDiagonal(n2, d2);
-
-    let stretchX1, stretchY1, stretchX2, stretchY2;
-
-    if (r1 >= 1) {stretchX1 = 1; stretchY1 = 1/r1}
-    else {stretchX1 = r1; stretchY1 = 1};
-
-    if (r2 >= 1) {stretchX2 = 1; stretchY2 = 1/r2}
-    else {stretchX2 = r2; stretchY2 = 1};
-
-    stretchArray(diag1, 1, 0, stretchX1, stretchY1);
-    stretchArray(diag2, 1, 0, stretchX2, stretchY2);
-
-    stretchArray(diag2, 0.5, 0, -1, 1);
-
-    diag1 = diag1.map(([x1, y1, x2, y2]) => extendToBoundary(x1, y1, x2, y2));
-    diag2 = diag2.map(([x1, y1, x2, y2]) => extendToBoundary(x1, y1, x2, y2));
-
-    const result = [];
-
-    const add = (arr, cls) =>
-        arr.forEach(([x1, y1, x2, y2]) =>
-            result.push({ x1, y1, x2, y2, class: cls })
-        );
-
-    add(diag1, "diag1");
-    add(diag2, "diag2");
-
-    return result;
-}
-
-function findY(a, b, c) {
-    //this is the master function, it takes as input a, b, c where a reference line defines beneath it a rectangle of width (a + b * rt2) / c
-
-    if ((a + b * Math.SQRT2) / c < 1) {
-        return;
-    }
-
-    const solutions = [];
-
-    function addSolution(name, preCreasing, cp) {
-        if (!cp) return;
-
-        const finalCrease = {x1: 0, y1: c/(a+b*Math.SQRT2), x2: 1, y2: c/(a+b*Math.SQRT2), class: "final"}
-
-        let base;
-
-        if (b === 0 && ["comboA", "comboB", "comboC", "comboD"].includes(name)) {
-            base = [...cp, finalCrease]; //no need to precrease 22.5 for rational fractions
-        } else {
-            base = [...preCreasing, ...cp, finalCrease];
-        }
-
-        const combined = pruneDuplicates(base);
-
-        solutions.push({
-            name,
-            cp: combined,
-            score: combined.length
-        });
-    }
-
-    addSolution("comboA", [
-        { x1: 0,            y1: 0, x2: 1,            y2: 1, class: "preCrease"},
-        { x1: 0,            y1: 0, x2: Math.SQRT2-1, y2: 1, class: "preCrease"},
-        { x1: Math.SQRT2-1, y1: 0, x2: Math.SQRT2-1, y2: 1, class: "preCrease"}
-        ], drawIntersection(a+b, c, 1, b, c, Math.SQRT2-1));
-    addSolution("comboB", [
-        {x1: 1,            y1: 0, x2: 0,            y2: 1, class: "preCrease"},
-        {x1: 1,            y1: 0, x2: 2-Math.SQRT2, y2: 1, class: "preCrease"},
-        {x1: 2-Math.SQRT2, y1: 0, x2: 2-Math.SQRT2, y2: 1, class: "preCrease"}
-        ], drawIntersection(a+2*b, c, 1, -b, c, 2-Math.SQRT2));
-    addSolution("comboC", [
-        {x1: 0, y1: 0,            x2: 1, y2: 1           , class: "preCrease"},
-        {x1: 1, y1: 1,            x2: 0, y2: 2-Math.SQRT2, class: "preCrease"},
-        {x1: 1, y1: 2-Math.SQRT2, x2: 0, y2: 2-Math.SQRT2, class: "preCrease"}
-        ], drawIntersection(2*b, c, 1 + Math.SQRT2/2, a - 2*b, c, 1));
-    addSolution("comboD", [
-        {x1: 1, y1: 0,            x2: 0, y2: 1           , class: "preCrease"},
-        {x1: 1, y1: 0,            x2: 0, y2: Math.SQRT2-1, class: "preCrease"},
-        {x1: 1, y1: Math.SQRT2-1, x2: 0, y2: Math.SQRT2-1, class: "preCrease"}
-        ], drawIntersection(b, c, Math.SQRT2+1, a-b, c, 1));
-    addSolution("comboE", [
-        {x1: 0,            y1: 0, x2: 1,            y2: 1, class: "preCrease"},
-        {x1: 0,            y1: 0, x2: Math.SQRT2-1, y2: 1, class: "preCrease"},
-        {x1: Math.SQRT2-1, y1: 0, x2: Math.SQRT2-1, y2: 1, class: "preCrease"}
-        ], drawIntersection(a+b, c, 2-Math.SQRT2, a+2*b, c, Math.SQRT2-1));
-    addSolution("comboF", [
-        {x1: 0,            y1: 1,            x2: 1,            y2: 0           , class: "preCrease"},
-        {x1: 0,            y1: 1,            x2: Math.SQRT2-1, y2: 0           , class: "preCrease"},
-        {x1: Math.SQRT2-1, y1: 0,            x2: Math.SQRT2-1, y2: 1           , class: "preCrease"},
-        {x1: 1,            y1: 2-Math.SQRT2, x2: 0,            y2: 2-Math.SQRT2, class: "preCrease"}
-        ], drawIntersection(2*a + 2*b, 3*c, 1 + Math.SQRT2/2, -a + 2*b, 3*c, Math.SQRT2-1));
-    addSolution("comboG", [
-        {x1: 0,            y1: 0,            x2: 1,            y2: 1           , class: "preCrease"},
-        {x1: 0,            y1: 0,            x2: Math.SQRT2-1, y2: 1           , class: "preCrease"},
-        {x1: Math.SQRT2-1, y1: 0,            x2: Math.SQRT2-1, y2: 1           , class: "preCrease"},
-        {x1: 1,            y1: Math.SQRT2-1, x2: 0,            y2: Math.SQRT2-1, class: "preCrease"}
-        ], drawIntersection(a+b, 2*c, Math.SQRT2+1, -a+b, 2*c, Math.SQRT2-1));
-    addSolution("comboH", [
-        {x1: 1,            y1: 1,            x2: 0,            y2: 0           , class: "preCrease"},
-        {x1: 1,            y1: 1,            x2: 2-Math.SQRT2, y2: 0           , class: "preCrease"},
-        {x1: 2-Math.SQRT2, y1: 0,            x2: 2-Math.SQRT2, y2: 1           , class: "preCrease"},
-        {x1: 1,            y1: 2-Math.SQRT2, x2: 0,            y2: 2-Math.SQRT2, class: "preCrease"}
-        ], drawIntersection(a+2*b, 2*c, 1+Math.SQRT2/2, a-2*b, 4*c, 2-Math.SQRT2));
-    addSolution("comboI", [
-        {x1: 1,            y1: 0,            x2: 0,            y2: 1           , class: "preCrease"},
-        {x1: 1,            y1: 0,            x2: 2-Math.SQRT2, y2: 1           , class: "preCrease"},
-        {x1: 2-Math.SQRT2, y1: 0,            x2: 2-Math.SQRT2, y2: 1           , class: "preCrease"},
-        {x1: 1,            y1: Math.SQRT2-1, x2: 0,            y2: Math.SQRT2-1, class: "preCrease"}
-        ], drawIntersection(a+2*b, 3*c, Math.SQRT2+1, a-b, 3*c, 2-Math.SQRT2));
-    addSolution("comboJ", [
-        {x1: 1, y1: 0,            x2: 0, y2: 1           , class: "preCrease"},
-        {x1: 1, y1: 0,            x2: 0, y2: Math.SQRT2-1, class: "preCrease"},
-        {x1: 1, y1: Math.SQRT2-1, x2: 0, y2: Math.SQRT2-1, class: "preCrease"},
-        {x1: 0, y1: 1,            x2: 1, y2: 2-Math.SQRT2, class: "preCrease"},
-        {x1: 0, y1: 2-Math.SQRT2, x2: 1, y2: 2-Math.SQRT2, class: "preCrease"}
-        ], drawIntersection(-a+2*b, c, Math.SQRT2+1, 2*a-2*b, c, 1+Math.SQRT2/2));
-
-    return solutions;
-}
-
-function fourOptions(a1,b1,c1,a2,b2,c2) {
-    const x = (a1 + b1 * Math.SQRT2) / c1;
-    const y = (a2 + b2 * Math.SQRT2) / c2;
-    if (x > 1 || x < 0 || y > 1 || y < 0) {
-        console.error("x, y must be between 0 and 1");
-        return;
-    }
-
-    const abcBelow = {a: a2*c2, b: -b2*c2, c: a2*a2-2*b2*b2};
-    const abcAbove = {a: c2*c2-a2*c2, b: b2*c2, c: c2*c2-2*a2*c2+a2*a2-2*b2*b2};
-    const abcLeft = {a: a1*c1, b: -b1*c1, c: a1*a1-2*b1*b1};
-    const abcRight = {a: c1*c1-a1*c1, b: b1*c1, c: c1*c1-2*a1*c1+a1*a1-2*b1*b1};
-
-    function safeFind(a, b, c) {
-        if (c === 0) return [];
-        const val = (a + b * Math.SQRT2) / c;
-        if (!isFinite(val) || val < 1) return [];
-        return findY(a, b, c) ?? [];
-    }
-
-    const belowSolution = safeFind(abcBelow.a, abcBelow.b, abcBelow.c);
-    const aboveSolution = safeFind(abcAbove.a, abcAbove.b, abcAbove.c);
-    const leftSolution  = safeFind(abcLeft.a,  abcLeft.b,  abcLeft.c);
-    const rightSolution = safeFind(abcRight.a, abcRight.b, abcRight.c);
-
-    const onEdgeX = (x === 0 || x === 1);
-    const onEdgeY = (y === 0 || y === 1);
-
-    const rawSolutions = [
-        ...(!onEdgeY ? belowSolution.map(s => ({ ...s, rot: 0   })) : []),
-        ...(!onEdgeY ? aboveSolution.map(s => ({ ...s, rot: 180 })) : []),
-        ...(!onEdgeX ? leftSolution.map(s  => ({ ...s, rot: 270 })) : []),
-        ...(!onEdgeX ? rightSolution.map(s => ({ ...s, rot: 90  })) : []),
+// 2. Accumulates creases across the ancestry tree
+function processAncestry(ancestryArray) {
+    const steps = [];
+    // Start with the border of the unit square
+    const accumulatedCreases = [
+        [[0, 0], [1, 0]], [[1, 0], [1, 1]], [[1, 1], [0, 1]], [[0, 1], [0, 0]]
     ];
 
-    // 2. geometry helpers
-    function rotateCrease(crease, degrees) {
-        const [nx1, ny1, nx2, ny2] = rotateCCW(
-            crease.x1, crease.y1,
-            crease.x2, crease.y2,
-            0.5, 0.5,
-            degrees
-        );
+    for (const entry of ancestryArray) {
+        if (entry.function_name === 'root') continue;
 
-        return {
-            x1: nx1,
-            y1: ny1,
-            x2: nx2,
-            y2: ny2,
-            class: crease.class
+        // Extract the pre-transformed floats directly
+        const nc1 = entry.new_crease_v1;
+        const nc2 = entry.new_crease_v2;
+        const refs = normalizeRefs(entry.refs);
+        
+        // Snapshot the paper state BEFORE this step's crease is folded
+        const currentCreases = [...accumulatedCreases];
+
+        steps.push({
+            depth: entry.depth,
+            function_name: entry.function_name,
+            pastCreases: currentCreases,
+            newCrease: nc1 && nc2 ? [nc1, nc2] : null,
+            refs: refs
+        });
+
+        // Add this step's crease to the background for all subsequent steps
+        if (nc1 && nc2 && (nc1[0] !== nc2[0] || nc1[1] !== nc2[1])) {
+            accumulatedCreases.push([nc1, nc2]);
+        }
+    }
+    return steps;
+}
+
+// 3. Translates the Python _instruction function
+function getInstructionText(fn, refs) {
+    const lang = localStorage.getItem('explori_lang') || 'en';
+    const dict = Locales[lang] || Locales['en'];
+
+    if (!fn || fn === "target") return dict.instrTarget;
+    if (fn === "vertex_pair") return dict.instrVertexPair;
+    if (fn === "parallel_bisector") return dict.instrParallelBisector;
+    if (fn === "angle_bisector") return dict.instrAngleBisector;
+    
+    if (fn === "perp_through_vertex") {
+        const hasDiag = refs.some(r => r.type === 'crease');
+        return hasDiag ? dict.instrPerpDiag : dict.instrPerpEdge;
+    }
+    
+    // Fallback for undefined functions (capitalizes and replaces underscores)
+    return fn.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase()) + ".";
+}
+
+// 4. Draws a single step to an SVG
+function renderStepSvg(svg, step, width, height, isFinal = false, targetXY = null) {
+    svg.innerHTML = '';
+    svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+    svg.style.display = "block";
+    svg.style.margin = "0 auto";
+
+    const scale = Math.min(width, height) * 0.9;
+    const padX = (width - scale) / 2;
+    const padY = (height - scale) / 2;
+    
+    const FLIP_Y = true; 
+
+    const tx = (x) => padX + (x * scale);
+    const ty = (y) => FLIP_Y ? height - (padY + (y * scale)) : padY + (y * scale);
+
+    // Helper to safely draw lines
+    const drawLine = (p1, p2, stroke, strokeWidth, dashed = false) => {
+        if (!p1 || !p2) return;
+        const attrs = {
+            x1: tx(p1[0]), y1: ty(p1[1]), x2: tx(p2[0]), y2: ty(p2[1]),
+            stroke: stroke, "stroke-width": strokeWidth
         };
+        if (dashed) attrs["stroke-dasharray"] = "4 4";
+        svg.appendChild(makeSvg("line", attrs));
+    };
+
+    // A. Draw Past Creases (Gray)
+    for (const [p1, p2] of step.pastCreases) {
+        drawLine(p1, p2, "var(--cp-h)", "1");
     }
 
-    function rotateCP(cp, degrees) {
-        return cp.map(c => rotateCrease(c, degrees));
+    if (!isFinal) {
+        // B. Reference Lines (Dashed Green/Accent)
+        for (const ref of step.refs) {
+            if (ref.type === 'crease' || ref.type === 'edge') {
+                drawLine(ref.xy1, ref.xy2, "var(--packing-h)", "4", true);
+            }
+        }
+
+        // C. New Crease (Thick Blue)
+        if (step.newCrease) {
+            drawLine(step.newCrease[0], step.newCrease[1], "var(--cp-m)", "4");
+        }
+
+        // D. Reference Vertices (Hollow circles)
+        for (const ref of step.refs) {
+            if (ref.type === 'vertex' && ref.xy) {
+                svg.appendChild(makeSvg("circle", {
+                    cx: tx(ref.xy[0]), cy: ty(ref.xy[1]), r: "8",
+                    fill: "none", stroke: "var(--accent, #4fa3e0)", "stroke-width": "2"
+                }));
+            }
+        }
+    } else if (targetXY) {
+        // E. Final Target Dot
+        svg.appendChild(makeSvg("circle", {
+            cx: tx(targetXY[0]), cy: ty(targetXY[1]), r: "8",
+            fill: "#50e890", stroke: "none"
+        }));
+    }
+}
+
+// 5. Main Workspace Populator
+export function renderReferenceWorkspace(ancestryArray, targetXY = null) {
+    const workspace = document.getElementById("refsWorkspace");
+    if (!workspace || !Array.isArray(ancestryArray)) return;
+
+    workspace.innerHTML = '';
+    workspace.style.display = "flex";
+    workspace.style.flexWrap = "wrap";
+    workspace.style.gap = "1rem";
+
+    const steps = processAncestry(ancestryArray);
+    
+    // Add the final target step so the last crease remains visible behind the dot
+    if (steps.length > 0) {
+        const lastStep = steps[steps.length - 1];
+        if (lastStep.newCrease) {
+            steps.push({ 
+                function_name: 'target',
+                isFinal: true, 
+                pastCreases: lastStep.pastCreases.concat([lastStep.newCrease]),
+                refs: []
+            });
+        }
     }
 
-    function rotateSolution(solution, degrees) {
-        return {
-            ...solution,
-            cp: rotateCP(solution.cp, degrees)
-        };
-    }
+    steps.forEach((step, index) => {
+        const stepDiv = document.createElement("div");
+        stepDiv.className = "ref-step-container";
+        stepDiv.style.width = "220px";
+        stepDiv.style.textAlign = "center";
 
-    // 3. single-pass transform
-    const finalSolutions = rawSolutions.map(sol => {
-        const rotated = rotateSolution(sol, sol.rot);
-        delete rotated.rot; // optional cleanup so drawer never sees it
-        return rotated;
+        const svg = makeSvg("svg", { width: "220", height: "220" });
+        stepDiv.appendChild(svg);
+
+        renderStepSvg(svg, step, 220, 220, step.isFinal, targetXY);
+
+        const caption = document.createElement("div");
+        caption.style.fontSize = "0.85rem";
+        caption.style.marginTop = "0.5rem";
+        caption.style.color = "var(--text-main, #d8d8e8)";
+        
+        const instruction = getInstructionText(step.function_name, step.refs || []);
+        caption.innerHTML = `<strong>${index + 1}.</strong> ${instruction}`;
+        
+        stepDiv.appendChild(caption);
+        workspace.appendChild(stepDiv);
     });
-
-    finalSolutions.sort((a, b) => a.score - b.score);
-
-    return finalSolutions;
 }

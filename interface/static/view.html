@@ -23,7 +23,6 @@
 
     /* --- DASHBOARD LAYOUT --- */
     .dashboard-container {
-      /* Vertical padding: 24px. Horizontal padding: Fluid (min 16px, ideal 8vw, max 120px) */
       padding: 24px clamp(16px, 8vw, 120px);
       max-width: 1800px;
       margin: 0 auto;
@@ -42,11 +41,10 @@
     }
 
     /* Responsive Grid Rows */
-    /* Responsive Grid Rows */
     .dash-row {
       display: grid;
       gap: 24px;
-      margin-bottom: 24px; /* Ensure spacing between rows */
+      margin-bottom: 24px; 
     }
     .dash-row-3col {
       grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -63,7 +61,7 @@
     }
     .panel-header {
       margin-top: 0;
-      margin-bottom: 16px; /* Slightly more room before the split */
+      margin-bottom: 16px; 
       font-size: 1.1rem;
       border-bottom: 1px solid var(--border-color);
       padding-bottom: 8px;
@@ -144,15 +142,15 @@
     <header class="top-bar">
       <div class="top-bar-left">
         <h1 id="appTitle">
-            <a href="/" style="text-decoration: none; color: inherit;">ExplOri 22.5</a>
+            <a href="/" style="text-decoration: none; color: inherit;" data-i18n="appTitle">ExplOri 22.5</a>
         </h1>
       </div>
       <div class="top-bar-actions">
-        <button id="donateBtn" class="icon-btn action-icon" type="button" aria-label="Donate" title="Donate"><img src="/assets/donate.svg" alt="" aria-hidden="true" /></button>
-        <button id="discordBtn" class="icon-btn action-icon" type="button" aria-label="Join Discord" title="Join Discord"><img src="/assets/discord.svg" alt="" aria-hidden="true" /></button>
-        <button id="themeToggleBtn" class="icon-btn action-icon" type="button" aria-label="Toggle light/dark mode" title="Toggle Theme"><img src="/assets/light-dark.svg" alt="" aria-hidden="true" /></button>
-        <button id="languageBtn" class="icon-btn action-icon" type="button" aria-label="Change Language" title="Change Language"><img src="/assets/language.svg" alt="" aria-hidden="true" /></button>
-        <a href="/about.html" target="_blank" class="icon-btn action-icon" aria-label="Help and Documentation" title="Help & About">
+        <button id="donateBtn" class="icon-btn action-icon" type="button" data-i18n-aria="donate" data-i18n-title="donate"><img src="/assets/donate.svg" alt="" aria-hidden="true" /></button>
+        <button id="discordBtn" class="icon-btn action-icon" type="button" data-i18n-aria="discord" data-i18n-title="discord"><img src="/assets/discord.svg" alt="" aria-hidden="true" /></button>
+        <button id="themeToggleBtn" class="icon-btn action-icon" type="button" data-i18n-aria="toggleTheme" data-i18n-title="toggleTheme"><img src="/assets/light-dark.svg" alt="" aria-hidden="true" /></button>
+        <button id="languageBtn" class="icon-btn action-icon" type="button" data-i18n-aria="changeLanguage" data-i18n-title="changeLanguage"><img src="/assets/language.svg" alt="" aria-hidden="true" /></button>
+        <a href="/about.html" target="_blank" class="icon-btn action-icon" data-i18n-aria="helpAbout" data-i18n-title="helpAbout">
           <img src="/assets/info.svg" alt="" aria-hidden="true" />
         </a>
       </div>
@@ -160,12 +158,12 @@
 
     <div id="donateModal" class="modal-overlay hidden">
       <div class="modal-content settings-content">
-        <button id="closeDonateModal" class="close-btn" aria-label="Close">✕</button>
-        <div class="modal-header"><h2>Donate</h2></div>
+        <button id="closeDonateModal" class="close-btn" data-i18n-aria="close">✕</button>
+        <div class="modal-header"><h2 data-i18n="donateTitle">Donate</h2></div>
         <div class="settings-panel">
-          <p class="modal-meta" style="text-align: left; max-width: none;">This software is free to use, but costs money to host. If you find SEARCH 22.5 useful, consider supporting financially for its continued development!</p>
+          <p class="modal-meta" style="text-align: left; max-width: none;" data-i18n="donateText">This software is free to use, but costs money to host. If you find SEARCH 22.5 useful, consider supporting financially for its continued development!</p>
           <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
-            <a href="https://www.paypal.com/paypalme/theplantpsychologist" target="_blank"><button type="button">Donate via PayPal</button></a>
+            <a href="https://www.paypal.com/paypalme/theplantpsychologist" target="_blank"><button type="button" data-i18n="donatePayPal">Donate via PayPal</button></a>
           </div>
         </div>
       </div>
@@ -173,12 +171,12 @@
 
     <div id="discordModal" class="modal-overlay hidden">
       <div class="modal-content settings-content">
-        <button id="closeDiscordModal" class="close-btn" aria-label="Close">✕</button>
-        <div class="modal-header"><h2>Community and development</h2></div>
+        <button id="closeDiscordModal" class="close-btn" data-i18n-aria="close">✕</button>
+        <div class="modal-header"><h2 data-i18n="discordTitle">Community and development</h2></div>
         <div class="settings-panel">
-          <p class="modal-meta" style="text-align: left; max-width: none;">Join our Discord server to get tech support, report bugs, and request new features.</p>
+          <p class="modal-meta" style="text-align: left; max-width: none;" data-i18n="discordText">Join our Discord server to get tech support, report bugs, and request new features.</p>
           <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
-            <a href="https://discord.gg/5YcGh8b9yC" target="_blank"><button type="button">Join the community</button></a>
+            <a href="https://discord.gg/5YcGh8b9yC" target="_blank"><button type="button" data-i18n="discordJoin">Join the community</button></a>
           </div>
         </div>
       </div>
@@ -186,8 +184,8 @@
 
     <div id="languageModal" class="modal-overlay hidden">
       <div class="modal-content settings-content">
-        <button id="closeLanguageModal" class="close-btn" aria-label="Close">✕</button>
-        <div class="modal-header"><h2>Select Language</h2></div>
+        <button id="closeLanguageModal" class="close-btn" data-i18n-aria="close">✕</button>
+        <div class="modal-header"><h2 data-i18n="languageTitle">Select Language</h2></div>
         <div class="settings-panel">
           <div class="language-grid">
             <button type="button" class="lang-btn" data-lang="en">🇺🇸 English</button>
@@ -201,21 +199,21 @@
 
     <div id="shareModal" class="modal-overlay hidden">
       <div class="modal-content settings-content">
-        <button id="closeShareModal" class="close-btn" aria-label="Close">✕</button>
-        <div class="modal-header"><h2>Share</h2></div>
+        <button id="closeShareModal" class="close-btn" data-i18n-aria="close">✕</button>
+        <div class="modal-header"><h2 data-i18n="shareTitle">Share</h2></div>
         <div class="settings-panel">
-          <p class="modal-meta" style="text-align: left; max-width: none;">Share this pattern with others!</p>
+          <p class="modal-meta" style="text-align: left; max-width: none;" data-i18n="shareText">Share this pattern with others!</p>
           
           <div style="display: flex; gap: 8px; margin-top: 16px; align-items: stretch;">
             <input type="text" id="shareUrlInput" readonly 
                   style="flex: 1; padding: 10px 14px; border-radius: 10px; border: 1px solid var(--line); background: var(--bg-surface); color: var(--text); font-family: monospace; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
             
-            <button type="button" id="copyLinkBtn" class="icon-btn" style="width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0; background: var(--bg-panel); border: 1px solid var(--line);" aria-label="Copy Link">
+            <button type="button" id="copyLinkBtn" class="icon-btn" style="width: 44px; height: 44px; border-radius: 10px; flex-shrink: 0; background: var(--bg-panel); border: 1px solid var(--line);" data-i18n-aria="copyLink">
               <img src="/assets/copy.svg" alt="Copy" style="width: 20px; height: 20px; opacity: 0.8;">
             </button>
           </div>
           
-          <p id="copyFeedback" class="status" style="opacity: 0; transition: opacity 0.2s ease; margin: 4px 0 0 4px; color: var(--cp-v);">Copied to clipboard!</p>
+          <p id="copyFeedback" class="status" style="opacity: 0; transition: opacity 0.2s ease; margin: 4px 0 0 4px; color: var(--cp-v);" data-i18n="copiedToClipboard">Copied to clipboard!</p>
           
         </div>
       </div>
@@ -224,29 +222,25 @@
     <main class="dashboard-container">
       
       <div style="display: flex; justify-content: space-between; align-items: baseline;">
-        <h2 id="viewTitle">Loading Pattern...</h2>
-        <button id="sharebtn" class="icon-btn action-icon" type="button" aria-label="Share" title="Share"><img src="/assets/share.svg" alt="" aria-hidden="true" /></button>
+        <h2 id="viewTitle" data-i18n="loadingPattern">Loading Pattern...</h2>
+        <button id="sharebtn" class="icon-btn action-icon" type="button" data-i18n-aria="shareTitle" data-i18n-title="shareTitle"><img src="/assets/share.svg" alt="" aria-hidden="true" /></button>
       </div>
 
       <div class="panel">
-        <h3 class="panel-header">Crease Pattern & References</h3>
+        <h3 class="panel-header" data-i18n="panelCpRefs">Crease Pattern & References</h3>
         <div class="composite-workspace">
           <div class="canvas-wrapper" id="target-cp"></div>
           <div class="refs-workspace" id="refsWorkspace">
-            <div class="ref-square-placeholder">Reference finding interface will go here</div>
-            <!-- <div class="ref-square-placeholder">Step 2</div>
-            <div class="ref-square-placeholder">Step 3</div> -->
           </div>
         </div>
       </div>
 
       <div class="panel">
-        <h3 class="panel-header">Packing & Tree</h3>
+        <h3 class="panel-header" data-i18n="panelPackingTree">Packing & Tree</h3>
         <div class="composite-workspace">
           <div class="canvas-wrapper" id="target-packing"></div>
           <div class="canvas-wrapper" id="target-tree" style="cursor: grab;">
             <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color: var(--text-color); opacity: 0.5;">
-               [Interactive Tree Placeholder]
             </div>
           </div>
         </div>
@@ -254,27 +248,26 @@
 
       <div class="dash-row dash-row-3col">
         <div class="panel">
-          <h3 class="panel-header">Folded State</h3>
+          <h3 class="panel-header" data-i18n="panelFoldedState">Folded State</h3>
           <div id="target-fold" style="min-height: 150px; color: var(--text-color); opacity: 0.5; display:flex; align-items:center; justify-content:center;"></div>
         </div>
         <div class="panel">
-          <h3 class="panel-header">Embedding signature</h3>
+          <h3 class="panel-header" data-i18n="panelEmbedding">Embedding signature</h3>
           <div id="target-heat" style="min-height: 150px; color: var(--text-color); opacity: 0.5; display:flex; align-items:center; justify-content:center;"></div>
         </div>
         <div class="panel">
-          <h3 class="panel-header">Topology</h3>
+          <h3 class="panel-header" data-i18n="panelTopology">Topology</h3>
           <div id="target-topology" style="min-height: 150px; color: var(--text-color); opacity: 0.5; display:flex; align-items:center; justify-content:center;"></div>
         </div>
         <div class="panel">
-          <h3 class="panel-header">Exact Tiling</h3>
+          <h3 class="panel-header" data-i18n="panelExactTiling">Exact Tiling</h3>
           <div id="target-tiling" style="min-height: 150px; color: var(--text-color); opacity: 0.5; display:flex; align-items:center; justify-content:center;"></div>
         </div>
       </div>
 
       <div class="action-row">
-        <!-- <button id="exportCpBtn" type="button" class="secondary">Export .CP</button> -->
-        <button id="exportFoldBtn" type="button" class="secondary">Export crease pattern as .FOLD</button>
-        <button id="exportDebugBtn" type="button" class="secondary">Export all details as JSON</button>
+        <button id="exportFoldBtn" type="button" class="secondary" data-i18n="exportFold">Export crease pattern as .FOLD</button>
+        <button id="exportDebugBtn" type="button" class="secondary" data-i18n="exportJson">Export all details as JSON</button>
       </div>
 
     </main>

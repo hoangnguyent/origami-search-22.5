@@ -20,6 +20,8 @@ from database.tilings.build_tilings import decompress_edges, Topology, Tiling
 from database.tilings.faiss_cache_hkt import get_t_scales, compute_hkt_signature, DIMENSION
 from database.tilings.query import draw_cp_ax, draw_fold_ax
 
+from database.refs.query import lookup_vertices
+
 def pull_specific_tiling(tiling_id, N, symmetry):
     """
     Directly fetches a specific tiling from the SQLite database, 
@@ -41,7 +43,7 @@ def pull_specific_tiling(tiling_id, N, symmetry):
             return []
             
         topo = session.query(Topology).filter_by(id=tiling.topology_id).first()
-        
+        session.close()  # Close early since we have the data we need
         # 1. Reconstruct exact tiling geometry
         blob = pickle.loads(tiling.tiling_blob)
         loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
@@ -52,6 +54,10 @@ def pull_specific_tiling(tiling_id, N, symmetry):
         # 2. Reconstruct CP and Fold
         cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=N, verbose=True)
         cp = add_hinges(cp)
+        
+        refs = lookup_vertices(cp.vertices)
+        # refs = {}
+        
         fold = cp_to_fold(cp)
         
         # 3. Extract Tree and Packing strictly from the Folded State
@@ -71,7 +77,8 @@ def pull_specific_tiling(tiling_id, N, symmetry):
             'fold': fold,
             'tree': res_tree,
             'packing': res_packing,
-            'comp_map': comp_map
+            'comp_map': comp_map,
+            'refs': refs
         }]
     finally:
         session.close()
