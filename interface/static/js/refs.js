@@ -1,3 +1,6 @@
+import { Locales } from './locales.js';
+
+
 /**
  * Helper to create an SVG element with attributes
  */
@@ -9,15 +12,69 @@ function makeSvg(tag, attrs) {
     return el;
 }
 
-// 1. Normalizes the Python keys (v, v1, v2) to the JS render keys (xy, xy1, xy2)
-function normalizeRefs(refsArray) {
-    if (!Array.isArray(refsArray)) return [];
+// 1. Normalizes the Python keys (v, v1, v2) to the JS render keys (xy, xy1, xy2), and extends reference creases to boundaries
+function normalizeRefs(rawRefs) {
+    let refs = rawRefs;
     
-    return refsArray.map(ref => {
+    // Safely parse if it arrived as a string
+    if (typeof refs === 'string') {
+        try { refs = JSON.parse(refs); } 
+        catch (e) { return []; }
+    }
+    
+    if (!Array.isArray(refs)) return [];
+
+    // Helper to extend any segment to the borders of the [0, 1] unit square
+    const extendToBoundary = (p1, p2) => {
+        const EPS = 1e-9;
+        const dx = p2[0] - p1[0];
+        const dy = p2[1] - p1[1];
+        
+        // If it's a zero-length line, do nothing
+        if (Math.abs(dx) < EPS && Math.abs(dy) < EPS) return [p1, p2];
+
+        const pts = [];
+        const addPoint = (t) => {
+            const x = p1[0] + t * dx;
+            const y = p1[1] + t * dy;
+            // Check if intersection is within the unit square bounds
+            if (x >= -EPS && x <= 1 + EPS && y >= -EPS && y <= 1 + EPS) {
+                // Deduplicate against already found points (handles corner intersections)
+                if (!pts.some(p => Math.hypot(p[0] - x, p[1] - y) < 1e-6)) {
+                    pts.push([x, y]);
+                }
+            }
+        };
+
+        // Find intersections with vertical borders (x=0, x=1)
+        if (Math.abs(dx) > EPS) {
+            addPoint(-p1[0] / dx);
+            addPoint((1 - p1[0]) / dx);
+        }
+        // Find intersections with horizontal borders (y=0, y=1)
+        if (Math.abs(dy) > EPS) {
+            addPoint(-p1[1] / dy);
+            addPoint((1 - p1[1]) / dy);
+        }
+
+        // Return the two boundary points, or fallback to original if math fails
+        return pts.length >= 2 ? [pts[0], pts[1]] : [p1, p2];
+    };
+    
+    return refs.map(ref => {
         if (ref.type === 'vertex') {
             return { type: 'vertex', xy: ref.xy || ref.v };
         } else if (ref.type === 'crease' || ref.type === 'edge') {
-            return { type: ref.type, xy1: ref.xy1 || ref.v1, xy2: ref.xy2 || ref.v2 };
+            let xy1 = ref.xy1 || ref.v1;
+            let xy2 = ref.xy2 || ref.v2;
+
+            if (xy1 && xy2) {
+                const extended = extendToBoundary(xy1, xy2);
+                xy1 = extended[0];
+                xy2 = extended[1];
+            }
+
+            return { type: ref.type, xy1: xy1, xy2: xy2 };
         }
         return ref;
     });
@@ -60,16 +117,20 @@ function processAncestry(ancestryArray) {
 
 // 3. Translates the Python _instruction function
 function getInstructionText(fn, refs) {
-    if (!fn || fn === "target") return "Target vertex.";
-    if (fn === "vertex_pair") return "Crease through the circled points.";
-    if (fn === "parallel_bisector") return "Bring the highlighted creases together.";
-    if (fn === "angle_bisector") return "Crease an angle bisector.";
+    const lang = localStorage.getItem('explori_lang') || 'en';
+    const dict = Locales[lang] || Locales['en'];
+
+    if (!fn || fn === "target") return dict.instrTarget;
+    if (fn === "vertex_pair") return dict.instrVertexPair;
+    if (fn === "parallel_bisector") return dict.instrParallelBisector;
+    if (fn === "angle_bisector") return dict.instrAngleBisector;
+    
     if (fn === "perp_through_vertex") {
         const hasDiag = refs.some(r => r.type === 'crease');
-        return hasDiag
-            ? "Crease through the circled point, perpendicular to the diagonal."
-            : "Crease through the circled point, perpendicular to the edge.";
+        return hasDiag ? dict.instrPerpDiag : dict.instrPerpEdge;
     }
+    
+    // Fallback for undefined functions (capitalizes and replaces underscores)
     return fn.replace(/_/g, " ").replace(/^\w/, c => c.toUpperCase()) + ".";
 }
 
@@ -102,27 +163,27 @@ function renderStepSvg(svg, step, width, height, isFinal = false, targetXY = nul
 
     // A. Draw Past Creases (Gray)
     for (const [p1, p2] of step.pastCreases) {
-        drawLine(p1, p2, "var(--text-muted, #738090)", "1");
+        drawLine(p1, p2, "var(--cp-h)", "1");
     }
 
     if (!isFinal) {
         // B. Reference Lines (Dashed Green/Accent)
         for (const ref of step.refs) {
             if (ref.type === 'crease' || ref.type === 'edge') {
-                drawLine(ref.xy1, ref.xy2, "var(--accent, #4fa3e0)", "1.5", true);
+                drawLine(ref.xy1, ref.xy2, "var(--packing-h)", "4", true);
             }
         }
 
         // C. New Crease (Thick Blue)
         if (step.newCrease) {
-            drawLine(step.newCrease[0], step.newCrease[1], "var(--primary, #4fa3e0)", "2.5");
+            drawLine(step.newCrease[0], step.newCrease[1], "var(--cp-m)", "4");
         }
 
         // D. Reference Vertices (Hollow circles)
         for (const ref of step.refs) {
             if (ref.type === 'vertex' && ref.xy) {
                 svg.appendChild(makeSvg("circle", {
-                    cx: tx(ref.xy[0]), cy: ty(ref.xy[1]), r: "4",
+                    cx: tx(ref.xy[0]), cy: ty(ref.xy[1]), r: "8",
                     fill: "none", stroke: "var(--accent, #4fa3e0)", "stroke-width": "2"
                 }));
             }
@@ -130,7 +191,7 @@ function renderStepSvg(svg, step, width, height, isFinal = false, targetXY = nul
     } else if (targetXY) {
         // E. Final Target Dot
         svg.appendChild(makeSvg("circle", {
-            cx: tx(targetXY[0]), cy: ty(targetXY[1]), r: "4",
+            cx: tx(targetXY[0]), cy: ty(targetXY[1]), r: "8",
             fill: "#50e890", stroke: "none"
         }));
     }

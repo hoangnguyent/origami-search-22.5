@@ -6,6 +6,69 @@ export const DETAIL_LEFT_VIEW_KEY = "search225-detail-left-view";
 export const DETAIL_RIGHT_VIEW_KEY = "search225-detail-right-view";
 const systemThemeQuery = window.matchMedia ? window.matchMedia("(prefers-color-scheme: light)") : null;
 
+// let currentLang = localStorage.getItem('explori_lang') || 'en';
+
+// const langButtons = document.querySelectorAll('.lang-btn');
+// if (langButtons.length > 0) {
+//   langButtons.forEach(btn => {
+//     btn.addEventListener('click', (e) => {
+//       const selectedLang = e.currentTarget.getAttribute('data-lang');
+//       applyLanguage(selectedLang);
+//       document.getElementById('languageModal').classList.add('hidden');
+//     });
+//   });
+// }
+// export function applyLanguage(lang) {
+//   console.log("changing language")
+//   // Check if the language exists AND actually has translations inside it
+//   if (!Locales[lang] || Object.keys(Locales[lang]).length === 0) {
+//     console.warn(`[i18n] Language '${lang}' is empty or missing. Falling back to English.`);
+//     lang = 'en'; 
+//   }
+  
+//   currentLang = lang;
+//   localStorage.setItem('explori_lang', lang);
+
+//   const dict = Locales[lang];
+
+//   // 1. Update standard text content
+//   document.querySelectorAll('[data-i18n]').forEach(el => {
+//     const key = el.getAttribute('data-i18n');
+//     if (dict[key]) el.textContent = dict[key];
+//   });
+
+//   // 2. Update tooltip titles
+//   document.querySelectorAll('[data-i18n-title]').forEach(el => {
+//     const key = el.getAttribute('data-i18n-title');
+//     if (dict[key]) el.title = dict[key];
+//   });
+
+//   // 3. Update screen reader aria-labels
+//   document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+//     const key = el.getAttribute('data-i18n-aria');
+//     if (dict[key]) el.setAttribute('aria-label', dict[key]);
+//   });
+  
+//   // 4. NEW: Visually update the buttons in the Language Modal
+//   document.querySelectorAll('.lang-btn').forEach(btn => {
+//     if (btn.getAttribute('data-lang') === lang) {
+//       btn.classList.remove('secondary'); // Highlight the active language
+//     } else {
+//       btn.classList.add('secondary');    // Dim the inactive languages
+//     }
+//   });
+
+//   // 5. NEW: Sync the dropdown in the Settings Modal
+//   const langSelect = document.getElementById('languageSelect');
+//   if (langSelect) {
+//     langSelect.value = lang;
+//   }
+  
+//   // Update HTML lang attribute
+//   document.documentElement.lang = lang;
+// }
+
+
 export function readStoredDetailView(key, fallback) {
   try { const stored = localStorage.getItem(key); return stored || fallback; } catch { return fallback; }
 }

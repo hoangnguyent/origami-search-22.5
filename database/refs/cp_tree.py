@@ -39,7 +39,6 @@ from database.refs.cp_general_crease import (
     _vertex_on_infinite_line,
     vertex4d_to_aplusbsqrt2_xy,
     aplusbsqrt2_xy_to_vertex4d,
-    point_on_segment_exact,
 )
 
 

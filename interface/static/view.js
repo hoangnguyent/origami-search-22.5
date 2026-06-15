@@ -1,4 +1,5 @@
 import * as Utils from './js/utils.js';
+import { Locales } from './js/locales.js';
 import { makeSvg, renderCpSvg, renderPackingSvg, renderFoldSvg, renderGraphSvg, renderHeatSvg, transformX, transformY, fitScale } from './js/renderers.js';
 import { renderReferenceWorkspace } from './js/refs.js';
 
@@ -13,6 +14,72 @@ const donateModal = document.getElementById("donateModal");
 const discordModal = document.getElementById("discordModal");
 const languageModal = document.getElementById("languageModal");
 const shareModal = document.getElementById("shareModal");
+
+// ==========================================
+// i18n Dictionary Setup
+// ==========================================
+let currentLang = localStorage.getItem('explori_lang') || 'en';
+
+const langButtons = document.querySelectorAll('.lang-btn');
+if (langButtons.length > 0) {
+  langButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const selectedLang = e.currentTarget.getAttribute('data-lang');
+      applyLanguage(selectedLang);
+      document.getElementById('languageModal').classList.add('hidden');
+    });
+  });
+}
+export function applyLanguage(lang) {
+  console.log("changing language")
+  // Check if the language exists AND actually has translations inside it
+  if (!Locales[lang] || Object.keys(Locales[lang]).length === 0) {
+    console.warn(`[i18n] Language '${lang}' is empty or missing. Falling back to English.`);
+    lang = 'en'; 
+  }
+  
+  currentLang = lang;
+  localStorage.setItem('explori_lang', lang);
+
+  const dict = Locales[lang];
+
+  // 1. Update standard text content
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (dict[key]) el.textContent = dict[key];
+  });
+
+  // 2. Update tooltip titles
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    if (dict[key]) el.title = dict[key];
+  });
+
+  // 3. Update screen reader aria-labels
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    const key = el.getAttribute('data-i18n-aria');
+    if (dict[key]) el.setAttribute('aria-label', dict[key]);
+  });
+  
+  // 4. NEW: Visually update the buttons in the Language Modal
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    if (btn.getAttribute('data-lang') === lang) {
+      btn.classList.remove('secondary'); // Highlight the active language
+    } else {
+      btn.classList.add('secondary');    // Dim the inactive languages
+    }
+  });
+
+  // 5. NEW: Sync the dropdown in the Settings Modal
+  const langSelect = document.getElementById('languageSelect');
+  if (langSelect) {
+    langSelect.value = lang;
+  }
+  
+  // Update HTML lang attribute
+  document.documentElement.lang = lang;
+}
+applyLanguage(currentLang);
 
 function setupModal(openBtn, modalEl, closeBtnId) {
   if (!openBtn || !modalEl) return;
@@ -260,13 +327,13 @@ function highlightCpReference(svg, targetXY, ancestryArray, cartesianVertices) {
         // Draw Green Dot for the target vertex
         layer.appendChild(makeSvg('circle', {
             cx: tx(targetXY[0]), cy: ty(targetXY[1]),
-            r: '8', fill: '#50e890', stroke: '#1a1a2e', 'stroke-width': '2'
+            r: '14', fill: '#50e890', stroke: 'var(--cp-b)', 'stroke-width': '3'
         }));
     } else {
         // FAILURE: Draw Red Dot
         layer.appendChild(makeSvg('circle', {
             cx: tx(targetXY[0]), cy: ty(targetXY[1]),
-            r: '8', fill: '#ff6b8a', stroke: '#1a1a2e', 'stroke-width': '2'
+            r: '15', fill: 'var(--cp-m', stroke: 'var(--cp-b)', 'stroke-width': '3'
         }));
     }
 }
@@ -375,6 +442,8 @@ function setupInteractiveSvg(svg, name, result) {
 
             // Threshold in SVG pixels (e.g., 30 pixels on a 1000x1000 canvas)
             const CLICK_THRESHOLD_SVG = 30; 
+            const lang = localStorage.getItem('explori_lang') || 'en';
+            const dict = Locales[lang] || Locales['en'];
             
             if (minDistance <= CLICK_THRESHOLD_SVG) {
                 const targetXY = cartesianVertices[closestIndex];
@@ -385,8 +454,19 @@ function setupInteractiveSvg(svg, name, result) {
                     highlightCpReference(svg, targetXY, ancestry, cartesianVertices);
                 } else {
                     const workspace = document.getElementById("refsWorkspace");
-                    if (workspace) workspace.innerHTML = "<p>No reference steps found for this vertex.</p>";
+                    if (workspace) workspace.innerHTML = `<p>${dict.noRefsFound}</p>`;
                     highlightCpReference(svg, targetXY, null, cartesianVertices);
+                }
+            } else {
+                // 1. Remove the highlight overlay from the CP
+                const layer = svg.querySelector('#cp-highlight-layer');
+                if (layer) layer.remove();
+
+                // 2. Clear the reference area and show the placeholder text
+                const workspace = document.getElementById("refsWorkspace");
+                if (workspace) {
+                    workspace.style.display = "block"; // Reset from flex layout to block for text
+                    workspace.innerHTML = `<p style='color: var(--text-muted, #738090); margin-top: 1rem;'>${dict.clickReference}</p>`;
                 }
             }
         }
@@ -433,6 +513,10 @@ function setupInteractiveSvg(svg, name, result) {
 async function initView() {
     Utils.applyTheme(Utils.readStoredThemePreference() || 'system', false);
 
+    // Fetch dictionary for current language
+    const lang = localStorage.getItem('explori_lang') || 'en';
+    const dict = Locales[lang] || Locales['en'];
+
     const urlParams = new URLSearchParams(window.location.search);
     const fullId = urlParams.get('id') || '';
     const titleEl = document.getElementById("viewTitle");
@@ -441,7 +525,8 @@ async function initView() {
     // Reset title styling and text
     if (titleEl) {
         titleEl.style.color = ''; 
-        titleEl.textContent = "Loading Pattern...";
+        // Note: loadingPattern should already be in your dict from the previous step
+        titleEl.textContent = dict.loadingPattern || "Loading Pattern..."; 
     }
 
     // Hide all layout panels AND export buttons completely so the page is empty
@@ -459,15 +544,15 @@ async function initView() {
     if (mainEl) mainEl.appendChild(loadingImg);
 
     const luckyBtn = document.createElement('button');
-        luckyBtn.id = 'luckyBtn';
-        luckyBtn.textContent = "View random crease pattern";
-        luckyBtn.style.display = 'block';
-        luckyBtn.style.margin = '2rem auto'; 
-        
-        luckyBtn.addEventListener('click', () => {
-            const randomId = Math.floor(Math.random() * 1000000) + 1;
-            window.location.search = `?id=5d${randomId}`;
-        });
+    luckyBtn.id = 'luckyBtn';
+    luckyBtn.textContent = dict.viewRandomCp;
+    luckyBtn.style.display = 'block';
+    luckyBtn.style.margin = '2rem auto'; 
+    
+    luckyBtn.addEventListener('click', () => {
+        const randomId = Math.floor(Math.random() * 1000000) + 1;
+        window.location.search = `?id=5d${randomId}`;
+    });
 
     const showError = (msg) => {
         if (titleEl) {
@@ -487,7 +572,7 @@ async function initView() {
     // 1. Strict Parsing: Checks for [1 digit N][n, b, or d][1+ digit ID]
     const match = fullId.match(/^(\d)([nbd])(\d+)$/i);
     if (!match) {
-        showError("Error: Invalid Pattern ID provided.");
+        showError(dict.errInvalidId);
         return;
     }
 
@@ -501,17 +586,17 @@ async function initView() {
 
     try {
         const response = await fetch(`/api/fetch_tiling?id=${tilingId}&N=${N}&sym=${sym}`);
-        if (!response.ok) throw new Error("Pattern not found or server error.");
+        if (!response.ok) throw new Error(dict.errNotFound);
         
         const data = await response.json();
         const result = data.results && data.results[0];
         
-        if (!result || !result.cp) throw new Error("Pattern data is corrupted.");
+        if (!result || !result.cp) throw new Error(dict.errCorrupted);
 
         // Format a nice title
         if (titleEl) {
             const symTitle = sym.charAt(0).toUpperCase() + sym.slice(1);
-            titleEl.textContent = `Pattern ${N}${symChar}${tilingId}`;
+            titleEl.textContent = `${dict.patternTitlePrefix} ${N}${symChar}${tilingId}`;
         }
         // Remove loading spinner and reveal containers and export buttons
         const spinner = document.getElementById('loadingSpinner');
@@ -521,42 +606,93 @@ async function initView() {
         // Save globally
         window.currentResult = result;
         drawAllPanels(result);
-        console.log(result.refs)
-        // --- Initial reference: Find shortest ancestry > length 1 ---
-        const cartesianVertices = (result.cp.vertices || []).map(v => Utils.Vertex4DtoCartesian(v));
+
+        // --- Smart Initial Load: Find vertex aligned with the most other vertices ---
+        const rawVertices = result.cp.vertices || [];
+        const cartesianVertices = rawVertices.map(v => Utils.Vertex4DtoCartesian(v));
         const cpSvg = document.querySelector('#target-cp svg');
 
         let bestIdx = -1;
-        let shortestLen = Infinity;
+        let maxAligned = -1;
+
+        // Bulletproof coordinate extractor to handle the 4 fractions (x, y, z, w)
+        // gracefully handling both flat arrays [num, den, num, den...] and object properties
+        const getCoord = (v, c) => {
+            if (Array.isArray(v)) {
+                return { n: v[c * 2], d: v[c * 2 + 1] };
+            } else {
+                const keys = ['x', 'y', 'z', 'w'];
+                const val = v[keys[c]];
+                if (Array.isArray(val)) return { n: val[0], d: val[1] };
+                if (val && val.num !== undefined) return { n: val.num, d: val.den };
+                return { n: val || 0, d: 1 };
+            }
+        };
 
         if (result.refs) {
-            for (const [idxStr, ancestry] of Object.entries(result.refs)) {
-                // Look for an ancestry array that is longer than just the root (length 1)
-                if (ancestry && ancestry.length > 1 && ancestry.length < shortestLen) {
-                    shortestLen = ancestry.length;
-                    bestIdx = parseInt(idxStr);
+            for (let i = 0; i < rawVertices.length; i++) {
+                const ancestry = result.refs[i];
+                
+                // Skip invalid sequences and trivial corners (which have length 1)
+                if (!ancestry || ancestry.length <= 1) continue; 
+
+                let alignedCount = 0;
+                
+                // Compare against all other vertices
+                for (let j = 0; j < rawVertices.length; j++) {
+                    if (i === j) continue;
+                    
+                    let matchCount = 0;
+                    for (let c = 0; c < 4; c++) {
+                        const c1 = getCoord(rawVertices[i], c);
+                        const c2 = getCoord(rawVertices[j], c);
+                        
+                        // Cross-multiply to check equality: n1 * d2 === n2 * d1
+                        if (c1.n * c2.d === c2.n * c1.d) {
+                            matchCount++;
+                        }
+                    }
+                    
+                    // Aligned if they share 3 out of the 4 coordinates
+                    if (matchCount >= 3) {
+                        alignedCount++;
+                    }
+                }
+
+                if (alignedCount > maxAligned) {
+                    maxAligned = alignedCount;
+                    bestIdx = i;
+                } else if (alignedCount === maxAligned && maxAligned > -1) {
+                    // Tie-breaker: prefer the SHORTER folding sequence
+                    if (ancestry.length < result.refs[bestIdx].length) {
+                        bestIdx = i;
+                    }
                 }
             }
         }
 
+        // --- Render the chosen reference ---
         if (bestIdx !== -1) {
             renderReferenceWorkspace(result.refs[bestIdx], cartesianVertices[bestIdx]);
             if (cpSvg) highlightCpReference(cpSvg, cartesianVertices[bestIdx], result.refs[bestIdx], cartesianVertices);
         } else if (cartesianVertices.length > 0) {
-            const fallbackIdx = Object.keys(result.refs)[0] || 0;
-            const fallbackAncestry = result.refs[fallbackIdx] || [];
+            // Fallback: If no complex vertices exist, load the first available
+            const fallbackIdx = Object.keys(result.refs || {})[0] || 0;
+            const fallbackAncestry = result.refs ? result.refs[fallbackIdx] : [];
             
             renderReferenceWorkspace(fallbackAncestry, cartesianVertices[fallbackIdx]);
             if (cpSvg) highlightCpReference(cpSvg, cartesianVertices[fallbackIdx], fallbackAncestry, cartesianVertices);
         } else {
             const workspace = document.getElementById("refsWorkspace");
-            if (workspace) workspace.innerHTML = "<p>No references found.</p>";
+            if (workspace) workspace.innerHTML = `<p>${dict.noRefsFound}</p>`;
         }
         
         mainEl.appendChild(luckyBtn);
 
     } catch (err) {
-        showError(`Error: ${err.message}`);
+        // Strip the native JS "Error: " if the throw already included our translated message
+        const rawMsg = err.message.replace(/^Error:\s*/, '');
+        showError(`${dict.errorPrefix} ${rawMsg}`);
     }
 }
 
