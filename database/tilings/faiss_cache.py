@@ -196,17 +196,21 @@ def plot_random_tree_embeddings(N=5, symmetry="diag", sample_size=100):
 
 if __name__ == "__main__":
     configs = [
-        (3, 'diag'), 
-        (3, 'none'),
-        (3, 'book'),
-        (4, 'diag'), 
-        (4, 'book'),
-        (4, 'none'), 
-        (5, 'diag'),
+        # (3, 'diag'), 
+        # (3, 'none'),
+        # (3, 'book'),
+        # (4, 'diag'), 
+        # (4, 'book'),
+        # (4, 'none'), 
+        # (5, 'diag'),
+        (2, 'book'),
+        (2, 'diag'),
+        (2, 'none'),
+        (5, 'book'),
         (6, 'book')
     ]
     # To test, uncomment build_wks_index_for_db to rebuild caches first
-    # for N, sym in configs:
-    #     build_wks_index_for_db(N, sym)
+    for N, sym in configs:
+        build_wks_index_for_db(N, sym)
     
-    plot_random_tree_embeddings(N=5, symmetry='diag', sample_size=10000)
+    # plot_random_tree_embeddings(N=5, symmetry='diag', sample_size=10000)

@@ -36,7 +36,7 @@ from src.engine.tree import extract_eigenvalues
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-N = 6
+N = 5
 SYMMETRY = "book"
 diversity_threshold = 4
 num_solutions = 10
