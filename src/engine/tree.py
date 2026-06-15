@@ -56,7 +56,7 @@ def merge_edges(tree):
 
 def get_proportional_tree_pos(G):
     """
-    Tree plot helper
+    Tree plot helper for python debugging, not meant for frontend use. 
     """
     if not G.nodes():
         return {}
@@ -166,7 +166,7 @@ def extract_eigenvalues(G, eig_count=EIG_COUNT, resolution=RESOLUTION):
 
     eigenvalues = eigh(L, M, eigvals_only=True)
     eigenvalues = np.clip(eigenvalues, 0, None)
-    eigenvalues = np.sort(eigenvalues)[1:]
+    eigenvalues = np.sort(eigenvalues)[1:] #get rid of the zero eigenvalue
     
     if len(eigenvalues) < eig_count:
         padded = np.zeros(eig_count)

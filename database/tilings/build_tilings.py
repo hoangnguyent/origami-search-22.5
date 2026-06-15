@@ -36,8 +36,8 @@ from src.engine.tree import extract_eigenvalues
 # =============================================================================
 # CONFIGURATION
 # =============================================================================
-N = 5
-SYMMETRY = "diag"
+N = 6
+SYMMETRY = "book"
 diversity_threshold = 4
 num_solutions = 10
 TIME_LIMIT = 30 # Internal Python DFS time limit

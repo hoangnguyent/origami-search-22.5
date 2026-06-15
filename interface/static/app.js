@@ -1,14 +1,11 @@
-import { state } from './state.js';
-import * as Editor from './editor.js';
-import * as TreeActions from './treeActions.js';
-import * as Results from './results.js';
-import * as Detail from './detail.js';
-import * as Utils from './utils.js';
+import { state } from './js/state.js';
+import * as Editor from './js/editor.js';
+import * as TreeActions from './js/treeActions.js';
+import * as Results from './js/results.js';
+import * as Detail from './js/detail.js';
+import * as Utils from './js/utils.js';
+import { Locales } from './js/locales.js';
 
-// const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
-// const settingsModal = document.getElementById("settingsModal");
-// const settingsBtn = document.getElementById("settingsBtn");
-// const closeSettingsModal = document.getElementById("closeSettingsModal");
 const themeSelect = document.getElementById("themeSelect");
 const languageSelect = document.getElementById("languageSelect");
 const editorSvgEl = document.getElementById("editorSvg");
@@ -17,7 +14,7 @@ const moveNodeUpBtn = document.getElementById("moveNodeUpBtn");
 const moveNodeDownBtn = document.getElementById("moveNodeDownBtn");
 const moveNodeLeftBtn = document.getElementById("moveNodeLeftBtn");
 const moveNodeRightBtn = document.getElementById("moveNodeRightBtn");
-const NODE_NUDGE_STEP = 20; //for mobile tree editing
+const NODE_NUDGE_STEP = 20;
 
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const donateBtn = document.getElementById("donateBtn");
@@ -27,6 +24,7 @@ const languageBtn = document.getElementById("languageBtn");
 const donateModal = document.getElementById("donateModal");
 const discordModal = document.getElementById("discordModal");
 const languageModal = document.getElementById("languageModal");
+
 function setupModal(openBtn, modalEl, closeBtnId) {
   if (!openBtn || !modalEl) return;
   const closeBtn = document.getElementById(closeBtnId);
@@ -37,89 +35,138 @@ function setupModal(openBtn, modalEl, closeBtnId) {
     if (e.target === modalEl) modalEl.classList.add("hidden");
   });
 }
-// Wire up the Modals
 setupModal(donateBtn, donateModal, "closeDonateModal");
 setupModal(discordBtn, discordModal, "closeDiscordModal");
 setupModal(languageBtn, languageModal, "closeLanguageModal");
 
-// Wire up the 1-click Theme Toggle
 if (themeToggleBtn) {
   themeToggleBtn.addEventListener("click", () => {
-    // Read the current theme from the HTML tag, default to dark if not explicitly light
     const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
     const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
     Utils.applyTheme(nextTheme, true);
   });
 }
 
-// Language selection logic (placeholder hook)
-document.querySelectorAll('.lang-btn').forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    const selectedLang = e.currentTarget.dataset.lang;
-    try { localStorage.setItem('search225-language-preference', selectedLang); } catch {}
-    
-    // Update active button styling visually
-    document.querySelectorAll('.lang-btn').forEach(b => b.classList.add('secondary'));
-    e.currentTarget.classList.remove('secondary');
-    
-    // Close modal
-    if (languageModal) languageModal.classList.add('hidden');
+// ==========================================
+// i18n Dictionary Setup
+// ==========================================
+let currentLang = localStorage.getItem('explori_lang') || 'en';
+export function applyLanguage(lang) {
+  // Check if the language exists AND actually has translations inside it
+  if (!Locales[lang] || Object.keys(Locales[lang]).length === 0) {
+    console.warn(`[i18n] Language '${lang}' is empty or missing. Falling back to English.`);
+    lang = 'en'; 
+  }
+  
+  currentLang = lang;
+  localStorage.setItem('explori_lang', lang);
+
+  const dict = Locales[lang];
+
+  // 1. Update standard text content
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    const key = el.getAttribute('data-i18n');
+    if (dict[key]) el.textContent = dict[key];
   });
-});
 
-// NEW SEGMENTED CONTROL LOGIC
+  // 2. Update tooltip titles
+  document.querySelectorAll('[data-i18n-title]').forEach(el => {
+    const key = el.getAttribute('data-i18n-title');
+    if (dict[key]) el.title = dict[key];
+  });
+
+  // 3. Update screen reader aria-labels
+  document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+    const key = el.getAttribute('data-i18n-aria');
+    if (dict[key]) el.setAttribute('aria-label', dict[key]);
+  });
+  
+  // 4. NEW: Visually update the buttons in the Language Modal
+  document.querySelectorAll('.lang-btn').forEach(btn => {
+    if (btn.getAttribute('data-lang') === lang) {
+      btn.classList.remove('secondary'); // Highlight the active language
+    } else {
+      btn.classList.add('secondary');    // Dim the inactive languages
+    }
+  });
+
+  // 5. NEW: Sync the dropdown in the Settings Modal
+  const langSelect = document.getElementById('languageSelect');
+  if (langSelect) {
+    langSelect.value = lang;
+  }
+  
+  // Update HTML lang attribute
+  document.documentElement.lang = lang;
+}
+
+const langButtons = document.querySelectorAll('.lang-btn');
+if (langButtons.length > 0) {
+  langButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const selectedLang = e.currentTarget.getAttribute('data-lang');
+      applyLanguage(selectedLang);
+      document.getElementById('languageModal').classList.add('hidden');
+    });
+  });
+}
+applyLanguage(currentLang);
+// ==========================================
+
 const resultsThumbInput = document.getElementById("resultsThumbMode");
-const thumbModeBtns = document.querySelectorAll(".thumb-mode-btn");
-
-if (resultsThumbInput && thumbModeBtns.length > 0) {
-  thumbModeBtns.forEach(btn => {
+const displayModeBtns = document.querySelectorAll(".results-head-left .thumb-mode-btn"); 
+if (resultsThumbInput && displayModeBtns.length > 0) {
+  displayModeBtns.forEach(btn => {
     btn.addEventListener("click", () => {
-      // 1. Remove active class from all buttons
-      thumbModeBtns.forEach(b => b.classList.remove("active"));
-      
-      // 2. Indent the clicked button
+      displayModeBtns.forEach(b => b.classList.remove("active"));
       btn.classList.add("active");
-      
-      // 3. Sync the hidden input so the renderer knows what to draw
       resultsThumbInput.value = btn.dataset.mode;
       
-      // 4. Fire the re-render if we have data
-      if (state.queryResult) {
+      if (typeof state !== 'undefined' && state.queryResult && typeof Results !== 'undefined') {
         Results.renderResults();
       }
     });
   });
 }
 
+const dbBtns = document.querySelectorAll('.db-toggle-group .thumb-mode-btn'); 
+if (dbBtns.length > 0) {
+  dbBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const isActive = btn.classList.contains('active');
+      const activeCount = document.querySelectorAll('.db-toggle-group .thumb-mode-btn.active').length;
+      
+      if (isActive && activeCount === 1) return; 
+      btn.classList.toggle('active');
+    });
+  });
+}
+
 function selectedDbConfigs() {
-  const isDiagOnly = !document.getElementById("diagToggle").checked;
-  if (isDiagOnly) {
-    return [
-      { N: 3, symmetry: "diag" },
-      { N: 4, symmetry: "diag" },
-      { N: 5, symmetry: "diag" }
-    ];
-  } else {
-    return [
-      { N: 3, symmetry: "diag" },
-      { N: 3, symmetry: "none" },
-      { N: 4, symmetry: "diag" },
-      { N: 4, symmetry: "none" },
-      { N: 4, symmetry: "book" },
-      { N: 5, symmetry: "diag" }
-    ];
-  }
+  const configs = [];
+  const isDiag = document.getElementById("dbDiagBtn")?.classList.contains("active");
+  const isBook = document.getElementById("dbBookBtn")?.classList.contains("active");
+  const isAsym = document.getElementById("dbAsymBtn")?.classList.contains("active");
+
+  if (isDiag) configs.push({ N: 3, symmetry: "diag" }, { N: 4, symmetry: "diag" }, { N: 5, symmetry: "diag" });
+  if (isBook) configs.push({ N: 3, symmetry: "book" }, { N: 4, symmetry: "book" }, { N: 6, symmetry: "book" });
+  if (isAsym) configs.push({ N: 3, symmetry: "none" }, { N: 4, symmetry: "none" });
+
+  return configs;
 }
 
 async function runQuery() {
+  // Grab the current dictionary for dynamic JS strings
+  const dict = Locales[currentLang] || Locales['en'];
+
   try {
     const tree = Editor.serializeTree();
     if (tree.edges.length < 4) {
-      Utils.setStatus("Tree is too simple. Add at least 4 edges before running a query.", true);
+      Utils.setStatus(dict.errorTreeTooSimple, true);
       return;
     }
 
-    Utils.setStatus("Querying backend...");
+    Utils.setStatus(dict.statusQuerying);
     state.isQueryLoading = true;
     Results.renderResults();
     const t0 = Date.now();
@@ -141,18 +188,16 @@ async function runQuery() {
       try { 
         data = JSON.parse(rawText); 
       } catch { 
-        // Gracefully catch HTML timeout pages (e.g., Cloudflare 502/504 errors)
         const textStart = rawText.trim().toLowerCase();
         if (textStart.startsWith("<!doctype") || textStart.startsWith("<html")) {
-          data = { error: "The search timed out. Try simplifying the tree or requesting fewer results." };
+          data = { error: dict.errorTimeout };
         } else {
-          data = { error: "An unexpected server error occurred: " + rawText.slice(0, 100) }; 
+          data = { error: dict.errorServer + rawText.slice(0, 100) }; 
         }
       }
     }
     
-    if (!response.ok) throw new Error(data.error || `Query failed (Status: ${response.status})`);
-
+    if (!response.ok) throw new Error(data.error || `${dict.errorQueryFailed} ${response.status})`);
 
     const tf = Date.now();
     const totalFrontendMs = tf - t0;
@@ -160,7 +205,6 @@ async function runQuery() {
     const backendTotalMs = prof.backend_total_ms || 0;
     const networkMs = Math.max(0, totalFrontendMs - backendTotalMs);
 
-    // Print detailed breakdown to the browser console
     console.log("📊 --- Query Profiling Breakdown ---");
     console.log(`Total Roundtrip Time : ${totalFrontendMs}ms`);
     console.log(` ├── Network / Browser : ${networkMs.toFixed(1)}ms`);
@@ -175,12 +219,10 @@ async function runQuery() {
     state.queryNodeCount = Math.max(1, tree.nodes.length || 0);
     Results.renderResults();
     const resultSummary = document.getElementById("resultSummary");
-    if (resultSummary) resultSummary.textContent = `${data.results.length} result(s) loaded.`;
+    if (resultSummary) resultSummary.textContent = `${data.results.length} ${dict.resultsLoaded}`;
     const n = Number(document.getElementById("resultCount").value || 5);
-    const isDiagOnly = !document.getElementById("diagToggle").checked;
     
-    // Update UI status to show a quick summary of the bottleneck
-    Utils.setStatus(`Successfully queried ${n} patterns in ${(totalFrontendMs/1000).toFixed(2)}s`);
+    Utils.setStatus(`${dict.querySuccess1} ${n} ${dict.querySuccess2} ${(totalFrontendMs/1000).toFixed(2)}s`);
 
   } catch (error) {
     state.isQueryLoading = false;
@@ -190,7 +232,6 @@ async function runQuery() {
 }
 
 function onKeyDown(event) {
-  // Prevent catching arrow keys if typing in an input
   if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
 
   const detailModalEl = document.getElementById("detailModal");
@@ -205,7 +246,6 @@ function onKeyDown(event) {
     return;
   }
 
-  // Hook up physical arrow keys to move the node
   if (state.selectedNode !== null) {
     if (event.key === "Backspace" || event.key === "Delete") {
       event.preventDefault();
@@ -228,10 +268,8 @@ function onKeyDown(event) {
 
 function onDocumentClick(event) {
   if (!editorSvgEl) return;
-  // Ignore clicks inside the canvas
   if (event.target instanceof Node && editorSvgEl.contains(event.target)) return;
   
-  // Ignore clicks inside the on-screen arrow controls so it doesn't deselect
   const controlsEl = document.getElementById("mobileEditorControls");
   if (controlsEl && event.target instanceof Node && controlsEl.contains(event.target)) return;
 
@@ -240,7 +278,6 @@ function onDocumentClick(event) {
   Editor.renderEditor();
 }
 
-// Wire DOM events
 document.getElementById("runQuery").addEventListener("click", runQuery);
 document.getElementById("resetTree").addEventListener("click", Editor.resetTree);
 const closeModalBtn = document.getElementById("closeModal"); if (closeModalBtn) closeModalBtn.addEventListener("click", Detail.closeDetailModal);
@@ -263,10 +300,8 @@ if (moveNodeUpBtn) moveNodeUpBtn.addEventListener("click", () => TreeActions.mov
 if (moveNodeDownBtn) moveNodeDownBtn.addEventListener("click", () => TreeActions.moveSelectedNode(0, NODE_NUDGE_STEP));
 if (moveNodeLeftBtn) moveNodeLeftBtn.addEventListener("click", () => TreeActions.moveSelectedNode(-NODE_NUDGE_STEP, 0));
 if (moveNodeRightBtn) moveNodeRightBtn.addEventListener("click", () => TreeActions.moveSelectedNode(NODE_NUDGE_STEP, 0));
-document.getElementById("downloadCpBtn").addEventListener("click", Detail.exportCurrentCp);
 window.addEventListener("resize", () => Editor.renderEditor());
 
-// Initialize theme, preferences and initial render
 Utils.applyTheme(Utils.readStoredThemePreference() || 'system', false);
 Utils.syncDetailViewPreferences();
 Editor.renderEditor();

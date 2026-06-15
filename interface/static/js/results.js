@@ -1,24 +1,28 @@
 import { state } from './state.js';
 import { makeSvg, renderCpSvg, renderPackingSvg, renderFoldSvg, renderGraphSvg } from './renderers.js';
 import { getMatchQuality, symmetry_abbr } from './utils.js';
+import { Locales } from './locales.js';
 
 const resultsGrid = document.getElementById("resultsGrid");
 const resultSummary = document.getElementById("resultSummary");
 const resultsThumbModeSelect = document.getElementById("resultsThumbMode");
-const loadingGifUrl = new URL("./assets/loading.svg", import.meta.url).href;
+const loadingGifUrl = new URL("./../assets/robot_loading.svg", import.meta.url).href;
 
 function renderLoadingResults() {
+  const lang = localStorage.getItem('explori_lang') || 'en';
+  const dict = Locales[lang] || Locales['en'];
+
   resultsGrid.replaceChildren();
 
   const loadingCard = document.createElement("div");
   loadingCard.className = "results-loading";
   loadingCard.innerHTML = `
     <img src="${loadingGifUrl}" alt="" aria-hidden="true" />
-    <p>Fetching results...</p>
+    <p>${dict.fetchingResults}</p>
   `;
 
   resultsGrid.appendChild(loadingCard);
-  if (resultSummary) resultSummary.textContent = "Fetching results...";
+  if (resultSummary) resultSummary.textContent = dict.fetchingResults;
 }
 
 export function renderResults() {
@@ -52,21 +56,31 @@ export function renderResults() {
     thumb.appendChild(svg);
 
     const meta = document.createElement("div");
-    const quality = getMatchQuality(result.distance, state.queryNodeCount);
-    meta.className = "result-meta";
-    meta.dataset.quality = quality;
-    meta.classList.add("match-quality");
+    const norm = (Math.sqrt(result.heat.query.reduce((sum, val) => sum + val * val, 0)));
+    const quality = getMatchQuality(result.distance/norm, state.queryNodeCount);
+    
+    const lang = localStorage.getItem('explori_lang') || 'en';
+    const dict = Locales[lang] || Locales['en'];
+
+    // Apply the class and the universal English key to the entire meta container
+    meta.className = "result-meta match-quality";
+    meta.dataset.quality = quality.key; 
+
+    // Use the translated label for the display text
     meta.innerHTML = `
-      <div><strong>Option ${result.rank ?? index + 1}</strong></div>
-      <div>Match quality: ${quality}</div>
-      <div>ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}</div>
+      <div><strong>${dict.option} ${result.rank ?? index + 1}</strong></div>
+      <div>${dict.matchQuality}: ${quality.label}</div>
+      <div>${dict.id}: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}</div>
     `;
 
     card.appendChild(thumb);
     card.appendChild(meta);
     resultsGrid.appendChild(card);
   });
-  resultSummary.textContent = `${state.queryResult.results.length} result(s) loaded.`;
+  
+  const lang = localStorage.getItem('explori_lang') || 'en';
+  const dict = Locales[lang] || Locales['en'];
+  resultSummary.textContent = `${state.queryResult.results.length} ${dict.resultsLoaded}`;
 }
 
 // Placeholder; will be imported dynamically by app.js to avoid circular dependency

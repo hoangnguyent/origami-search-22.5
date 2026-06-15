@@ -38,7 +38,7 @@
   --packing-m: #ff6b6b;
   --packing-b: #ffffff;
   
-  --quality-perfect: 28, 184, 112;
+  --quality-Great: 28, 184, 112;
   --quality-good: 92, 194, 106;
   --quality-acceptable: 214, 180, 55;
   --quality-poor: 237, 136, 63;
@@ -55,7 +55,7 @@ html[data-theme="light"] {
   --bg-panel: rgba(255, 255, 255, 0.9);
   --bg-surface: rgba(17, 30, 52, 0.05);
   --bg-surface-hover: rgba(19, 108, 160, 0.08);
-  --page-bg: radial-gradient(circle at top, #ffffff 0%, #edf2f9 55%, #dfe8f2 100%);
+  /* --page-bg: radial-gradient(circle at top, #ffffff 0%, #edf2f9 55%, #dfe8f2 100%); */
   --line: #c7d2e3;
   --line-soft: rgba(15, 23, 42, 0.08);
   --line-faint: rgba(15, 23, 42, 0.05);
@@ -80,7 +80,7 @@ html[data-theme="light"] {
   --packing-m: #ec5151;
   --packing-b: #2b3a4a;
   
-  --quality-perfect: 24, 153, 92;
+  --quality-Great: 24, 153, 92;
   --quality-good: 76, 167, 88;
   --quality-acceptable: 173, 145, 32;
   --quality-poor: 207, 116, 39;
@@ -150,6 +150,132 @@ html[data-theme="light"] { --gear-filter: invert(14%) sepia(13%) saturate(1434%)
 .split-view { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; overflow: hidden; }
 
 /* Left Panel */
+
+/* --- Floating Random Controls (Top Left Pill) --- */
+.editor-top-left-controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 4px;
+  box-shadow: var(--shadow);
+  transition: border-color 0.15s ease;
+}
+.editor-top-left-controls:hover {
+  border-color: rgba(122, 211, 255, 0.4);
+}
+.editor-top-left-controls .icon-btn {
+  width: 36px; 
+  height: 36px;
+  background: transparent;
+  padding: 6px;
+}
+.input-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  margin: 0 4px;
+}
+.editor-top-left-controls input {
+  width: 50px;
+  background: transparent;
+  border: none;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+  outline: none;
+  padding: 8px 4px;
+}
+/* Hide the native number arrows for a cleaner look */
+.editor-top-left-controls input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+/* --- Redesigned Query Settings --- */
+
+/* The main wrapper keeping left and right separated */
+.query-action-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: nowrap; /* Forces the inputs and the run button to always be side-by-side */
+}
+
+/* The left side container that handles the wrapping */
+.query-inputs-group {
+  display: flex;
+  flex-wrap: wrap; /* Allows Search Size to drop below DB toggles when compressed */
+  gap: 16px;
+  flex: 1 1 auto; /* Takes up available space but allows shrinking */
+}
+
+.config-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.config-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  margin-left: 4px;
+}
+
+.size-input {
+  width: 80px;
+  height: 40px;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-surface);
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 600;
+  text-align: center;
+  transition: 0.15s ease;
+}
+
+.size-input:focus {
+  outline: none;
+  border-color: rgba(122, 211, 255, 0.7);
+  box-shadow: 0 0 0 3px rgba(122, 211, 255, 0.16);
+}
+
+
+/* Emphasize the Run button */
+.primary-run-btn {
+  flex: 0 0 auto; /* CRITICAL: Do not grow, do not shrink. Stay rigid. */
+  height: 60px;
+  width: 60px;
+  font-size: 16px;
+  padding: 13px;
+  border-radius: 40px;
+  letter-spacing: 0.02em;
+  background: rgba(122,211,255,0.7);
+  border: none;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.primary-run-btn img {
+  width: 100%;
+  height: 100%;
+  padding: 0px;
+  object-fit: contain;
+}
+
+.primary-run-btn:hover {
+  background: rgba(122, 211, 255, 0.35);
+}
+
 .left-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 24px; border-right: 1px solid var(--line); overflow-y: auto; }
 .editor-container { position: relative; flex-grow: 1; min-height: 400px; margin-bottom: 24px; }
 #editorSvg { width: 100%; height: 100%; display: block; border-radius: 14px; background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); border: 1px solid var(--line-faint); cursor: grab; user-select: none; touch-action: none; }
@@ -165,6 +291,9 @@ html[data-theme="light"] { --gear-filter: invert(14%) sepia(13%) saturate(1434%)
   height: 42px;
   border-radius: 14px;
   transition: 0.15s ease;
+  background: var(--bg-elevated);
+  border: 1px solid var(--line-soft);
+  box-shadow: var(--shadow);
 }
 .editor-reset-btn img {padding: 7px;}
 .editor-reset-btn:hover {
@@ -196,7 +325,7 @@ html[data-theme="light"] { --gear-filter: invert(14%) sepia(13%) saturate(1434%)
 .toggle-label select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-surface); color: var(--text); }
 
 .actions { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px; }
-button { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; background: linear-gradient(180deg, rgba(122,211,255,0.22), rgba(122,211,255,0.08)); color: var(--text); font-weight: 600; cursor: pointer; transition: 0.15s; }
+button { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; background: rgba(0, 167, 251, 0.296); color: var(--text); font-weight: 600; cursor: pointer; transition: 0.15s; }
 button.secondary { background: var(--bg-surface); font-weight: normal; }
 button:hover { border-color: rgba(122,211,255,0.55); }
 .status { margin: 0; font-size: 13px; color: var(--muted); }
@@ -267,14 +396,15 @@ html[data-theme="light"] .thumb-mode-btn.active {
 .results-loading { grid-column: 1 / -1; min-height: 360px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px; padding: 20px; border-radius: 18px; border: 0; background: transparent; color: var(--muted); text-align: center; }
 .results-loading img { width: min(68vw, 360px); max-width: 360px; height: auto; image-rendering: auto; }
 .results-loading p { margin: 0; font-size: clamp(20px, 2.2vw, 30px); line-height: 1.15; letter-spacing: 0.02em; font-weight: 700; }
-.result-card { padding: 12px; border-radius: 14px; border: 1px solid var(--line-soft); background: var(--bg-soft); cursor: pointer; transition: 0.15s; }
+.result-card { padding: 12px; border-radius: 14px; border: 1px solid var(--line-soft); background: var(--bg-soft); cursor: pointer; transition: 0.15s; background: var(--bg-elevated);  box-shadow: var(--shadow);
+}
 .result-card:hover { border-color: rgba(122,211,255,0.4); background: var(--bg-surface-hover); transform: translateY(-2px); }
 .thumb { width: 100%; aspect-ratio: 1 / 1; display: block; overflow: hidden; margin-bottom: 0px; padding: 0; border: 0; background: transparent; }
 .thumb > .thumb-svg { width: 100%; height: 100%; display: block; background: transparent; border: 0px solid var(--line-faint); }
 .result-meta { display: grid; gap: 4px; color: var(--muted); font-size: 12px; }
 .result-meta strong { color: var(--text); font-size: 14px; }
 .match-quality { --quality-rgb: var(--quality-good); gap: 5px; padding: 10px 12px; border-radius: 12px; border: 1px solid rgba(var(--quality-rgb), var(--quality-border-alpha)); background: rgba(var(--quality-rgb), 0.06); }
-.match-quality[data-quality="Perfect"] { --quality-rgb: var(--quality-perfect); }
+.match-quality[data-quality="Great"] { --quality-rgb: var(--quality-Great); }
 .match-quality[data-quality="Good"] { --quality-rgb: var(--quality-good); }
 .match-quality[data-quality="Acceptable"] { --quality-rgb: var(--quality-acceptable); }
 .match-quality[data-quality="Poor"] { --quality-rgb: var(--quality-poor); }
@@ -314,7 +444,7 @@ svg .packing-b { stroke: var(--packing-b); }
 .close-btn { position: absolute; top: 24px; right: 24px; background: var(--toolbar-icon-bg); border: none; width: 40px; height: 40px; border-radius: 20px; font-size: 18px; display: flex; align-items: center; justify-content: center; padding: 0; transition: 0.2s; }
 .close-btn:hover { background: var(--danger); color: white; }
 .detail-modal-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; padding-right: 24px;}
-.modal-title-group { min-width: 0; }
+
 .modal-kicker { margin: 0 0 6px; color: var(--muted); font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; }
 .modal-header h2 { margin: 0; color: var(--text); font-size: 26px; line-height: 1.15; padding-bottom:25px; }
 .modal-meta { margin: 0; color: var(--muted); font-size: 16px; text-align: right; max-width: 40ch; line-height: 1.6}
@@ -373,9 +503,9 @@ svg .packing-b { stroke: var(--packing-b); }
 
 /* Modal Footer */
 .modal-footer { 
-  margin-top: 24px; 
-  padding-top: 24px; 
-  border-top: 1px solid var(--line); 
+  margin-top: 12px; 
+  padding-top: 12px; 
+  /* border-top: 1px solid var(--line);  */
   display: flex; 
   justify-content: flex-end; 
 }

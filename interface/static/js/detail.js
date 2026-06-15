@@ -2,6 +2,7 @@ import { state } from './state.js';
 import { makeSvg, renderCpSvg, renderPackingSvg, renderFoldSvg, renderGraphSvg } from './renderers.js';
 import { persistDetailView, getMatchQuality, symmetry_abbr } from './utils.js';
 import { registerDetailRenderer } from './results.js';
+import { Locales } from './locales.js';
 
 const detailModal = document.getElementById("detailModal");
 const modalGrid = document.getElementById("modalGrid");
@@ -75,25 +76,33 @@ function buildDetailPane({ side, activeValue, options, renderActive }) {
 }
 
 export function renderDetail(result, index) {
+  const lang = localStorage.getItem('explori_lang') || 'en';
+  const dict = Locales[lang] || Locales['en'];
+
   state.currentDetailResult = result;
   state.currentDetailIndex = index;
   modalGrid.replaceChildren();
   if (!result) return;
-  modalTitle.textContent = `Option ${result.rank ?? index + 1}`;
-  const quality = getMatchQuality(result.distance, state.queryNodeCount);
-  modalMeta.dataset.quality = quality;
+  const norm = (Math.sqrt(result.heat.query.reduce((sum, val) => sum + val * val, 0)));
+  const quality = getMatchQuality(result.distance/norm, state.queryNodeCount);
+  
+  // Use the universal English key for the CSS styling
+  modalMeta.dataset.quality = quality.key; 
   modalMeta.classList.add("match-quality");
-  modalMeta.textContent = `Match quality: ${quality} • Normalized distance: ${(result.distance*Math.exp(state.queryNodeCount)/1000).toFixed(4)} • Tiling ID: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
+  
+  // Use the translated label for the display text
+  // modalMeta.textContent = `${dict.matchQuality}: ${quality.label} • ${dict.distance}: ${(result.distance/norm).toFixed(4)} • ${dict.tilingId}: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id}`;
+  modalMeta.textContent = `${dict.tilingId}: ${result.N}${symmetry_abbr[result.symmetry]}.${result.tiling_id} • ${dict.matchQuality}: ${quality.label}`;
+  
   const leftPane = buildDetailPane({
     side: "left",
     activeValue: state.detailViewModes.left,
-    options: [ { value: "cp", label: "Crease pattern" }, { value: "packing", label: "Packing" } ],
+    // Note: Reusing the dict.thumbCp and dict.thumbPacking translations here!
+    options: [ { value: "cp", label: dict.thumbCp }, { value: "packing", label: dict.thumbPacking } ],
     renderActive: (svg, currentValue) => {
       if (currentValue === "packing" && result.packing) {
-        // UPDATE: Pass 400, 400
         renderPackingSvg(svg, result.packing, 400, 400);
       } else {
-        // UPDATE: Pass 400, 400
         renderCpSvg(svg, result.cp, 400, 400);
       }
     },
@@ -102,7 +111,7 @@ export function renderDetail(result, index) {
   const rightPane = buildDetailPane({
     side: "right",
     activeValue: state.detailViewModes.right,
-    options: [ { value: "tree", label: "Tree" }, { value: "fold", label: "Folded form" } ],
+    options: [ { value: "tree", label: dict.thumbTree }, { value: "fold", label: dict.thumbFold } ],
     renderActive: (svg, currentValue) => {
       if (currentValue === "fold" && result.fold) {
         // Pass 400, 400 so it matches the viewBox square
@@ -116,58 +125,16 @@ export function renderDetail(result, index) {
   modalGrid.appendChild(leftPane);
   modalGrid.appendChild(rightPane);
   updateDetailNavButtons();
+  const viewLink = document.getElementById("viewPatternLink");
+  if (viewLink) {
+    const N = result.N || "4";
+    const sym = result.symmetry || "none";
+    const symChar = sym === "diag" ? "d" : sym === "book" ? "b" : "n";
+    const tilingId = result.tiling_id || "0";
+    viewLink.href = `/view?id=${N}${symChar}${tilingId}`;
+  }
   detailModal.classList.remove("hidden");
   detailModal.setAttribute("aria-hidden", "false");
 }
 
-// Register ourselves with results so clicking thumbnails can open details
 registerDetailRenderer(renderDetail);
-
-// Download handler wired by app.js, but expose an export for convenience
-export function exportCurrentCp() {
-  if (!state.currentDetailResult) return;
-  const cp = state.currentDetailResult.cp;
-  const vertices = [];
-  const vMap = new Map();
-  const edges_vertices = [];
-  const edges_assignment = [];
-  function getVertexId(x, y) {
-    const key = x.toFixed(6) + "," + y.toFixed(6);
-    if (vMap.has(key)) return vMap.get(key);
-    const id = vertices.length;
-    vertices.push([x, y]);
-    vMap.set(key, id);
-    return id;
-  }
-  function getFoldType(rawType) {
-    if (!rawType) return "F";
-    const t = String(rawType).trim().toLowerCase();
-    if (t === "b") return "B";
-    if (t === "rm" || t === "m" || t === "hm") return "M";
-    if (t === "rv" || t === "av" || t === "v" || t === "hv") return "V";
-    if (t === "h" || t === "aux" || t === "ax") return "F";
-    if (t.includes("m")) return "M";
-    if (t.includes("v")) return "V";
-    return "F";
-  }
-  cp.segments.forEach(seg => {
-    const u = getVertexId(seg.x1, seg.y1);
-    const v = getVertexId(seg.x2, seg.y2);
-    edges_vertices.push([u, v]);
-    edges_assignment.push(getFoldType(seg.type));
-  });
-  const foldData = { file_spec: 1.1, file_creator: "SEARCH 22.5", vertices_coords: vertices, edges_vertices: edges_vertices, edges_assignment: edges_assignment };
-  const blob = new Blob([JSON.stringify(foldData, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  const rank = state.currentDetailResult.rank || 1;
-  const N = state.currentDetailResult.N || "N";
-  const sym = state.currentDetailResult.symmetry || "sym";
-  const tilingId = state.currentDetailResult.tiling_id || "unknown";
-  a.href = url;
-  a.download = `${N}${sym=="diag"?"d":sym=="book"?"b":"n"}-${tilingId}.fold`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}

@@ -12,12 +12,14 @@ from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Any
-
+from urllib.parse import urlparse, parse_qs
 import networkx as nx
 
-from database.tilings.faiss_cache import DIMENSION, compute_hkt_signature, get_t_scales
+# from database.tilings.faiss_cache_hkt import DIMENSION, compute_hkt_signature, get_t_scales
+from database.tilings.faiss_cache import DIMENSION, E_SWEEP, compute_wks_signature
 from database.tilings.query import query_tilings
-from src.engine.tree import EIG_COUNT, RESOLUTION, extract_eigenvalues, get_proportional_tree_pos
+from database.tilings.inspect import pull_specific_tiling
+from src.engine.tree import EIG_COUNT, RESOLUTION, extract_eigenvalues
 from src.engine.fold225 import PLOT_COLORS, ALPHA
 
 from interface.serialization import (
@@ -26,8 +28,10 @@ from interface.serialization import (
     serialize_cp,
     serialize_fold,
     serialize_graph,
+    serialize_query_tree,
     serialize_result_pickle,
-    serialize_tree,
+    serialize_solved_tiling,
+    serialize_topology_graph,
 )
 
 import gspread
@@ -47,9 +51,9 @@ scope = [
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 
-# 3. Open the specific Google Sheet (Must match the exact title of your sheet)
-sheet = client.open("22.5 logs").sheet1
-
+# 3. Open the specific Google Sheet
+sheet1 = client.open("22.5 logs").worksheets()[0]
+sheet2 = client.open("22.5 logs").worksheets()[1]
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TOKEN = os.environ.get("SEARCH22_INTERFACE_TOKEN", "").strip()
@@ -142,67 +146,6 @@ def _normalize_db_configs(payload: dict[str, Any]) -> list[tuple[int, str]]:
     return normalized
 
 
-def _serialize_query_tree(query_tree: nx.Graph) -> dict[str, Any]:
-    pos = {
-        node: [float(coord[0]), float(coord[1])]
-        for node, coord in nx.get_node_attributes(query_tree, "pos").items()
-        if coord is not None
-    }
-    if not pos:
-        pos = {
-            node: [float(coord[0]), float(coord[1])]
-            for node, coord in get_proportional_tree_pos(query_tree).items()
-        }
-    return serialize_tree(query_tree, pos=pos)
-
-
-def _serialize_tree_with_preserved_pos(graph: nx.Graph) -> dict[str, Any]:
-    if isinstance(graph, tuple):
-        graph = graph[0]
-
-    pos = {
-        node: [float(coord[0]), float(coord[1])]
-        for node, coord in nx.get_node_attributes(graph, "pos").items()
-        if coord is not None
-    }
-    if not pos:
-        raw_pos = nx.spring_layout(graph, seed=42)
-        pos = {
-            node: [float(coord[0]), float(coord[1])]
-            for node, coord in raw_pos.items()
-        }
-        
-    return serialize_tree(graph, pos=pos)
-
-
-def _serialize_topology_graph(graph: nx.Graph, seed: int = 42) -> dict[str, Any]:
-    if graph.number_of_nodes() == 0:
-        return {"nodes": [], "edges": []}
-    # Prefer explicit integer/grid node positions when available (stored in node attribute 'pos')
-    node_pos = nx.get_node_attributes(graph, "pos")
-    if node_pos:
-        # Ensure positions are pairs and usable; otherwise fall back to layout
-        ok = True
-        for v, p in node_pos.items():
-            try:
-                if not (isinstance(p, (list, tuple)) and len(p) >= 2):
-                    ok = False
-                    break
-            except Exception:
-                ok = False
-                break
-        if ok:
-            return serialize_graph(graph, pos=node_pos)
-
-    pos = nx.spring_layout(graph, seed=seed)
-    return serialize_graph(graph, pos=pos)
-
-
-def _serialize_solved_tiling(graph: nx.Graph, pos_solved: dict[Any, Any]) -> dict[str, Any]:
-    pos = {node: _vertex_to_xy(value) for node, value in pos_solved.items()}
-    return serialize_graph(graph, pos=pos)
-
-
 def _sanitize_for_pickle(obj: Any) -> Any:
     """Recursively convert non-pickle-friendly objects to basic Python types."""
     if obj is None or isinstance(obj, (bool, int, float, str)):
@@ -243,26 +186,25 @@ def _build_heat_profile(query_tree: nx.Graph, result_tree: nx.Graph, N: int, sym
     cache_data = load_db_scale_payload(prefix)
     mu = cache_data["mu"]
     sigma = cache_data["sigma"]
-    t_scales = get_t_scales(dim=DIMENSION)
+    # t_scales = get_t_scales(dim=DIMENSION)
 
     query_eigs = extract_eigenvalues(query_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
-    query_hkt = compute_hkt_signature(query_eigs, dim=DIMENSION)
+    query_wks = compute_wks_signature(query_eigs, dim=DIMENSION)
 
     result_eigs = extract_eigenvalues(result_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
-    result_hkt = compute_hkt_signature(result_eigs, dim=DIMENSION)
+    result_wks = compute_wks_signature(result_eigs, dim=DIMENSION)
 
-    normalized_query = ((query_hkt - mu) / sigma).tolist()
-    normalized_result = ((result_hkt - mu) / sigma).tolist()
+    normalized_query = ((query_wks - mu) / sigma).tolist()
+    normalized_result = ((result_wks - mu) / sigma).tolist()
 
     return {
-        "t_scales": [float(value) for value in t_scales],
+        "t_scales": [float(value) for value in E_SWEEP], # Using 't_scales' as the key to prevent frontend refactoring
         "query": [float(value) for value in normalized_query],
         "result": [float(value) for value in normalized_result],
     }
 
-
 def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], db_configs: list[tuple[int, str]]) -> dict[str, Any]:
-    query_tree_payload = _serialize_query_tree(query_tree)
+    query_tree_payload = serialize_query_tree(query_tree)
     ui_results: list[dict[str, Any]] = []
 
     for res in results:
@@ -275,13 +217,14 @@ def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], d
                 "symmetry": res.get("symmetry"),
                 "topology_id": res.get("topology_id"),
                 "tiling_id": res.get("tiling_id"),
-                "topology": _serialize_topology_graph(res["G_raw"]),
-                "solved_tiling": _serialize_solved_tiling(res["G_solved"], res["pos_solved"]),
+                "topology": serialize_topology_graph(res["G_raw"]),
+                "solved_tiling": serialize_solved_tiling(res["G_solved"], res["pos_solved"]),
                 "cp": serialize_cp(res["cp"]),
                 "fold": serialize_fold(res["fold"]),
-                "tree": _serialize_tree_with_preserved_pos(tree_graph),
+                "tree": serialize_graph(tree_graph),
                 "packing": serialize_cp(res["packing"]),
                 "heat": _build_heat_profile(query_tree, tree_graph, res["N"], res["symmetry"]),
+                "comp_map": res.get("comp_map", {}),
             }
         )
 
@@ -313,12 +256,68 @@ class InterfaceHandler(BaseHTTPRequestHandler):
         return
 
     def do_GET(self) -> None:  # noqa: N802
+
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+
+        # 1. SERVE THE HTML PAGE
+        if path in {"/view", "/view.html"}:
+            html = (STATIC_DIR / "view.html").read_bytes()
+            _send_bytes(self, "text/html; charset=utf-8", html)
+            return
+
+        # 2. SERVE THE EXACT TILING DATA (API)
+        if path == "/api/fetch_tiling":
+            t0 = time.time()
+            qs = parse_qs(parsed_url.query)
+            try:
+                tiling_id = int(qs.get("id", [0])[0])
+                N = int(qs.get("N", [4])[0])
+                symmetry = qs.get("sym", ["diag"])[0]
+                
+                # Fetch the exact geometry from SQLite
+                results = pull_specific_tiling(tiling_id, N, symmetry)
+                
+                if not results:
+                    self.send_error(HTTPStatus.NOT_FOUND, "Tiling not found")
+                    return
+                
+                # We need to construct a dummy query_tree because build_response_bundle expects one.
+                # Since we bypass FAISS, we just pass an empty graph.
+                dummy_query = nx.Graph() 
+                
+                # Serialize exactly like a normal FAISS query response
+                response = build_response_bundle(
+                    query_tree=dummy_query, 
+                    results=results, 
+                    db_configs=[(N, symmetry)]
+                )
+                
+                _send_json(self, HTTPStatus.OK, response)
+            except Exception as e:
+                self.send_error(HTTPStatus.BAD_REQUEST, f"Invalid parameters: {e}")
+
+            # Write to logs
+            try:
+                country = self.headers.get("CF-IPCountry", "Unknown")
+                real_ip = self.headers.get("CF-Connecting-IP", "Unknown")
+                ray_id = self.headers.get("CF-Ray", "Unknown")
+                
+                user_agent = self.headers.get("User-Agent", "Unknown")
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                row_data = [timestamp,N, symmetry,tiling_id,time.time() - t0, country, real_ip, ray_id, user_agent,]
+                sheet2.append_row(row_data)
+            except Exception as e:
+                print(f"Failed to log to Google Sheets: {e}")
+
+            return
+        
         if self.path in {"/", "/index.html"}:
             html = (STATIC_DIR / "index.html").read_bytes()
             _send_bytes(self, "text/html; charset=utf-8", html)
             return
             
-        if self.path in {"/favicon.png", "/favicon.ico"}:
+        if self.path in {"/assets/favicon.png", "/assets/favicon.ico"}:
             file_path = STATIC_DIR / self.path.lstrip("/")
             if file_path.exists():
                 body = file_path.read_bytes()
@@ -428,7 +427,7 @@ class InterfaceHandler(BaseHTTPRequestHandler):
 
         db_configs = _normalize_db_configs(payload)
         if not db_configs:
-            db_configs = [(4, "diag"), (4, "none"), (3, "none"), (5, "diag")]
+            db_configs = [(4, "diag"), (4,"book"), (4, "none"), (5, "diag"), (6, "book")]
 
         n_results = int(payload.get("n", 5))
         results = query_tilings(query_tree, db_configs=db_configs, n=n_results)
@@ -443,8 +442,8 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             
             user_agent = self.headers.get("User-Agent", "Unknown")
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            row_data = [timestamp, n_results, time.time() - t0, country, real_ip, ray_id, user_agent, str(payload["tree"])]
-            sheet.append_row(row_data)
+            row_data = [timestamp, n_results, time.time() - t0, country, real_ip, ray_id, user_agent, str(payload["tree"]), str(db_configs)]
+            sheet1.append_row(row_data)
         except Exception as e:
             print(f"Failed to log to Google Sheets: {e}")
 
