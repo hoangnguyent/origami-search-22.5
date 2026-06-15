@@ -389,7 +389,7 @@ async function initView() {
         const result = data.results && data.results[0];
         
         if (!result || !result.cp) throw new Error("Pattern data is corrupted.");
-
+        console.log(result.refs)
         // Format a nice title
         if (titleEl) {
             const symTitle = sym.charAt(0).toUpperCase() + sym.slice(1);

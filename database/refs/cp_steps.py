@@ -3,7 +3,7 @@ cp_steps.py  —  step-by-step CP instruction visualizer
 """
 
 import sys, sqlite3, struct, json, math
-import tkinter as tk
+# import tkinter as tk
 from src.engine.math225_core import Vertex4D, Fraction
 
 
@@ -243,113 +243,114 @@ GAP    = 32
 LABEL_H= 52
 COLS   = 5
 
-def show_steps(conn, result):
-    tfn      = result.transform_fn
-    ancestry = result.ancestry
-    steps    = _load_steps(conn, ancestry, tfn)
+# def show_steps(conn, result):
+#     tfn      = result.transform_fn
+#     ancestry = result.ancestry
+#     steps    = _load_steps(conn, ancestry, tfn)
 
-    # Duplicate last step — no new crease shown, just target dot
-    if steps:
-        steps = steps + [dict(steps[-1], _target=True)]
+#     # Duplicate last step — no new crease shown, just target dot
+#     if steps:
+#         steps = steps + [dict(steps[-1], _target=True)]
 
-    uv = result.matched_user
-    target_xy = _v4d_xy_from_obj(uv)
+#     uv = result.matched_user
+#     target_xy = _v4d_xy_from_obj(uv)
 
-    n      = len(steps)
-    n_cols = min(COLS, n)
-    n_rows = math.ceil(n / n_cols)
+#     n      = len(steps)
+#     n_cols = min(COLS, n)
+#     n_rows = math.ceil(n / n_cols)
 
-    root = tk.Tk()
-    root.title(f"Node #{result.node_id}  depth={result.depth}  "
-               f"transform={result.transform_name}")
-    root.configure(bg=BG)
-    root.resizable(True, True)
+#     root = tk.Tk()
+#     root.title(f"Node #{result.node_id}  depth={result.depth}  "
+#                f"transform={result.transform_name}")
+#     root.configure(bg=BG)
+#     root.resizable(True, True)
 
-    outer = tk.Frame(root, bg=BG)
-    outer.pack(fill="both", expand=True)
-    vc  = tk.Canvas(outer, bg=BG, highlightthickness=0,
-                    width=min(n_cols*(CELL+GAP)+GAP, 1300),
-                    height=min(n_rows*(CELL+LABEL_H+GAP)+GAP, 800))
-    vsb = tk.Scrollbar(outer, orient="vertical",   command=vc.yview)
-    hsb = tk.Scrollbar(outer, orient="horizontal", command=vc.xview)
-    vc.configure(xscrollcommand=hsb.set, yscrollcommand=vsb.set)
-    vsb.pack(side="right", fill="y")
-    hsb.pack(side="bottom", fill="x")
-    vc.pack(side="left", fill="both", expand=True)
+#     outer = tk.Frame(root, bg=BG)
+#     outer.pack(fill="both", expand=True)
+#     vc  = tk.Canvas(outer, bg=BG, highlightthickness=0,
+#                     width=min(n_cols*(CELL+GAP)+GAP, 1300),
+#                     height=min(n_rows*(CELL+LABEL_H+GAP)+GAP, 800))
+#     vsb = tk.Scrollbar(outer, orient="vertical",   command=vc.yview)
+#     hsb = tk.Scrollbar(outer, orient="horizontal", command=vc.xview)
+#     vc.configure(xscrollcommand=hsb.set, yscrollcommand=vsb.set)
+#     vsb.pack(side="right", fill="y")
+#     hsb.pack(side="bottom", fill="x")
+#     vc.pack(side="left", fill="both", expand=True)
 
-    frame = tk.Frame(vc, bg=BG)
-    vc.create_window(0, 0, anchor="nw", window=frame)
-    frame.bind("<Configure>", lambda e: vc.configure(scrollregion=vc.bbox("all")))
+#     frame = tk.Frame(vc, bg=BG)
+#     vc.create_window(0, 0, anchor="nw", window=frame)
+#     frame.bind("<Configure>", lambda e: vc.configure(scrollregion=vc.bbox("all")))
 
-    for idx, step in enumerate(steps):
-        is_tc  = step.get("_target", False)
-        row    = idx // n_cols
-        col    = idx % n_cols
-        num    = idx + 1
+#     for idx, step in enumerate(steps):
+#         is_tc  = step.get("_target", False)
+#         row    = idx // n_cols
+#         col    = idx % n_cols
+#         num    = idx + 1
 
-        cell = tk.Frame(frame, bg=BG)
-        cell.grid(row=row, column=col, padx=GAP//2, pady=GAP//2, sticky="n")
+#         cell = tk.Frame(frame, bg=BG)
+#         cell.grid(row=row, column=col, padx=GAP//2, pady=GAP//2, sticky="n")
 
-        c = tk.Canvas(cell, width=CELL, height=CELL,
-                      bg=BG, highlightthickness=0)
-        c.pack()
+#         c = tk.Canvas(cell, width=CELL, height=CELL,
+#                       bg=BG, highlightthickness=0)
+#         c.pack()
 
-        draw_step(c, step,
-                  is_final_copy=is_tc,
-                  target_xy=target_xy if is_tc else None)
+#         draw_step(c, step,
+#                   is_final_copy=is_tc,
+#                   target_xy=target_xy if is_tc else None)
 
-        if is_tc:
-            txt = "Target vertex."
-            clr = WHITE
-        else:
-            txt = _instruction(step["fn"], step["refs"])
-            clr = WHITE
+#         if is_tc:
+#             txt = "Target vertex."
+#             clr = WHITE
+#         else:
+#             txt = _instruction(step["fn"], step["refs"])
+#             clr = WHITE
 
-        tk.Label(cell,
-                 text=f"{num}. {txt}",
-                 bg=BG, fg=clr,
-                 font=("Helvetica", 9),
-                 wraplength=CELL,
-                 justify="left").pack(anchor="w", pady=(4,0))
+#         tk.Label(cell,
+#                  text=f"{num}. {txt}",
+#                  bg=BG, fg=clr,
+#                  font=("Helvetica", 9),
+#                  wraplength=CELL,
+#                  justify="left").pack(anchor="w", pady=(4,0))
 
-    root.mainloop()
+#     root.mainloop()
 
 # ── entry point ───────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    import numpy as np
-    from database.refs.cp_lookup import lookup_vertex
+    pass
+    # import numpy as np
+    # from database.refs.cp_lookup import lookup_vertex
 
-    def _is_int(s):
-        try: int(s); return True
-        except: return False
+    # def _is_int(s):
+    #     try: int(s); return True
+    #     except: return False
 
-    args = sys.argv[1:]
-    if args and not _is_int(args[0]):
-        db_path = args.pop(0)
-    else:
-        db_path = "cp_tree.db"
+    # args = sys.argv[1:]
+    # if args and not _is_int(args[0]):
+    #     db_path = args.pop(0)
+    # else:
+    #     db_path = "cp_tree.db"
 
-    if len(args) != 6:
-        print("Usage: python cp_steps.py [db_path] ax bx cx  ay by cy")
-        sys.exit(1)
+    # if len(args) != 6:
+    #     print("Usage: python cp_steps.py [db_path] ax bx cx  ay by cy")
+    #     sys.exit(1)
 
-    ax,bx,cx_ = int(args[0]),int(args[1]),int(args[2])
-    ay,by,cy_ = int(args[3]),int(args[4]),int(args[5])
+    # ax,bx,cx_ = int(args[0]),int(args[1]),int(args[2])
+    # ay,by,cy_ = int(args[3]),int(args[4]),int(args[5])
 
-    xf=(ax+bx*np.sqrt(2))/cx_; yf=(ay+by*np.sqrt(2))/cy_
-    print(f"Looking up ({ax}+{bx}√2)/{cx_}, ({ay}+{by}√2)/{cy_}  ≈  ({xf:.5g},{yf:.5g})")
+    # xf=(ax+bx*np.sqrt(2))/cx_; yf=(ay+by*np.sqrt(2))/cy_
+    # print(f"Looking up ({ax}+{bx}√2)/{cx_}, ({ay}+{by}√2)/{cy_}  ≈  ({xf:.5g},{yf:.5g})")
 
-    conn = sqlite3.connect(db_path)
-    try:
-        results = lookup_vertex(conn, ax, bx, cx_, ay, by, cy_)
-        if not results:
-            print("No match found.")
-            sys.exit(0)
-        r = results[0]
-        print(f"Node #{r.node_id}  depth={r.depth}  transform={r.transform_name}")
-        show_steps(conn, r)
-    except ValueError as e:
-        print(f"Error: {e}")
-    finally:
-        conn.close()
+    # conn = sqlite3.connect(db_path)
+    # try:
+    #     results = lookup_vertex(conn, ax, bx, cx_, ay, by, cy_)
+    #     if not results:
+    #         print("No match found.")
+    #         sys.exit(0)
+    #     r = results[0]
+    #     print(f"Node #{r.node_id}  depth={r.depth}  transform={r.transform_name}")
+    #     show_steps(conn, r)
+    # except ValueError as e:
+    #     print(f"Error: {e}")
+    # finally:
+    #     conn.close()
