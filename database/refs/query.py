@@ -22,8 +22,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Callable, Optional
-
-from database.refs.cp_tree import decode_refs
+import json
+from database.refs.cp_tree import decode_refs, z2_to_v4d
 from src.engine.math225_core import Vertex4D, Fraction, AplusBsqrt2
 from src.engine.cp225 import Cp225, rotate_90, rotate_180, rotate_270, reflect_x_axis
 
@@ -302,8 +302,30 @@ def lookup_vertices(
         user_idx, t_name, depth, node_id = row
 
         fwd_fn, inv_fn, stored_v = transform_cache[(user_idx, t_name)]
-       
-        results_by_vertex[user_idx] = apply_transform_to_ancestry(_get_ancestry(conn, node_id), fwd_fn)
+        ancestry = _get_ancestry(conn, node_id)
+
+        results_by_vertex[user_idx] = []
+        for step in ancestry:
+            load_refs = json.loads(step["refs_raw"])
+            processed_refs = []
+            for ref in load_refs:
+                if ref["type"] == "vertex":
+                    processed_refs.append({
+                        "type": "vertex",
+                        "v": fwd_fn(z2_to_v4d(*ref["v"])).to_cartesian()
+                    })
+                else: # crease
+                    processed_refs.append({
+                        "type": "crease",
+                        "v1": fwd_fn(z2_to_v4d(*ref["v1"])).to_cartesian(),
+                        "v2": fwd_fn(z2_to_v4d(*ref["v2"])).to_cartesian()
+                    })
+            results_by_vertex[user_idx].append({
+                "function_name": step["function_name"],
+                "new_crease_v1": fwd_fn(step["new_crease_v1"]).to_cartesian(),
+                "new_crease_v2": fwd_fn(step["new_crease_v2"]).to_cartesian(),
+                "refs": processed_refs
+            })
 
     return results_by_vertex
 

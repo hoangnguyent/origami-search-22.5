@@ -20,7 +20,7 @@ from database.tilings.build_tilings import decompress_edges, Topology, Tiling
 from database.tilings.faiss_cache_hkt import get_t_scales, compute_hkt_signature, DIMENSION
 from database.tilings.query import draw_cp_ax, draw_fold_ax
 
-from database.refs.query import lookup_vertices, print_result, LookupResult
+from database.refs.query import lookup_vertices
 
 def pull_specific_tiling(tiling_id, N, symmetry):
     """

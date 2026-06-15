@@ -138,3 +138,15 @@ export function exportJson(result) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+
+export function Vertex4DtoCartesian(v){
+  const SQRT2_2 = Math.SQRT2 / 2;
+  const x = v[0] / v[1];
+  const y = v[2] / v[3];
+  const z = v[4] / v[5];
+  const w = v[6] / v[7];
+  return [
+    x + SQRT2_2 * (y - w),
+    z + SQRT2_2 * (y + w)
+  ];
+}

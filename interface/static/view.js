@@ -1,5 +1,7 @@
 import * as Utils from './js/utils.js';
 import { makeSvg, renderCpSvg, renderPackingSvg, renderFoldSvg, renderGraphSvg, renderHeatSvg, transformX, transformY, fitScale } from './js/renderers.js';
+import { renderReferenceWorkspace } from './js/refs.js';
+
 // --- Global UI & Modal Wiring ---
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const donateBtn = document.getElementById("donateBtn");
@@ -200,6 +202,74 @@ function highlightComponent(compId, result) {
         packingSvg.appendChild(layer);
     }
 }
+// Reliable bounds calculator for raw float arrays
+function getBoundsFromArray(vertices) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const v of vertices) {
+        if (!v) continue;
+        if (v[0] < minX) minX = v[0];
+        if (v[0] > maxX) maxX = v[0];
+        if (v[1] < minY) minY = v[1];
+        if (v[1] > maxY) maxY = v[1];
+    }
+    if (minX === Infinity) return { minX: 0, maxX: 1, minY: 0, maxY: 1 };
+    return { minX, maxX, minY, maxY };
+}
+
+function highlightCpReference(svg, targetXY, ancestryArray, cartesianVertices) {
+    // 1. Clear any existing highlight layer
+    let layer = svg.querySelector('#cp-highlight-layer');
+    if (layer) layer.remove();
+
+    // 2. Create a new layer at the top of the SVG stack
+    layer = makeSvg('g', { id: 'cp-highlight-layer' });
+    svg.appendChild(layer);
+
+    if (!targetXY) return;
+
+    // 3. Set up identical projection math to align with the visual CP
+    const vb = svg.getAttribute('viewBox').split(' ').map(Number);
+    const w = vb[2] || 1000;
+    const h = vb[3] || 1000;
+    
+    const bounds = getBoundsFromArray(cartesianVertices);
+    const scale = fitScale(bounds, w, h);
+
+    const tx = (x) => transformX(x, bounds, scale, w);
+    const ty = (y) => transformY(y, bounds, scale, h);
+
+    if (ancestryArray && ancestryArray.length > 0) {
+        // SUCCESS: Draw the reference creases
+        for (const entry of ancestryArray) {
+            if (entry.function_name === 'root') continue;
+            
+            const nc1 = entry.new_crease_v1;
+            const nc2 = entry.new_crease_v2;
+            
+            if (nc1 && nc2) {
+                layer.appendChild(makeSvg('line', {
+                    x1: tx(nc1[0]), y1: ty(nc1[1]),
+                    x2: tx(nc2[0]), y2: ty(nc2[1]),
+                    stroke: '#50e890', // Bright Green
+                    'stroke-width': '4',
+                    'stroke-linecap': 'round'
+                }));
+            }
+        }
+
+        // Draw Green Dot for the target vertex
+        layer.appendChild(makeSvg('circle', {
+            cx: tx(targetXY[0]), cy: ty(targetXY[1]),
+            r: '8', fill: '#50e890', stroke: '#1a1a2e', 'stroke-width': '2'
+        }));
+    } else {
+        // FAILURE: Draw Red Dot
+        layer.appendChild(makeSvg('circle', {
+            cx: tx(targetXY[0]), cy: ty(targetXY[1]),
+            r: '8', fill: '#ff6b8a', stroke: '#1a1a2e', 'stroke-width': '2'
+        }));
+    }
+}
 
 // --- Dynamic SVG Rendering ---
 function populatePanel(containerId, renderFn, data, options = {}) {
@@ -272,6 +342,54 @@ function setupInteractiveSvg(svg, name, result) {
 
     svg.addEventListener("click", (e) => {
         const pt = getSvgCoords(e, svg);
+// ---------------------------------------------------------
+        // 1. CP CLICK LOGIC (Find closest vertex in SVG ViewBox Space)
+        // ---------------------------------------------------------
+        if (name === "CP" && result && result.cp) {
+            const pt = getSvgCoords(e, svg);
+            const cartesianVertices = (result.cp.vertices || []).map(v => Utils.Vertex4DtoCartesian(v));
+            if (cartesianVertices.length === 0) return;
+
+            // Generate scale to map math vertices to pixel hits
+            const bounds = getBoundsFromArray(cartesianVertices);
+            const vb = svg.getAttribute('viewBox').split(' ').map(Number);
+            const w = vb[2] || 1000;
+            const h = vb[3] || 1000;
+            const scale = fitScale(bounds, w, h);
+            
+            const tx = (x) => transformX(x, bounds, scale, w);
+            const ty = (y) => transformY(y, bounds, scale, h);
+
+            let closestIndex = -1;
+            let minDistance = Infinity;
+
+            cartesianVertices.forEach((v, index) => {
+                const svgX = tx(v[0]);
+                const svgY = ty(v[1]);
+                const dist = Math.hypot(svgX - pt.x, svgY - pt.y);
+                if (dist < minDistance) {
+                    minDistance = dist;
+                    closestIndex = index;
+                }
+            });
+
+            // Threshold in SVG pixels (e.g., 30 pixels on a 1000x1000 canvas)
+            const CLICK_THRESHOLD_SVG = 30; 
+            
+            if (minDistance <= CLICK_THRESHOLD_SVG) {
+                const targetXY = cartesianVertices[closestIndex];
+                const ancestry = result.refs ? result.refs[closestIndex] : null;
+
+                if (ancestry && ancestry.length > 0) {
+                    renderReferenceWorkspace(ancestry, targetXY);
+                    highlightCpReference(svg, targetXY, ancestry, cartesianVertices);
+                } else {
+                    const workspace = document.getElementById("refsWorkspace");
+                    if (workspace) workspace.innerHTML = "<p>No reference steps found for this vertex.</p>";
+                    highlightCpReference(svg, targetXY, null, cartesianVertices);
+                }
+            }
+        }
 
         if (name === "Packing" && result && result.comp_map) {
             const vb = svg.getAttribute('viewBox').split(' ').map(Number);
@@ -389,7 +507,7 @@ async function initView() {
         const result = data.results && data.results[0];
         
         if (!result || !result.cp) throw new Error("Pattern data is corrupted.");
-        console.log(result.refs)
+
         // Format a nice title
         if (titleEl) {
             const symTitle = sym.charAt(0).toUpperCase() + sym.slice(1);
@@ -403,6 +521,38 @@ async function initView() {
         // Save globally
         window.currentResult = result;
         drawAllPanels(result);
+        console.log(result.refs)
+        // --- Initial reference: Find shortest ancestry > length 1 ---
+        const cartesianVertices = (result.cp.vertices || []).map(v => Utils.Vertex4DtoCartesian(v));
+        const cpSvg = document.querySelector('#target-cp svg');
+
+        let bestIdx = -1;
+        let shortestLen = Infinity;
+
+        if (result.refs) {
+            for (const [idxStr, ancestry] of Object.entries(result.refs)) {
+                // Look for an ancestry array that is longer than just the root (length 1)
+                if (ancestry && ancestry.length > 1 && ancestry.length < shortestLen) {
+                    shortestLen = ancestry.length;
+                    bestIdx = parseInt(idxStr);
+                }
+            }
+        }
+
+        if (bestIdx !== -1) {
+            renderReferenceWorkspace(result.refs[bestIdx], cartesianVertices[bestIdx]);
+            if (cpSvg) highlightCpReference(cpSvg, cartesianVertices[bestIdx], result.refs[bestIdx], cartesianVertices);
+        } else if (cartesianVertices.length > 0) {
+            const fallbackIdx = Object.keys(result.refs)[0] || 0;
+            const fallbackAncestry = result.refs[fallbackIdx] || [];
+            
+            renderReferenceWorkspace(fallbackAncestry, cartesianVertices[fallbackIdx]);
+            if (cpSvg) highlightCpReference(cpSvg, cartesianVertices[fallbackIdx], fallbackAncestry, cartesianVertices);
+        } else {
+            const workspace = document.getElementById("refsWorkspace");
+            if (workspace) workspace.innerHTML = "<p>No references found.</p>";
+        }
+        
         mainEl.appendChild(luckyBtn);
 
     } catch (err) {

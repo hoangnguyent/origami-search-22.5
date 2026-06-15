@@ -50,7 +50,6 @@ export function transformY(y, b, s, h) {
 
 export function pointForNode(g, id) { const f = g.nodes.find(n => n.id === id); return f && f.pos ? f.pos : [0, 0]; }
 
-// --- NEW HELPER: Put this anywhere in renderers.js ---
 export function parseCp4D(cp) {
   // Graceful fallback just in case old cached payloads pass through
   if (cp.segments) return cp.segments;
