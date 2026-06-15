@@ -51,7 +51,19 @@ if (themeToggleBtn) {
 // i18n Dictionary Setup
 // ==========================================
 let currentLang = localStorage.getItem('explori_lang') || 'en';
+
+const langButtons = document.querySelectorAll('.lang-btn');
+if (langButtons.length > 0) {
+  langButtons.forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const selectedLang = e.currentTarget.getAttribute('data-lang');
+      applyLanguage(selectedLang);
+      document.getElementById('languageModal').classList.add('hidden');
+    });
+  });
+}
 export function applyLanguage(lang) {
+  console.log("changing language")
   // Check if the language exists AND actually has translations inside it
   if (!Locales[lang] || Object.keys(Locales[lang]).length === 0) {
     console.warn(`[i18n] Language '${lang}' is empty or missing. Falling back to English.`);
@@ -98,17 +110,6 @@ export function applyLanguage(lang) {
   
   // Update HTML lang attribute
   document.documentElement.lang = lang;
-}
-
-const langButtons = document.querySelectorAll('.lang-btn');
-if (langButtons.length > 0) {
-  langButtons.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const selectedLang = e.currentTarget.getAttribute('data-lang');
-      applyLanguage(selectedLang);
-      document.getElementById('languageModal').classList.add('hidden');
-    });
-  });
 }
 applyLanguage(currentLang);
 // ==========================================
