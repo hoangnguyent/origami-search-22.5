@@ -111,7 +111,22 @@ export const Locales = {
     patternTitlePrefix: "Pattern",
     noRefsFound: "No references found.",
     errorPrefix: "Error:",
-    clickReference: "Click on a point to see its folding sequence."
+    clickReference: "Click on a point to see its folding sequence.",
+
+    heroSubtitle: "Explore the world of 22.5 origami design.",
+    launchEngine: "Launch engine",
+    faqTitle: "Frequently asked questions",
+    faqQ1: "Why does the search sometimes take a long time?",
+    faqA1: "The query time depends on the size of the tree you input and the number of results you request, and to a lesser degree, the number of other simultaneous users. If speed becomes a significant issue, there may be some updates in the future to optimize the algorithms.",
+    faqQ2: "Why do none of the results match the tree I asked for?",
+    faqA2: "This system gives you what you want, not what you ask for. Every crease pattern you get will be flat foldable and feel natural to fold, much like a traditional base. The tradeoff is that it might not match your tree exactly. That's where you, the artist, take it the rest of the way.",
+    faqQ3: "Are the crease patterns really flat foldable?",
+    faqA3: "Technically, they are only geometrically flat foldable (with respect to Kawasaki's theorem) but may have self intersection or incorrect mountain-valley assignment. In fact, the hinges (grey lines) are unassigned creases. This is because the tree structure that the search algorithm is built off of does not depend on mountain valley assignment, so this part is once again left to you, the artist, to figure out.",
+    faqQ4: "What are the \"great\", \"good\", \"acceptable\" etc metrics?",
+    faqA4: "For some trees, the nearest match is very different, while for others, it can find a near-perfect match. The system has a number that describes this distance and will make a guess to assign it a semantic description.",
+    docInProgress: "This documentation is still in progress. If you have more questions, please join the community on",
+    createdBy: "Created by",
+    sourceCode: "Source code is available on",
   },
   
   es: {
@@ -218,6 +233,21 @@ export const Locales = {
     noRefsFound: "No se encontraron referencias.",
     errorPrefix: "Error:",
     clickReference:"Haz clic en un punto para ver su secuencia de plegado.",
+
+    heroSubtitle: "Explora el mundo del diseño de origami a 22.5 grados.",
+    launchEngine: "Iniciar motor",
+    faqTitle: "Preguntas frecuentes",
+    faqQ1: "¿Por qué la búsqueda a veces tarda mucho?",
+    faqA1: "El tiempo de consulta depende del tamaño del árbol que introduzcas y de la cantidad de resultados que solicites, y en menor medida, del número de otros usuarios simultáneos. Si la velocidad se convierte en un problema importante, es posible que haya actualizaciones en el futuro para optimizar los algoritmos.",
+    faqQ2: "¿Por qué ninguno de los resultados coincide con el árbol que pedí?",
+    faqA2: "Este sistema te da lo que quieres, no lo que pides. Cada patrón de pliegues que obtengas será plegable en plano y se sentirá natural al plegarlo, de forma similar a una base tradicional. La contrapartida es que podría no coincidir exactamente con tu árbol. Ahí es donde tú, el artista, tomas el relevo.",
+    faqQ3: "¿Son los patrones de pliegues realmente plegables en plano?",
+    faqA3: "Técnicamente, solo son geométricamente plegables en plano (con respecto al teorema de Kawasaki) pero pueden tener auto-intersecciones o una asignación incorrecta de monte-valle. De hecho, las bisagras (líneas grises) son pliegues sin asignar. Esto se debe a que la estructura de árbol en la que se basa el algoritmo de búsqueda no depende de la asignación monte-valle, por lo que esta parte queda nuevamente para que tú, el artista, la resuelvas.",
+    faqQ4: "¿Qué son las métricas \"Excelente\", \"Bueno\", \"Aceptable\", etc.?",
+    faqA4: "En el caso de algunos árboles, la coincidencia más cercana es muy diferente, mientras que en otros se puede encontrar una coincidencia casi perfecta. El sistema cuenta con un valor que describe esta distancia y realiza una estimación para asignarle una descripción semántica.",
+    docInProgress: "Esta documentación aún está en progreso. Si tienes más preguntas, únete a la comunidad en",
+    createdBy: "Creado por",
+    sourceCode: "El código fuente está disponible en",
   },
   
   ja: {
@@ -324,6 +354,21 @@ export const Locales = {
     noRefsFound: "参照が見つかりません。",
     errorPrefix: "エラー:",
     clickReference:"点をクリックすると、その折り方の手順が表示されます。",
+
+    heroSubtitle: "22.5度折り紙デザインの世界を探求する。",
+    launchEngine: "エンジンを起動",
+    faqTitle: "よくある質問",
+    faqQ1: "検索に時間がかかることがあるのはなぜですか？",
+    faqA1: "クエリ時間は、入力したツリーのサイズとリクエストした結果の数に依存し、さらに他の同時利用ユーザーの数にも影響されます。速度が大きな問題になる場合は、将来的にアルゴリズムを最適化するアップデートが行われる可能性があります。",
+    faqQ2: "結果が入力したツリーと一致しないのはなぜですか？",
+    faqA2: "このシステムは「要求したもの」ではなく「望むもの」を提供します。生成される展開図はすべて平坦折り可能で、伝承の基本形のように自然に折りたためるようになっています。その代償として、あなたのツリーと完全に一致しない場合があります。そこから先をどう仕上げるかは、アーティストであるあなた次第です。",
+    faqQ3: "展開図は本当に平坦折り可能ですか？",
+    faqA3: "厳密には、幾何学的に平坦折り可能（川崎の定理に基づく）なだけであり、自己交差や不正確な山谷の割り当てが含まれる場合があります。実際、ヒンジ（灰色の線）は未割り当ての折り線です。これは、検索アルゴリズムが基にしているツリー構造が山谷の割り当てに依存しないためであり、この部分の解決もアーティストであるあなたに委ねられています。",
+    faqQ4: "「素晴らしい」「良い」「許容範囲」などの指標は何ですか？",
+    faqA4: "樹形図によっては、最も近い一致が全く異なるものになることもあれば、ほぼ完璧な一致が見つかることもあります。このシステムには、その距離を表す数値があり、それに基づいて意味的な記述を割り当てる推測を行います。",
+    docInProgress: "このドキュメントはまだ作成中です。さらに質問がある場合は、こちらのコミュニティに参加してください：",
+    createdBy: "制作：",
+    sourceCode: "ソースコードは以下で公開されています：",
   },
   
   zh: {
@@ -430,5 +475,20 @@ export const Locales = {
     noRefsFound: "未找到参考。",
     errorPrefix: "错误：",
     clickReference:"点击某一点，即可查看其折叠步骤。",
+
+    heroSubtitle: "探索 22.5 度折纸设计的世界。",
+    launchEngine: "启动引擎",
+    faqTitle: "常见问题",
+    faqQ1: "为什么搜索有时需要很长时间？",
+    faqA1: "查询时间取决于您输入的树的大小和请求的结果数量，在较小程度上也取决于同时使用的其他用户数量。如果速度成为一个重大问题，将来可能会进行更新以优化算法。",
+    faqQ2: "为什么结果都与我要求的树不匹配？",
+    faqA2: "这个系统提供的是您想要的结果，而不是您要求的结果。您获得的每个折痕图都可以平坦折叠，并且折叠起来感觉很自然，就像传统的折纸基本型一样。代价是它可能与您的树不完全匹配。这就是需要由您（创作者）来完成剩余工作的地方。",
+    faqQ3: "折痕图真的可以平坦折叠吗？",
+    faqA3: "从技术上讲，它们只是在几何上可以平坦折叠（符合川崎定理），但可能存在自交或错误的峰谷分配。实际上，铰链（灰线）是未分配的折痕。这是因为搜索算法所基于的树结构不依赖于峰谷分配，所以这部分再次留给您（创作者）来弄清楚。",
+    faqQ4: "“极佳”、“良好”、“可接受”等指标是什么？",
+    faqA4: "对于某些树木，最接近的匹配结果可能大相径庭；而对于另一些树木，系统则能找到近乎完美的匹配。该系统通过一个数值来描述这种差异，并据此推测为其分配语义描述。",
+    docInProgress: "本文档仍在不断完善中。如果您有更多问题，请加入社区：",
+    createdBy: "创建者：",
+    sourceCode: "源代码可在以下网址获取：",
   }
 };

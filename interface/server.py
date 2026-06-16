@@ -379,21 +379,21 @@ class InterfaceHandler(BaseHTTPRequestHandler):
                 _send_bytes(self, ctype, body)
                 return
 
-        if self.path == "/api/config":
-            _send_json(
-                self,
-                HTTPStatus.OK,
-                {
-                    "auth_required": bool(TOKEN),
-                    "db_options": [
-                        {"N": 3, "symmetry": "none", "label": "3 none"},
-                        {"N": 4, "symmetry": "diag", "label": "4 diag"},
-                        {"N": 4, "symmetry": "none", "label": "4 none"},
-                        {"N": 5, "symmetry": "diag", "label": "5 diag"},
-                    ],
-                },
-            )
-            return
+        # if self.path == "/api/config":
+        #     _send_json(
+        #         self,
+        #         HTTPStatus.OK,
+        #         {
+        #             "auth_required": bool(TOKEN),
+        #             "db_options": [
+        #                 {"N": 3, "symmetry": "none", "label": "3 none"},
+        #                 {"N": 4, "symmetry": "diag", "label": "4 diag"},
+        #                 {"N": 4, "symmetry": "none", "label": "4 none"},
+        #                 {"N": 5, "symmetry": "diag", "label": "5 diag"},
+        #             ],
+        #         },
+        #     )
+        #     return
 
         if self.path.startswith("/api/result/"):
             query_id = self.path.rstrip("/").rsplit("/", 1)[-1]
@@ -427,11 +427,13 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             return
 
         db_configs = _normalize_db_configs(payload)
-        if not db_configs:
-            db_configs = [(4, "diag"), (4,"book"), (4, "none"), (5, "diag"), (6, "book")]
+        # if not db_configs:
+        #     db_configs = [(4, "diag"), (4,"book"), (4, "none"), (5, "diag"), (6, "book")]
 
         n_results = int(payload.get("n", 5))
         results = query_tilings(query_tree, db_configs=db_configs, n=n_results)
+
+        result_ids = [f"{res.get("N")}{res.get("symmetry")}{res.get("tiling_id")}" for res in results if "tiling_id" in res]
         response = build_response_bundle(query_tree, results, db_configs)
         _send_json(self, HTTPStatus.OK, response)
 
@@ -443,7 +445,7 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             
             user_agent = self.headers.get("User-Agent", "Unknown")
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            row_data = [timestamp, n_results, time.time() - t0, country, real_ip, ray_id, user_agent, str(payload["tree"]), str(db_configs)]
+            row_data = [timestamp, n_results, time.time() - t0, country, real_ip, ray_id, user_agent, str(payload["tree"]), str(db_configs), str(result_ids)]
             sheet1.append_row(row_data)
         except Exception as e:
             print(f"Failed to log to Google Sheets: {e}")

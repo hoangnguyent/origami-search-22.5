@@ -3,48 +3,50 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>About - SEARCH 22.5</title>
+  <title>About - ExplOri 22.5</title>
   <link rel="stylesheet" href="/styles.css" />
   <link rel="stylesheet" href="/about.css" />
+  <link rel="icon" type="image/png" href="./assets/favicon.png" />
 </head>
 <body>
   <div class="app-shell about-shell">
     <header class="top-bar">
       <div class="top-bar-left">
-        <h1 id="appTitle">SEARCH 22.5</h1>
+        <h1 id="appTitle">
+            <a href="/" style="text-decoration: none; color: inherit;" data-i18n="appTitle">ExplOri 22.5</a>
+        </h1>
       </div>
       <div class="top-bar-actions">
-        <button id="donateBtn" class="icon-btn action-icon" type="button" aria-label="Donate" title="Donate">
+        <button id="donateBtn" class="icon-btn action-icon" type="button" data-i18n-aria="donate" data-i18n-title="donate">
           <img src="/assets/donate.svg" alt="" aria-hidden="true" />
         </button>
-        <button id="discordBtn" class="icon-btn action-icon" type="button" aria-label="Join Discord" title="Join Discord">
+        <button id="discordBtn" class="icon-btn action-icon" type="button" data-i18n-aria="discord" data-i18n-title="discord">
           <img src="/assets/discord.svg" alt="" aria-hidden="true" />
         </button>
-        <button id="themeToggleBtn" class="icon-btn action-icon" type="button" aria-label="Toggle light/dark mode" title="Toggle Theme">
+        <button id="themeToggleBtn" class="icon-btn action-icon" type="button" data-i18n-aria="toggleTheme" data-i18n-title="toggleTheme">
           <img src="/assets/light-dark.svg" alt="" aria-hidden="true" />
         </button>
-        <button id="languageBtn" class="icon-btn action-icon" type="button" aria-label="Change Language" title="Change Language">
+        <button id="languageBtn" class="icon-btn action-icon" type="button" data-i18n-aria="changeLanguage" data-i18n-title="changeLanguage">
           <img src="/assets/language.svg" alt="" aria-hidden="true" />
         </button>
-        <a href="/about.html" target="_blank" class="icon-btn action-icon" aria-label="Help and Documentation" title="Help & About">
+        <a href="/about.html" class="icon-btn action-icon" data-i18n-aria="helpAbout" data-i18n-title="helpAbout">
           <img src="/assets/info.svg" alt="" aria-hidden="true" />
         </a>
       </div>
     </header>
 
-
     <div id="donateModal" class="modal-overlay hidden">
       <div class="modal-content settings-content">
-        <button id="closeDonateModal" class="close-btn" aria-label="Close">✕</button>
+        <button id="closeDonateModal" class="close-btn" data-i18n-aria="close">✕</button>
         <div class="modal-header">
-          <h2>Donate</h2>
+          <h2 data-i18n="donateTitle">Donate</h2>
         </div>
         <div class="settings-panel">
-          <p class="modal-meta" style="text-align: left; max-width: none;">If you find SEARCH 22.5 useful, consider supporting its continued development!</p>
+          <p class="modal-meta" style="text-align: left; max-width: none;" data-i18n="donateText">This software is free to use, but costs money to host. If you find SEARCH 22.5 useful, consider supporting financially for its continued development!</p>
           <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
-
-            <!-- <button type="button">Support on Ko-fi</button>
-            <button type="button" class="secondary">GitHub Sponsors</button> -->
+             <a href="https://www.paypal.com/paypalme/theplantpsychologist" target="_blank">
+              <button type="button" data-i18n="donatePayPal">Donate via PayPal</button>
+             </a>
           </div>
         </div>
       </div>
@@ -52,15 +54,15 @@
 
     <div id="discordModal" class="modal-overlay hidden">
       <div class="modal-content settings-content">
-        <button id="closeDiscordModal" class="close-btn" aria-label="Close">✕</button>
+        <button id="closeDiscordModal" class="close-btn" data-i18n-aria="close">✕</button>
         <div class="modal-header">
-          <h2>Community and development</h2>
+          <h2 data-i18n="discordTitle">Community and development</h2>
         </div>
         <div class="settings-panel">
-          <p class="modal-meta" style="text-align: left; max-width: none;">Join our Discord server to get tech support, report bugs, and request new features. You can also join the development team, chat about computational origami in general, and share your creations!</p>
+          <p class="modal-meta" style="text-align: left; max-width: none;" data-i18n="discordText">Join our Discord server to get tech support, report bugs, and request new features. You can also join the development team, chat about computational origami in general, and share your creations!</p>
           <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
-            <a href="https://discord.gg/5YcGh8b9yC">
-              <button type="button">Join the community</button>
+            <a href="https://discord.gg/5YcGh8b9yC" target="_blank">
+              <button type="button" data-i18n="discordJoin">Join the community</button>
             </a>
           </div>
         </div>
@@ -69,9 +71,9 @@
 
     <div id="languageModal" class="modal-overlay hidden">
       <div class="modal-content settings-content">
-        <button id="closeLanguageModal" class="close-btn" aria-label="Close">✕</button>
+        <button id="closeLanguageModal" class="close-btn" data-i18n-aria="close">✕</button>
         <div class="modal-header">
-          <h2>Select Language</h2>
+          <h2 data-i18n="languageTitle">Select Language</h2>
         </div>
         <div class="settings-panel">
           <div class="language-grid">
@@ -84,66 +86,131 @@
       </div>
     </div>
 
-
-
-
     <main class="about-content">
       <section class="hero">
-        <h1 class="hero-title">ExplOri 22.5</h1>
-        <p class="hero-subtitle">
+        <h1 class="hero-title" data-i18n="appTitle">ExplOri 22.5</h1>
+        <p class="hero-subtitle" data-i18n="heroSubtitle">
           Explore the world of 22.5 origami design.
         </p>
-        <a href="/index.html" class="cta-button">Launch engine</a>
+        <a href="/index.html" class="cta-button" data-i18n="launchEngine">Launch engine</a>
       </section>
 
       <section class="doc-section">
-        <!-- <h2>How to use this tool</h2>
-        <p class="doc-intro">[Brief introduction explaining the general workflow of the application, similar to a quick-start guide.]</p> -->
-        
-        <!-- <div class="step-grid">
-          <div class="step-card">
-            <div class="step-number">1</div>
-            <h3>Define your search</h3>
-            <p>[Explain how to use the canvas: click to select nodes, drag to pan, pinch to zoom, and use the UI or arrow keys to nudge vertices into place.]</p>
-          </div>
-          
-          <div class="step-card">
-            <div class="step-number">2</div>
-            <h3>Configure search</h3>
-            <p>[Explain the toggles on the left panel, what diagonal vs. asymmetric symmetry means, and how to set the result count.]</p>
-          </div>
-
-          <div class="step-card">
-            <div class="step-number">3</div>
-            <h3>Analyze results</h3>
-            <p>[Explain the detail modal, the difference between crease pattern, packing, and tree views, and how match quality is calculated.]</p>
-          </div>
+        <div class="video-wrapper">
+          <iframe src="https://www.youtube.com/embed/M6ewRG1zto4?si=ePLZwyJVxuVsnIYL" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
         </div>
-      </section> -->
 
-      <section class="doc-section">
-        <h2>Documentation</h2>
-        <p>This page is still in progress. Please check back later for more information, or join the community on <a href="https://discord.gg/5YcGh8b9yC">Discord</a>.</p>
-        <!-- <details class="faq-item">
-          <summary>What is a 22.5-degree crease pattern?</summary>
-          <p>A crease pattern where all creases make angles of multiples of 22.5 degrees. This </p>
+        <h2 data-i18n="faqTitle">Frequently asked questions</h2>
+        <details class="faq-item">
+          <summary data-i18n="faqQ1">Why does the search sometimes take a long time?</summary>
+          <p data-i18n="faqA1">The query time depends on the size of the tree you input and the number of results you request, and to a lesser degree, the number of other simultaneous users. If speed becomes a significant issue, there may be some updates in the future to optimize the algorithms.</p>
         </details>
 
         <details class="faq-item">
-          <summary>How do I export my design?</summary>
-          <p>[Explain the .FOLD export button located in the detail view and what software supports it.]</p>
+          <summary data-i18n="faqQ2">Why do none of the results match the tree I asked for?</summary>
+          <p data-i18n="faqA2">This system gives you what you want, not what you ask for. Every crease pattern you get will be flat foldable and feel natural to fold, much like a traditional base. The tradeoff is that it might not match your tree exactly. That's where you, the artist, take it the rest of the way.</p>
         </details>
 
         <details class="faq-item">
-          <summary>Why are some results marked as "Poor" quality?</summary>
-          <p>[Explain the distance metric and how the algorithm attempts to map the user's freehand tree to the nearest valid mathematical tiling.]</p>
-        </details> -->
+          <summary data-i18n="faqQ3">Are the crease patterns really flat foldable?</summary>
+          <p data-i18n="faqA3">Technically, they are only geometrically flat foldable (with respect to Kawasaki's theorem) but may have self intersection or incorrect mountain-valley assignment. In fact, the hinges (grey lines) are unassigned creases. This is because the tree structure that the search algorithm is built off of does not depend on mountain valley assignment, so this part is once again left to you, the artist, to figure out.</p>
+        </details>
+
+        <details class="faq-item">
+          <summary data-i18n="faqQ4">What are the "great", "good", "acceptable" etc metrics?</summary>
+          <p data-i18n="faqA4">For some trees, the nearest match is very different, while for others, it can find a near-perfect match. The system has a number that describes this distance and will make a guess to assign it a semantic description.</p>
+        </details>
+        
+        <p><span data-i18n="docInProgress">This documentation is still in progress. If you have more questions, please join the community on</span> <a href="https://discord.gg/5YcGh8b9yC">Discord</a>.</p>
       </section>
 
       <footer class="about-footer">
-        <p>Created by <a href="https://www.instagram.com/theplantpsychologist/">Brandon Wong</a>.</p>
+        <p>
+          <span data-i18n="createdBy">Created by</span> <a href="https://www.instagram.com/theplantpsychologist/">Brandon Wong</a>. 
+          <span data-i18n="sourceCode">Source code is available on</span> <a href="https://github.com/theplantpsychologist/SEARCH-22.5">Github</a>.
+        </p>
       </footer>
     </main>
   </div>
+
+  <script type="module">
+    import * as Utils from '/interface/static/js/utils.js';
+    import { Locales } from '/interface/static/js/locales.js';
+
+    // 1. Modal Logic
+    function setupModal(openBtnId, modalId, closeBtnId) {
+      const openBtn = document.getElementById(openBtnId);
+      const modalEl = document.getElementById(modalId);
+      const closeBtn = document.getElementById(closeBtnId);
+      if (!openBtn || !modalEl) return;
+      
+      openBtn.addEventListener("click", () => modalEl.classList.remove("hidden"));
+      if (closeBtn) closeBtn.addEventListener("click", () => modalEl.classList.add("hidden"));
+      modalEl.addEventListener("click", (e) => {
+        if (e.target === modalEl) modalEl.classList.add("hidden");
+      });
+    }
+    setupModal("donateBtn", "donateModal", "closeDonateModal");
+    setupModal("discordBtn", "discordModal", "closeDiscordModal");
+    setupModal("languageBtn", "languageModal", "closeLanguageModal");
+
+    // 2. Theme Logic
+    const themeToggleBtn = document.getElementById("themeToggleBtn");
+    if (themeToggleBtn) {
+      themeToggleBtn.addEventListener("click", () => {
+        const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+        const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+        Utils.applyTheme(nextTheme, true);
+      });
+    }
+    Utils.applyTheme(Utils.readStoredThemePreference() || 'system', false);
+
+    // 3. Internationalization (i18n) Logic
+    let currentLang = localStorage.getItem('explori_lang') || 'en';
+
+    function applyLanguage(lang) {
+      if (!Locales[lang] || Object.keys(Locales[lang]).length === 0) {
+        console.warn(`[i18n] Language '${lang}' is empty or missing. Falling back to English.`);
+        lang = 'en'; 
+      }
+      
+      currentLang = lang;
+      localStorage.setItem('explori_lang', lang);
+      const dict = Locales[lang];
+
+      document.querySelectorAll('[data-i18n]').forEach(el => {
+        const key = el.getAttribute('data-i18n');
+        if (dict[key]) el.textContent = dict[key];
+      });
+
+      document.querySelectorAll('[data-i18n-title]').forEach(el => {
+        const key = el.getAttribute('data-i18n-title');
+        if (dict[key]) el.title = dict[key];
+      });
+
+      document.querySelectorAll('[data-i18n-aria]').forEach(el => {
+        const key = el.getAttribute('data-i18n-aria');
+        if (dict[key]) el.setAttribute('aria-label', dict[key]);
+      });
+      
+      document.querySelectorAll('.lang-btn').forEach(btn => {
+        if (btn.getAttribute('data-lang') === lang) btn.classList.remove('secondary');
+        else btn.classList.add('secondary');
+      });
+      
+      document.documentElement.lang = lang;
+    }
+
+    const langButtons = document.querySelectorAll('.lang-btn');
+    langButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const selectedLang = e.currentTarget.getAttribute('data-lang');
+        applyLanguage(selectedLang);
+        document.getElementById('languageModal').classList.add('hidden');
+      });
+    });
+
+    applyLanguage(currentLang);
+  </script>
 </body>
 </html>
