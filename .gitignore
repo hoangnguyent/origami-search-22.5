@@ -31,7 +31,7 @@ renders/
 
 
 interface/server_debug.py
-database/tilings/log_monitor.py
+database/logs/
 
 .vscode/
 

@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
+
+<svg
+   width="466.66666"
+   height="666.66669"
+   viewBox="0 0 14 20.000001"
+   fill="none"
+   version="1.1"
+   id="svg1"
+   sodipodi:docname="upload.svg"
+   inkscape:version="1.4.2 (ebf0e940, 2025-05-08)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <defs
+     id="defs1">
+    <clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath1">
+      <path
+         style="fill:#f6f7fb;stroke:#ff0000;stroke-width:0.226772;stroke-linejoin:round;paint-order:fill markers stroke"
+         d="M -1.3366336,17.554455 14,17.138614 l 0.138614,3.623762 -15.5643566,0.415842 z"
+         id="path2" />
+    </clipPath>
+    <clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath3">
+      <path
+         style="fill:#f6f7fb;stroke:#ff0000;stroke-width:0.226772;stroke-linejoin:round;paint-order:fill markers stroke"
+         d="m 21.831683,17.316832 -8.70297,-7.336634 5.851485,-11.7623762 c 0,0 5.049505,1.75247523 5.168317,1.81188117 0.118812,0.05940594 4.544554,6.98019823 4.544554,6.98019823 l -1.277227,6.6237618 z"
+         id="path4" />
+    </clipPath>
+  </defs>
+  <sodipodi:namedview
+     id="namedview1"
+     pagecolor="#ffffff"
+     bordercolor="#000000"
+     borderopacity="0.25"
+     inkscape:showpageshadow="2"
+     inkscape:pageopacity="0.0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.01"
+     inkscape:cx="550.49505"
+     inkscape:cy="333.66337"
+     inkscape:window-width="1920"
+     inkscape:window-height="957"
+     inkscape:window-x="0"
+     inkscape:window-y="30"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg1" />
+  <path
+     id="Vector"
+     d="M 0.99999998,19.000001 H 13 m -6,-18 v 14 m 0,0 5,-5 m -5,5 -5,-5"
+     stroke="#000000"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     clip-path="url(#clipPath1)" />
+  <path
+     id="Vector-9"
+     d="m 15,19.000001 h 12 m -6,-18 v 14 m 0,0 5,-5 m -5,5 -5,-5"
+     stroke="#000000"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     clip-path="url(#clipPath3)"
+     transform="matrix(1,0,0,-1,-14,16.039605)" />
+</svg>

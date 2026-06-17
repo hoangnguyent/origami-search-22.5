@@ -303,10 +303,31 @@ class InterfaceHandler(BaseHTTPRequestHandler):
                 country = self.headers.get("CF-IPCountry", "Unknown")
                 real_ip = self.headers.get("CF-Connecting-IP", "Unknown")
                 ray_id = self.headers.get("CF-Ray", "Unknown")
-                
                 user_agent = self.headers.get("User-Agent", "Unknown")
+                
+                # Convert the headers object to a standard dictionary
+                headers_dict = dict(self.headers)
+                
+                # OPTIONAL BUT HIGHLY RECOMMENDED: Sanitize sensitive headers
+                headers_dict.pop("Cookie", None)
+                headers_dict.pop("Authorization", None)
+                
+                # Serialize to a JSON string for easy storage in a single cell
+                all_headers_json = json.dumps(headers_dict)
+                
                 timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                row_data = [timestamp,N, symmetry,tiling_id,time.time() - t0, country, real_ip, ray_id, user_agent,]
+                row_data = [
+                    timestamp,
+                    N, 
+                    symmetry,
+                    tiling_id,
+                    time.time() - t0, 
+                    country, 
+                    real_ip, 
+                    ray_id, 
+                    user_agent,
+                    all_headers_json  # Append the raw JSON dump to the end of the row
+                ]
                 sheet2.append_row(row_data)
             except Exception as e:
                 print(f"Failed to log to Google Sheets: {e}")
@@ -442,10 +463,19 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             country = self.headers.get("CF-IPCountry", "Unknown")
             real_ip = self.headers.get("CF-Connecting-IP", "Unknown")
             ray_id = self.headers.get("CF-Ray", "Unknown")
-            
             user_agent = self.headers.get("User-Agent", "Unknown")
+
+            # Convert the headers object to a standard dictionary
+            headers_dict = dict(self.headers)
+            
+            # OPTIONAL BUT HIGHLY RECOMMENDED: Sanitize sensitive headers
+            headers_dict.pop("Cookie", None)
+            headers_dict.pop("Authorization", None)
+            # Serialize to a JSON string for easy storage in a single cell
+            all_headers_json = json.dumps(headers_dict)
+
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            row_data = [timestamp, n_results, time.time() - t0, country, real_ip, ray_id, user_agent, str(payload["tree"]), str(db_configs), str(result_ids)]
+            row_data = [timestamp, n_results, time.time() - t0, country, real_ip, ray_id, user_agent, str(payload["tree"]), str(db_configs), str(result_ids), all_headers_json]
             sheet1.append_row(row_data)
         except Exception as e:
             print(f"Failed to log to Google Sheets: {e}")

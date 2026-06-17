@@ -72,7 +72,11 @@ def print_appendix_audit():
         # (3, 'none'), (3, 'diag'), (3, 'book'),
         # (4, 'none'), (4, 'diag'), (4, 'book'),
         # (5, 'diag'),
-        (5, 'book')
+        (2,"none"),
+        (3,"diag"),
+        (3,"book"),
+        (3,"none"),
+        (6, 'book')
     ]
     
     header = f"{'DB Config':<10} | {'Topos':<8} | {'Tilings':<8} | {'Done/Total':<12} | {'Compl%':<7} | {'Size(MB)':<8} | {'Est. Final'}"
