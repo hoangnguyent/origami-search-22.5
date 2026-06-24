@@ -512,3 +512,67 @@ export function loadTreeState(jsonString, isHistoryAction = false) {
     setStatus("Failed to load tree: " + err.message, true);
   }
 }
+
+export function loadTreeFromResult(tree) {
+  History.saveState(); // Save current tree to undo history before overwriting
+
+  const newNodes = {};
+  const newEdges = [];
+
+  // Handle both {u, v} and [u, v] / {source, target} edge formats safely
+  const rawEdges = tree.edges || tree;
+  if (!Array.isArray(rawEdges)) {
+    setStatus("Error: Invalid tree topology format.", true);
+    return;
+  }
+
+  rawEdges.forEach(e => {
+    let u, v, length = 1;
+    if (Array.isArray(e)) { u = e[0]; v = e[1]; }
+    else { u = e.u ?? e.source; v = e.v ?? e.target; length = e.length || 1; }
+
+    const idU = parseInt(u, 10);
+    const idV = parseInt(v, 10);
+
+    if (!newNodes[idU]) newNodes[idU] = { id: idU };
+    if (!newNodes[idV]) newNodes[idV] = { id: idV };
+    newEdges.push({ u: idU, v: idV, length });
+  });
+
+  const graphToLayout = {
+    nodes: Object.values(newNodes),
+    edges: newEdges
+  };
+
+  // Run the physics/radial layout algorithm
+  computeRadialTreeLayout(graphToLayout);
+
+  // Scale and center the generated layout into the 800x560 canvas
+  const margin = 40, width = 800, height = 560;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const n of graphToLayout.nodes) {
+    if (!n.pos) n.pos = [0, 0];
+    if (n.pos[0] < minX) minX = n.pos[0];
+    if (n.pos[0] > maxX) maxX = n.pos[0];
+    if (n.pos[1] < minY) minY = n.pos[1];
+    if (n.pos[1] > maxY) maxY = n.pos[1];
+  }
+
+  const graphWidth = Math.max(maxX - minX, 1);
+  const graphHeight = Math.max(maxY - minY, 1);
+  const scale = Math.min((width - 2 * margin) / graphWidth, (height - 2 * margin) / graphHeight);
+  const cx = (minX + maxX) / 2;
+  const cy = (minY + maxY) / 2;
+
+  // Apply final physical coordinates
+  for (const n of graphToLayout.nodes) {
+    n.x = (width / 2) + (n.pos[0] - cx) * scale;
+    n.y = (height / 2) + (-n.pos[1] + cy) * scale;
+    delete n.pos;
+  }
+
+  // Load it up as if the user uploaded a JSON file
+  const finalJson = JSON.stringify({ nodes: graphToLayout.nodes, edges: newEdges });
+  loadTreeState(finalJson, true); // true = bypasses the redundant history save inside loadTreeState
+  setStatus("Loaded neighbor tree into editor.");
+}

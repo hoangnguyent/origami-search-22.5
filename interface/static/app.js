@@ -220,6 +220,15 @@ bind("uploadTreeBtn", "click", () => document.getElementById("treeFileInput")?.c
 bind("undoBtn", "click", Editor.History.undo);
 bind("redoBtn", "click", Editor.History.redo);
 
+// Detail Modal "Search for Neighbors" Listener
+bind("searchNeighborsBtn", "click", () => {
+  if (state.currentDetailResult && state.currentDetailResult.tree) {
+    Editor.loadTreeFromResult(state.currentDetailResult.tree);
+    Detail.closeDetailModal();
+    window.scrollTo({ top: 0, behavior: 'smooth' }); // Smoothly scroll the user back up to the editor
+  }
+});
+
 const treeFileInput = document.getElementById("treeFileInput");
 if (treeFileInput) {
   treeFileInput.addEventListener("change", (e) => {

@@ -494,6 +494,42 @@ svg .packing-b { stroke: var(--packing-b); }
   background: transparent; 
 }
 
+/* --- Detail Modal Action Buttons --- */
+.action-pill-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--line);
+  border-radius: 40px; /* Pill shape */
+  color: var(--text);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: 0.15s ease;
+}
+
+.action-pill-btn img {
+  width: 18px;
+  height: 18px;
+  opacity: 0.8;
+  object-fit: contain;
+  transition: opacity 0.15s ease;
+}
+
+/* Hover effects matching your existing aesthetic */
+.action-pill-btn:hover {
+  background: rgba(122, 211, 255, 0.15); 
+  border-color: rgba(122, 211, 255, 0.3);
+  color: var(--cp-v); /* Gives the text a blueish highlight */
+}
+
+.action-pill-btn:hover img {
+  opacity: 1;
+}
+
+
 .modal-nav-btn { position: absolute; top: 50%; transform: translateY(-50%); width: 44px; height: 44px; border-radius: 22px; border: 1px solid var(--line-soft); background: rgba(255, 255, 255, 0.05); color: var(--text); display: flex; align-items: center; justify-content: center; padding: 0; font-size: 28px; line-height: 1; z-index: 2; box-shadow: var(--shadow); }
 .modal-nav-btn:hover:not(:disabled) { background: var(--toolbar-icon-hover); border-color: rgba(122, 211, 255, 0.5); }
 .modal-nav-btn:disabled { opacity: 0.35; cursor: not-allowed; }

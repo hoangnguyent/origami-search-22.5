@@ -187,15 +187,28 @@
       <button id="closeModal" class="close-btn" type="button" data-i18n-aria="close">✕</button>
       <div class="modal-header detail-modal-header">
         <p id="modalMeta" class="modal-meta"></p>
-        <a id="viewPatternLink" href="#" target="_blank" style="text-decoration: none; margin-left:auto">
-          <button id="openInViewer" class="primary-run-btn icon-btn"><img src="/assets/open.svg" alt=""></button>
-        </a>
+        
+        <div class="modal-action-group" style="display: flex; align-items: center; gap: 12px; margin-left: auto;">
+          
+          <button id="searchNeighborsBtn" class="action-pill-btn" type="button">
+            <img src="/assets/search.svg" alt="" aria-hidden="true" />
+            <span data-i18n="searchNeighbors">Search for neighbors</span>
+          </button>
+
+          <a id="viewPatternLink" href="#" target="_blank" style="text-decoration: none;">
+            <button id="openInViewer" class="action-pill-btn" data-i18n-aria="openInViewer" data-i18n-title="openInViewer">
+              <img src="/assets/open.svg" alt="" aria-hidden="true" />
+              <span data-i18n="searchNeighbors">Open in viewer</span>
+            </button>
+          </a>
+          
+        </div>
       </div>
       <div id="modalGrid" class="detail-modal-body"></div>
     </div>
   </div>
 
-  <div id="settingsModal" class="modal-overlay hidden">
+  <!-- <div id="settingsModal" class="modal-overlay hidden">
     <div class="modal-content settings-content">
       <button id="closeSettingsModal" class="close-btn" data-i18n-aria="close">✕</button>
       <div class="modal-header">
@@ -225,7 +238,7 @@
         </label>
       </div>
     </div>
-  </div>
+  </div> -->
 
   <script type="module" src="/interface/static/app.js"></script>
 </body>
