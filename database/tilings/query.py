@@ -30,7 +30,6 @@ from database.tilings.faiss_cache import compute_wks_signature, E_SWEEP
 # =============================================================================
 # FEDERATED QUERY FUNCTION
 # =============================================================================
-
 def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')], n=5):
     """
     Lightning fast federated search using cached raw CWKS signatures.
@@ -74,7 +73,11 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
     print("Filtering top hits for unique Crease Patterns...")
 
     results = []
-    seen_cps = set()
+    
+    # Two-tier deduplication sets
+    seen_fast_hashes = set()
+    seen_canonical_cps = set()
+    
     active_sessions = {}
     
     try:
@@ -98,19 +101,27 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
             blob = pickle.loads(tiling.tiling_blob)
             loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
             
-            cp_hash = (topo.binary_state, frozenset(loaded_pos.items()))
-            
-            if cp_hash in seen_cps:
+            # TIER 1: Fast Algebraic Deduplication (Intra-DB)
+            # Added N to the hash to ensure safe cross-DB comparisons
+            fast_hash = (N, topo.binary_state, frozenset(loaded_pos.items()))
+            if fast_hash in seen_fast_hashes:
                 continue
-                
-            seen_cps.add(cp_hash)
+            seen_fast_hashes.add(fast_hash)
             
+            # Only build the base CP if it passes the fast check
             G_raw = nx.Graph()
             G_raw.add_edges_from(decompress_edges(topo.binary_state, N))
             nx.set_node_attributes(G_raw, {node: node for node in G_raw.nodes()}, 'pos')
             cp = build_crease_pattern(loaded_G, loaded_pos, loaded_faces, N=N)
-            cp = add_hinges(cp)
             
+            # TIER 2: Slow Geometric Deduplication (Inter-DB)
+            canonical_tuple = canonicalize(cp)
+            if canonical_tuple in seen_canonical_cps:
+                continue
+            seen_canonical_cps.add(canonical_tuple)
+            
+            # If it passes both deduplication layers, proceed with the expensive mechanics
+            cp = add_hinges(cp)
             fold = cp_to_fold(cp)
             res_tree, packing = fold.get_tree_and_packing(include_packing=True)
             res_packing = fold_to_cp(packing[0], inst_graph=packing[1], mv_reference=cp)
@@ -133,8 +144,8 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
     finally:
         for s in active_sessions.values():
             s.close()
+            
     return results
-
 # =============================================================================
 # 4. VISUALIZATION & MEGAPLOT
 # =============================================================================

@@ -132,7 +132,6 @@ def serialize_solved_tiling(graph: nx.Graph, pos_solved: dict[Any, Any]) -> dict
     return serialize_graph(graph, pos=pos)
 
 
-
 def serialize_cp(cp: Any) -> dict[str, Any]:
     """
     Serializes the crease pattern sending exact 4D mathematical coordinates 
@@ -168,15 +167,3 @@ def serialize_fold(fold: Any) -> dict[str, Any]:
 def serialize_result_pickle(payload: Any) -> str:
     raw = pickle.dumps(payload, protocol=pickle.HIGHEST_PROTOCOL)
     return base64.b64encode(raw).decode("ascii")
-
-
-def load_db_scale_payload(prefix: Path | str) -> dict[str, Any]:
-    import pickle as _pickle
-
-    data_path = Path(f"{prefix}_data.pkl")
-    with data_path.open("rb") as handle:
-        cache_data = _pickle.load(handle)
-    return {
-        "mu": cache_data["mu"],
-        "sigma": cache_data["sigma"],
-    }

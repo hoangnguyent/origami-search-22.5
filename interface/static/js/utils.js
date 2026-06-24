@@ -49,14 +49,14 @@ export function setStatus(message, isError = false) {
 
 export const symmetry_abbr = { "diag":"d", "book":"b", "none":"n" };
 
-export function getMatchQuality(distance, queryNodeCount = 1) {
+export function getMatchQuality(distance) {
   const lang = localStorage.getItem('explori_lang') || 'en';
   const dict = Locales[lang] || Locales['en'];
-
-  if (distance < 0.5) return { key: "Great", label: dict.qualityGreat };
-  if (distance < 1.5) return { key: "Good", label: dict.qualityGood };
-  if (distance < 3.0) return { key: "Acceptable", label: dict.qualityAcceptable };
-  if (distance < 4.0) return { key: "Poor", label: dict.qualityPoor };
+  console.log(distance * 1000);
+  if (distance*1000 < 0.75) return { key: "Great", label: dict.qualityGreat };
+  if (distance*1000 < 1.5) return { key: "Good", label: dict.qualityGood };
+  if (distance*1000 < 3.0) return { key: "Acceptable", label: dict.qualityAcceptable };
+  if (distance*1000 < 4.0) return { key: "Poor", label: dict.qualityPoor };
   return { key: "Terrible", label: dict.qualityTerrible };
 }
 

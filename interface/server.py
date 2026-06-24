@@ -15,7 +15,6 @@ from typing import Any
 from urllib.parse import urlparse, parse_qs
 import networkx as nx
 
-# from database.tilings.faiss_cache_hkt import DIMENSION, compute_hkt_signature, get_t_scales
 from database.tilings.faiss_cache import DIMENSION, E_SWEEP, compute_wks_signature
 from database.tilings.query import query_tilings
 from database.tilings.inspect import pull_specific_tiling
@@ -24,7 +23,6 @@ from src.engine.fold225 import PLOT_COLORS, ALPHA
 
 from interface.serialization import (
     REPO_ROOT,
-    load_db_scale_payload,
     serialize_cp,
     serialize_fold,
     serialize_graph,
@@ -182,25 +180,16 @@ def _sanitize_for_pickle(obj: Any) -> Any:
 
 
 def _build_heat_profile(query_tree: nx.Graph, result_tree: nx.Graph, N: int, symmetry: str) -> dict[str, Any]:
-    prefix = REPO_ROOT / f"database/tilings/faiss_cache/db_{N}_{symmetry}"
-    cache_data = load_db_scale_payload(prefix)
-    mu = cache_data["mu"]
-    sigma = cache_data["sigma"]
-    # t_scales = get_t_scales(dim=DIMENSION)
-
     query_eigs = extract_eigenvalues(query_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
     query_wks = compute_wks_signature(query_eigs, dim=DIMENSION)
 
     result_eigs = extract_eigenvalues(result_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
     result_wks = compute_wks_signature(result_eigs, dim=DIMENSION)
 
-    normalized_query = ((query_wks - mu) / sigma).tolist()
-    normalized_result = ((result_wks - mu) / sigma).tolist()
-
     return {
-        "t_scales": [float(value) for value in E_SWEEP], # Using 't_scales' as the key to prevent frontend refactoring
-        "query": [float(value) for value in normalized_query],
-        "result": [float(value) for value in normalized_result],
+        "t_scales": [float(value) for value in E_SWEEP], 
+        "query": [float(value) for value in query_wks.tolist()],
+        "result": [float(value) for value in result_wks.tolist()],
     }
 
 def build_response_bundle(query_tree: nx.Graph, results: list[dict[str, Any]], db_configs: list[tuple[int, str]]) -> dict[str, Any]:
@@ -400,22 +389,6 @@ class InterfaceHandler(BaseHTTPRequestHandler):
                 _send_bytes(self, ctype, body)
                 return
 
-        # if self.path == "/api/config":
-        #     _send_json(
-        #         self,
-        #         HTTPStatus.OK,
-        #         {
-        #             "auth_required": bool(TOKEN),
-        #             "db_options": [
-        #                 {"N": 3, "symmetry": "none", "label": "3 none"},
-        #                 {"N": 4, "symmetry": "diag", "label": "4 diag"},
-        #                 {"N": 4, "symmetry": "none", "label": "4 none"},
-        #                 {"N": 5, "symmetry": "diag", "label": "5 diag"},
-        #             ],
-        #         },
-        #     )
-        #     return
-
         if self.path.startswith("/api/result/"):
             query_id = self.path.rstrip("/").rsplit("/", 1)[-1]
             with QUERY_CACHE_LOCK:
@@ -448,13 +421,11 @@ class InterfaceHandler(BaseHTTPRequestHandler):
             return
 
         db_configs = _normalize_db_configs(payload)
-        # if not db_configs:
-        #     db_configs = [(4, "diag"), (4,"book"), (4, "none"), (5, "diag"), (6, "book")]
 
         n_results = int(payload.get("n", 5))
         results = query_tilings(query_tree, db_configs=db_configs, n=n_results)
 
-        result_ids = [f"{res.get("N")}{res.get("symmetry")}{res.get("tiling_id")}" for res in results if "tiling_id" in res]
+        result_ids = [f"{res.get('N')}{res.get('symmetry')}{res.get('tiling_id')}" for res in results if "tiling_id" in res]
         response = build_response_bundle(query_tree, results, db_configs)
         _send_json(self, HTTPStatus.OK, response)
 

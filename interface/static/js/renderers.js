@@ -301,18 +301,10 @@ export function renderHeatSvg(svg, heat) {
   if (!xValues.length || !result.length) return; 
   
   const xMin = Math.min(...xValues), xMax = Math.max(...xValues);
-  // 1. Centered Integer Y-Bounds (Symmetric around 0)
-  const yMinRaw = Math.min(...result);
-  const yMaxRaw = Math.max(...result);
-  let absMax = Math.max(Math.abs(yMinRaw), Math.abs(yMaxRaw));
-  if (absMax === 0) absMax = 1; // Fallback for flat zero-lines
   
-  // Target ~4 to 6 integer ticks per side
-  let tickStep = Math.ceil(absMax / 4);
-  if (tickStep < 1) tickStep = 1; // Enforce strict integers
-  
-  const yMax = Math.ceil(absMax / tickStep) * tickStep;
-  const yMin = -yMax;
+  const tickStep = 0.1;
+  const yMax = 1;
+  const yMin = 0;
 
   // 2. CSS Variable Styles (Responsive to Light/Dark Mode)
   const axisStyle = "stroke: var(--packing-b); stroke-width: 10;";
@@ -360,7 +352,7 @@ export function renderHeatSvg(svg, heat) {
         "text-anchor": "end",
         style: textStyle
     });
-    tickText.textContent = val;
+    tickText.textContent = val.toFixed(1);
     svg.appendChild(tickText);
 
     // Dashed horizontal line strictly at y = 0

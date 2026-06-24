@@ -75,7 +75,7 @@ export const Locales = {
 
     // Plotting
     logEigenvalues: "Log Eigenvalues",
-    normIntensity: "Normalized Intensity",
+    normIntensity: "Normalized Cumulative Intensity",
 
     // Dynamic Javascript Messages (app.js)
     errorTreeTooSimple: "Tree is too simple. Add at least 4 edges before running a query.",

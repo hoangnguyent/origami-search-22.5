@@ -56,8 +56,9 @@ export function renderResults() {
     thumb.appendChild(svg);
 
     const meta = document.createElement("div");
-    const norm = (Math.sqrt(result.heat.query.reduce((sum, val) => sum + val * val, 0)));
-    const quality = getMatchQuality(result.distance/norm, state.queryNodeCount);
+    // const norm = (Math.sqrt(result.heat.query.reduce((sum, val) => sum + val * val, 0)));
+    // console.log(result.distance/norm*1000);
+    const quality = getMatchQuality(result.distance);
     
     const lang = localStorage.getItem('explori_lang') || 'en';
     const dict = Locales[lang] || Locales['en'];
