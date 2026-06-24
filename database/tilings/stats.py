@@ -1,104 +1,107 @@
 import os
-from sqlalchemy import create_engine, func, text
-from sqlalchemy.orm import sessionmaker
+import json
+import sqlite3
 
-# Adjust these imports to match your project architecture
-from database.tilings.build_tilings import Topology, Tiling
-
-def get_dynamic_db_stats(N, symmetry):
-    db_path = f'database/tilings/storage/tilings_{N}_{symmetry}.db'
-    if not os.path.exists(db_path):
-        return None
-
-    engine = create_engine(f'sqlite:///{db_path}')
-    Session = sessionmaker(bind=engine)
-    session = Session()
-
-    # 1. Physical Footprint
-    total_db_size_mb = os.path.getsize(db_path) / (1024 * 1024)
-
-    # 2. Dynamic Prefix Audit
-    # We query the 'prefixes' table directly to determine the search space scale
+def query_scalar(cursor, query, fallback=0):
+    """Safely executes a single-value query, returning a fallback if the table/column is missing."""
     try:
-        # Get the total number of work units (prefixes) defined for this DB
-        total_prefixes = session.execute(text("SELECT COUNT(*) FROM prefixes")).scalar() or 1
-        
-        # Count units flagged as 'done' or 'exhausted'
-        # Adjust 'status' or 'is_done' to match your specific progress tracking column
-        done_prefixes = session.execute(text(
-            "SELECT COUNT(*) FROM prefixes WHERE status = 'done' OR status = 'exhausted'"
-        )).scalar() or 0
-        
-        completion_ratio = done_prefixes / total_prefixes
-    except Exception:
-        # Fallback heuristic if the prefix table is missing or differently named
-        total_prefixes = 0
-        done_prefixes = 0
-        completion_ratio = 1.0 # Assume complete if tracking is unavailable
+        cursor.execute(query)
+        res = cursor.fetchone()
+        return res[0] if res and res[0] is not None else fallback
+    except sqlite3.OperationalError:
+        return fallback
 
-    # 3. Object Counts
-    total_topologies = session.query(Topology).count()
-    total_tilings = session.query(Tiling).count()
+def get_db_stats(N, symmetry):
+    # Paths based on standard separation of generation and solving phases
+    topo_db_path = f'database/tilings/storage/topologies_{N}_{symmetry}.db'
+    tiling_db_path = f'database/tilings/storage/tilings_{N}_{symmetry}.db'
     
-    # Measure raw data density (blobs only)
-    topo_blob_bytes = session.query(func.sum(func.length(Topology.binary_state))).scalar() or 0
-    tiling_blob_bytes = session.query(func.sum(func.length(Tiling.tiling_blob))).scalar() or 0
-    raw_data_mb = (topo_blob_bytes + tiling_blob_bytes) / (1024 * 1024)
-
-    # 4. Extrapolation
-    # We use the completion ratio to estimate the final scale of the data
-    est_final_topos = int(total_topologies / completion_ratio) if completion_ratio > 0 else total_topologies
-    est_final_tilings = int(total_tilings / completion_ratio) if completion_ratio > 0 else total_tilings
-    est_final_size_gb = (total_db_size_mb / completion_ratio) / 1024 if completion_ratio > 0 else total_db_size_mb / 1024
-
-    session.close()
-
-    return {
-        "config": f"{N} {symmetry}",
-        "topos": total_topologies,
-        "tilings": total_tilings,
-        "prefix_done": done_prefixes,
-        "prefix_total": total_prefixes,
-        "completion_pct": completion_ratio * 100,
-        "db_size_mb": total_db_size_mb,
-        "raw_data_mb": raw_data_mb,
-        "est_tilings": est_final_tilings,
-        "est_size_gb": est_final_size_gb
+    stats = {
+        "config": f"N={N}, Sym={symmetry}",
+        "topology_db": {"exists": False},
+        "tiling_db": {"exists": False}
     }
+    
+    # ==========================================
+    # 1. TOPOLOGY DB STATS
+    # ==========================================
+    if os.path.exists(topo_db_path):
+        stats["topology_db"]["exists"] = True
+        conn = sqlite3.connect(topo_db_path)
+        c = conn.cursor()
+        
+        # Prefix metrics
+        stats["topology_db"]["total_prefixes"] = query_scalar(c, "SELECT COUNT(*) FROM prefixes")
+        stats["topology_db"]["done_prefixes"] = query_scalar(c, "SELECT COUNT(*) FROM prefixes WHERE is_done = 1")
+        
+        # Bits per prefix (Derived from the length of the 'bits' string in a sample prefix)
+        sample_bits = query_scalar(c, "SELECT bits FROM prefixes LIMIT 1", fallback="")
+        stats["topology_db"]["bits_per_prefix"] = len(str(sample_bits)) if sample_bits else 0
+        
+        # State counts (Using the exact 'states' table)
+        stats["topology_db"]["total_states"] = query_scalar(c, "SELECT COUNT(*) FROM states")
+        
+        conn.close()
+        
+    # ==========================================
+    # 2. TILING DB STATS
+    # ==========================================
+    if os.path.exists(tiling_db_path):
+        stats["tiling_db"]["exists"] = True
+        
+        # File size
+        stats["tiling_db"]["total_db_size_mb"] = round(os.path.getsize(tiling_db_path) / (1024 * 1024), 2)
+        
+        conn = sqlite3.connect(tiling_db_path)
+        c = conn.cursor()
+        
+        # Identify the sync table name
+        topo_table = "topology" if query_scalar(c, "SELECT COUNT(*) FROM topology", fallback=-1) != -1 else "topologies"
+        
+        # Topology Sync Status
+        stats["tiling_db"]["synced_topologies"] = query_scalar(c, f"SELECT COUNT(*) FROM {topo_table}")
+        stats["tiling_db"]["status_0_unprocessed"] = query_scalar(c, f"SELECT COUNT(*) FROM {topo_table} WHERE status = 0")
+        stats["tiling_db"]["status_1_success"] = query_scalar(c, f"SELECT COUNT(*) FROM {topo_table} WHERE status = 1")
+        stats["tiling_db"]["status_2_timeout"] = query_scalar(c, f"SELECT COUNT(*) FROM {topo_table} WHERE status = 2")
+        stats["tiling_db"]["status_3_error"] = query_scalar(c, f"SELECT COUNT(*) FROM {topo_table} WHERE status = 3")
+        
+        # Identify the tiling table name
+        tiling_table = "tiling" if query_scalar(c, "SELECT COUNT(*) FROM tiling", fallback=-1) != -1 else "tilings"
+        
+        # Raw Data Density
+        blob_bytes = query_scalar(c, f"SELECT SUM(length(tiling_blob)) FROM {tiling_table}")
+        tree_bytes = query_scalar(c, f"SELECT SUM(length(embedding)) FROM {tiling_table}")
+        
+        stats["tiling_db"]["raw_data_only_mb"] = round((blob_bytes + tree_bytes) / (1024 * 1024), 2)
+        stats["tiling_db"]["total_tilings"] = query_scalar(c, f"SELECT COUNT(*) FROM {tiling_table}")
+        
+        conn.close()
+        
+    return stats
 
-def print_appendix_audit():
+def run_audit_and_export():
     configs = [
-        # (2, 'none'), (2, 'diag'), (2, 'book'),
-        # (3, 'none'), (3, 'diag'), (3, 'book'),
-        # (4, 'none'), (4, 'diag'), (4, 'book'),
-        # (5, 'diag'),
-        (2,"none"),
-        (3,"diag"),
-        (3,"book"),
-        (3,"none"),
+        (2, 'none'), (2, 'diag'), (2, 'book'),
+        (3, 'none'), (3, 'diag'), (3, 'book'),
+        (4, 'none'), (4, 'diag'), (4, 'book'),
+        (5, 'diag'), (5, 'book'),
         (6, 'book')
     ]
     
-    header = f"{'DB Config':<10} | {'Topos':<8} | {'Tilings':<8} | {'Done/Total':<12} | {'Compl%':<7} | {'Size(MB)':<8} | {'Est. Final'}"
-    print("\n" + "="*100)
-    print("VARIABLE-PREFIX DATABASE AUDIT")
-    print("="*100)
-    print(header)
-    print("-" * 100)
+    print("Starting Database Audit...")
+    all_stats = {}
     
     for N, sym in configs:
-        s = get_dynamic_db_stats(N, sym)
-        if s:
-            prefix_str = f"{s['prefix_done']}/{s['prefix_total']}"
-            print(f"{s['config']:<10} | "
-                  f"{s['topos']:<8,} | "
-                  f"{s['tilings']:<8,} | "
-                  f"{prefix_str:<12} | "
-                  f"{s['completion_pct']:>6.1f}% | "
-                  f"{s['db_size_mb']:>8.1f} | "
-                  f"{s['est_tilings']:>9,} tilings ({s['est_size_gb']:.1f} GB)")
-    print(f"Total number of topologies across all DBs: {sum(get_dynamic_db_stats(N, sym)['topos'] for N, sym in configs):,}")
-    print(f"Total number of tilings across all DBs: {sum(get_dynamic_db_stats(N, sym)['tilings'] for N, sym in configs):,}")
+        print(f"  Scanning N={N}, Sym={sym}...")
+        config_key = f"{N}_{sym}"
+        all_stats[config_key] = get_db_stats(N, sym)
+        
+    # Export to JSON
+    output_filename = "db_audit_stats.json"
+    with open(output_filename, "w") as f:
+        json.dump(all_stats, f, indent=4)
+        
+    print(f"\nAudit complete. Data saved to {output_filename}")
 
 if __name__ == "__main__":
-    print_appendix_audit()
+    run_audit_and_export()

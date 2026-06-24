@@ -54,9 +54,9 @@ def compute_wks_signature(eigenvalues, dim=DIMENSION):
 def build_wks_index_for_db(N, symmetry):
     """
     Reads the SQLite DB, extracts eigenvalues, computes normalized CWKS, 
-    applies Z-score stretching, and caches assets.
+    and caches assets directly without Z-score stretching.
     """
-    print(f"Building FAISS Z-Scored WKS Index for N={N}, Sym={symmetry}...")
+    print(f"Building FAISS CWKS Index for N={N}, Sym={symmetry}...")
     db_uri = f'sqlite:///database/tilings/storage/tilings_{N}_{symmetry}.db'
     
     engine = create_engine(db_uri)
@@ -91,59 +91,32 @@ def build_wks_index_for_db(N, symmetry):
     print("Computing Normalized CWKS signatures...")
     cdf_matrix = compute_wks_signature(raw_eigs_np, dim=DIMENSION)
     
-    # 3. Statistical Normalization (Z-Score)
-    # This stretches the S-curve so dimensions with low variance (where all trees look the same)
-    # are amplified to fill the L2 hypercube.
-    print("Applying Z-Score vector expansion...")
-    mu = np.mean(cdf_matrix, axis=0)
-    sigma = np.std(cdf_matrix, axis=0)
-    
-    # We use 1e-5 instead of 1e-8 to prevent blowing up pure floating point noise
-    # at the extreme tails of the CDF where variance is near 0.
-    sigma[sigma < 1e-5] = 1e-5 
-    
-    z_matrix = (cdf_matrix - mu) / sigma
-    z_matrix = z_matrix.astype(np.float32)
-    
-    # 4. Build L2 Index
+    # 3. Build L2 Index directly using the raw CDF
     index = faiss.IndexFlatL2(DIMENSION)
-    index.add(z_matrix)
+    index.add(cdf_matrix)
     
-    # 5. Save all assets to disk
+    # 4. Save all assets to disk
     os.makedirs("database/tilings/faiss_cache", exist_ok=True)
     prefix = f"database/tilings/faiss_cache/db_{N}_{symmetry}"
     
     cache_data = {
-        'faiss_map': faiss_map,
-        'mu': mu,
-        'sigma': sigma
+        'faiss_map': faiss_map
     }
     with open(f"{prefix}_data.pkl", 'wb') as f:
         pickle.dump(cache_data, f)
         
     faiss.write_index(index, f"{prefix}_l2.index")
     
-    print(f"Success. Cached {len(raw_eigs)} Z-scored vectors.")
+    print(f"Success. Cached {len(raw_eigs)} raw CWKS vectors.")
 
 def plot_random_tree_embeddings(N=5, symmetry="diag", sample_size=100):
     """
-    Connects to the database, extracts random trees, computes their Z-Scored CWKS,
-    and plots them to visualize the stretched embedding space.
+    Connects to the database, extracts random trees, computes their CWKS,
+    and plots them to visualize the embedding space.
     """
     db_path = f"database/tilings/storage/tilings_{N}_{symmetry}.db"
-    cache_path = f"database/tilings/faiss_cache/db_{N}_{symmetry}_data.pkl"
-    
-    # 1. Load the Database mu and sigma to apply the correct stretch
-    try:
-        with open(cache_path, 'rb') as f:
-            cache_data = pickle.load(f)
-            mu = cache_data['mu']
-            sigma = cache_data['sigma']
-    except FileNotFoundError:
-        print(f"Error: Missing cache file for {N}_{symmetry}. Run build_wks_index_for_db first.")
-        return
 
-    # 2. Sample random pickled trees
+    # Sample random pickled trees
     try:
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -161,34 +134,26 @@ def plot_random_tree_embeddings(N=5, symmetry="diag", sample_size=100):
         print("Error: No trees found in database.")
         return
 
-    # 3. Setup Plot
+    # Setup Plot
     plt.figure(figsize=(12, 7))
     
-    # 4. Process and Plot each tree
+    # Process and Plot each tree
     for row in rows:
         tree_bytes = row[0]
         tree = pickle.loads(tree_bytes)
         eigs = extract_eigenvalues(tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
         
-        # compute_wks_signature now natively returns the mass-normalized CDF
-        cdf = compute_wks_signature(eigs, dim=DIMENSION, e_min=E_MIN, e_max=E_MAX)
+        # natively returns the mass-normalized CDF
+        cdf = compute_wks_signature(eigs, dim=DIMENSION)
         
-        # Apply the Database-specific Z-score stretch
-        z_score_vector = (cdf - mu) / sigma
-        
-        plt.plot(E_SWEEP, z_score_vector, alpha=0.01, linewidth=0.5, color = '#1f77b4')
+        plt.plot(E_SWEEP, cdf, alpha=0.01, linewidth=0.5, color='#1f77b4')
 
-    # 5. Formatting
-    plt.title(f"Z-Scored CWKS Embeddings of {sample_size} Trees (N={N}, {symmetry})", fontsize=14)
-    plt.xlabel("Log-Energy Level (e)", fontsize=12)
-    plt.ylabel("Z-Score Deviations from Mean", fontsize=12)
+    # Formatting
+    plt.title(f"Raw CWKS Embeddings of {sample_size} Trees (N={N}, {symmetry})", color='white', fontsize=14)
+    plt.xlabel("Log-Energy Level (e)", color='#aaaaaa')
+    plt.ylabel("Cumulative Spectral Mass (Normalized)", color='#aaaaaa')
     
     plt.minorticks_on()
-    
-
-    plt.title(f"Z-Scored CWKS Embeddings of {sample_size} Trees (N={N}, {symmetry})", color='white')
-    plt.xlabel("Log-Energy Level (e)")
-    plt.ylabel("Z-Score Deviations from Mean")
     plt.tick_params(colors='#aaaaaa', which='both')
     
     plt.tight_layout()
@@ -196,17 +161,18 @@ def plot_random_tree_embeddings(N=5, symmetry="diag", sample_size=100):
 
 if __name__ == "__main__":
     configs = [
-        # (3, 'diag'), 
-        # (3, 'none'),
-        # (3, 'book'),
-        # (4, 'diag'), 
-        # (4, 'book'),
-        # (4, 'none'), 
-        # (5, 'diag'),
         (2, 'book'),
         (2, 'diag'),
         (2, 'none'),
+        (3, 'diag'), 
+        (3, 'none'),
+        (3, 'book'),
+        (4, 'diag'), 
+        (4, 'book'),
+        (4, 'none'), 
+        (5, 'diag'),
         (5, 'book'),
+        (5, 'none'),
         (6, 'book')
     ]
     # To test, uncomment build_wks_index_for_db to rebuild caches first

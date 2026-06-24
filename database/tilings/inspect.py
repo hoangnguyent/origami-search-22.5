@@ -17,7 +17,7 @@ from src.engine.cp225 import canonicalize, unfreeze
 from src.engine.fold225 import cp_to_fold, fold_to_cp
 from src.engine.tree import extract_eigenvalues, get_proportional_tree_pos, EIG_COUNT, RESOLUTION
 from database.tilings.build_tilings import decompress_edges, Topology, Tiling
-from database.tilings.faiss_cache_hkt import get_t_scales, compute_hkt_signature, DIMENSION
+from database.tilings.faiss_cache import compute_wks_signature, E_SWEEP, DIMENSION
 from database.tilings.query import draw_cp_ax, draw_fold_ax
 
 from database.refs.query import lookup_vertices
@@ -44,6 +44,7 @@ def pull_specific_tiling(tiling_id, N, symmetry):
             
         topo = session.query(Topology).filter_by(id=tiling.topology_id).first()
         session.close()  # Close early since we have the data we need
+        
         # 1. Reconstruct exact tiling geometry
         blob = pickle.loads(tiling.tiling_blob)
         loaded_G, loaded_pos, loaded_faces = load_frozen_blob(blob)
@@ -56,7 +57,6 @@ def pull_specific_tiling(tiling_id, N, symmetry):
         cp = add_hinges(cp)
         
         refs = lookup_vertices(cp.vertices)
-        # refs = {}
         
         fold = cp_to_fold(cp)
         
@@ -82,7 +82,6 @@ def pull_specific_tiling(tiling_id, N, symmetry):
         }]
     finally:
         session.close()
-
 
 def plot_specific_tiling_megaplot(results):
     """
@@ -127,7 +126,7 @@ def plot_specific_tiling_megaplot(results):
     # 3. Crease Pattern
     draw_cp_ax(ax_cp, res['cp'])
     
-    # 4. Packing (Using the same cp render loop)
+    # 4. Packing
     draw_cp_ax(ax_pack, res['packing'])
     
     # 5. Folded State
@@ -140,39 +139,20 @@ def plot_specific_tiling_megaplot(results):
 
     # 7. Heat Profile
     try:
-        prefix = f"database/tilings/faiss_cache/db_{res['N']}_{res['symmetry']}"
-        with open(f"{prefix}_data.pkl", 'rb') as f:
-            cache_data = pickle.load(f)
-        mu = cache_data['mu']
-        sigma = cache_data['sigma']
-        t_scales = get_t_scales(dim=DIMENSION)
-        
         res_eig = extract_eigenvalues(res['tree'], eig_count=EIG_COUNT, resolution=RESOLUTION)
-        res_hkt = compute_hkt_signature(res_eig, dim=DIMENSION)
-        normalized_res_hkt = (res_hkt - mu) / sigma
-        ax_hkt.plot(t_scales, normalized_res_hkt, 'b-', label="Database Result")
-        ax_hkt.set_xscale('log')
-        ax_hkt.set_xlabel("Time (t)")
-        ax_hkt.set_ylabel("Normalized Heat Z")
+        res_cwks = compute_wks_signature(res_eig, dim=DIMENSION)
+        
+        ax_hkt.plot(E_SWEEP, res_cwks, 'b-', label="Database Result")
+        ax_hkt.set_xlabel("Log-Energy Level (e)")
+        ax_hkt.set_ylabel("Cumulative Spectral Mass")
         ax_hkt.legend()
     except Exception as e:
-        ax_hkt.text(0.5, 0.5, f"Cache Warning:\n{e}", ha='center', va='center', color='red')
+        ax_hkt.text(0.5, 0.5, f"Calculation Warning:\n{e}", ha='center', va='center', color='red')
         ax_hkt.axis('off')
 
     plt.tight_layout()
     plt.show()
 
 if __name__ == "__main__":
-    
-    # results = pull_specific_tiling(346, 3, 'diag')
-    # plot_specific_tiling_megaplot(results)
-
-    # results = pull_specific_tiling(3342, 4, 'diag')
-    # plot_specific_tiling_megaplot(results)
-
-    # results = pull_specific_tiling(24603, 4, 'diag')
-    # plot_specific_tiling_megaplot(results)
-
     results = pull_specific_tiling(50000, 5, 'book')
     plot_specific_tiling_megaplot(results)
-    
