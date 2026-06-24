@@ -122,21 +122,28 @@
         
         <div class="controls-container">
           <div class="query-action-row">
-            
             <div class="query-inputs-group">
               <div class="config-group">
                 <span class="config-label" data-i18n="symModes">Symmetry modes</span>
-                <div class="thumb-mode-group db-toggle-group" role="group" aria-label="Database configurations">
-                  <button type="button" class="thumb-mode-btn active" id="dbDiagBtn" data-db="diag" data-i18n-title="symDiag">
-                    <img src="/assets/diag_sym.svg" alt="" aria-hidden="true" />
-                  </button>
-                  <button type="button" class="thumb-mode-btn" id="dbBookBtn" data-db="book" data-i18n-title="symBook">
-                    <img src="/assets/book_sym.svg" alt="" aria-hidden="true" />
-                  </button>
-                  <button type="button" class="thumb-mode-btn" id="dbAsymBtn" data-db="none" data-i18n-title="symAsym">
-                    <img src="/assets/none.svg" alt="" aria-hidden="true" />
+                
+                <div style="display: flex; gap: 8px; align-items: center;">
+                  <div class="thumb-mode-group db-toggle-group" role="group" aria-label="Database configurations">
+                    <button type="button" class="thumb-mode-btn active" id="dbDiagBtn" data-db="diag" data-i18n-title="symDiag">
+                      <img src="/assets/diag_sym.svg" alt="" aria-hidden="true" />
+                    </button>
+                    <button type="button" class="thumb-mode-btn" id="dbBookBtn" data-db="book" data-i18n-title="symBook">
+                      <img src="/assets/book_sym.svg" alt="" aria-hidden="true" />
+                    </button>
+                    <button type="button" class="thumb-mode-btn" id="dbAsymBtn" data-db="none" data-i18n-title="symAsym">
+                      <img src="/assets/none.svg" alt="" aria-hidden="true" />
+                    </button>
+                  </div>
+                  
+                  <button type="button" class="icon-btn" id="advancedDbBtn" data-i18n-title="advancedSettings" style="width: 45px; height: 45px; border-radius: 8px; background: var(--bg-surface); border: 1px solid var(--line);">
+                    <img src="/assets/gear.svg" alt="" aria-hidden="true" style="width: 30px; height: 30px; opacity: 0.8;" />
                   </button>
                 </div>
+                
               </div>
 
               <div class="config-group">
@@ -208,37 +215,60 @@
     </div>
   </div>
 
-  <!-- <div id="settingsModal" class="modal-overlay hidden">
+  <div id="advancedDbModal" class="modal-overlay hidden">
     <div class="modal-content settings-content">
-      <button id="closeSettingsModal" class="close-btn" data-i18n-aria="close">✕</button>
+      <button id="closeAdvancedDbModal" class="close-btn" data-i18n-aria="close">✕</button>
       <div class="modal-header">
-        <h2 id="settingsHeading" data-i18n="settingsTitle">Settings</h2>
+        <h2 data-i18n="advancedSettings">Advanced Settings</h2>
       </div>
       <div class="settings-panel">
-        <label class="setting-row" for="themeSelect">
-          <div>
-            <strong id="themeLabel" data-i18n="themeLabel">Theme</strong>
-          </div>
-          <select id="themeSelect" class="setting-select" aria-label="Theme preference">
-            <option value="system" data-i18n="themeSystem">Use system settings</option>
-            <option value="light" data-i18n="themeLight">Light mode</option>
-            <option value="dark" data-i18n="themeDark">Dark mode</option>
-          </select>
-        </label>
-        <label class="setting-row" for="languageSelect">
-          <div>
-            <strong id="languageLabel" data-i18n="languageLabel">Language</strong>
-          </div>
-          <select id="languageSelect" class="setting-select" aria-label="Language preference">
-            <option value="en">🇺🇸 English</option>
-            <option value="es">🇪🇸 Español</option>
-            <option value="ja">🇯🇵 日本語</option>
-            <option value="zh">🇨🇳 中文</option>
-          </select>
-        </label>
+        <div style="overflow-x: auto;">
+          <table class="db-config-table" style="width: 100%; border-collapse: collapse; text-align: center; color: var(--text); margin-top: 12px;">
+            <thead>
+              <tr>
+                <th rowspan="2" data-i18n="topologyComplexity" style="padding: 10px; border: 1px solid var(--line-soft); background: var(--bg-surface); font-size: 0.9rem; color: var(--muted); font-weight: 600;">Topology Complexity</th>
+                <th colspan="3" data-i18n="symmetryType" style="padding: 10px; border: 1px solid var(--line-soft); background: var(--bg-surface); font-size: 0.9rem; color: var(--muted); font-weight: 600;">Symmetry Type</th>
+              </tr>
+              <tr>
+                <th data-i18n="symD" title="Diagonal" style="padding: 10px; border: 1px solid var(--line-soft); background: var(--bg-surface); font-size: 0.9rem; color: var(--muted); font-weight: 600;">Diagonal</th>
+                <th data-i18n="symB" title="Book" style="padding: 10px; border: 1px solid var(--line-soft); background: var(--bg-surface); font-size: 0.9rem; color: var(--muted); font-weight: 600;">Book</th>
+                <th data-i18n="symN" title="Asymmetric" style="padding: 10px; border: 1px solid var(--line-soft); background: var(--bg-surface); font-size: 0.9rem; color: var(--muted); font-weight: 600;">None</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);">2</td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="2" data-sym="diag" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;" checked></td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="2" data-sym="book" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;"></td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="2" data-sym="none" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;"></td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);">3</td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="3" data-sym="diag" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;" checked></td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="3" data-sym="book" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;"></td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="3" data-sym="none" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;"></td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);">4</td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="4" data-sym="diag" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;" checked></td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="4" data-sym="book" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;"></td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="4" data-sym="none" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;"></td>
+              </tr>
+              <tr>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);">5</td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="5" data-sym="diag" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;" checked></td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="5" data-sym="book" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;"></td>
+                <td style="padding: 10px; border: 1px solid var(--line-soft);"><input type="checkbox" class="db-cb" data-n="5" data-sym="none" style="width: 18px; height: 18px; accent-color: var(--cp-v); cursor: pointer;"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="actions" style="grid-template-columns: 1fr; margin-top: 16px;">
+          <button type="button" id="doneAdvancedDbBtn" data-i18n="done">Done</button>
+        </div>
       </div>
     </div>
-  </div> -->
+  </div>
 
   <script type="module" src="/interface/static/app.js"></script>
 </body>

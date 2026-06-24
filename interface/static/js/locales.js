@@ -42,7 +42,16 @@ export const Locales = {
     symAsym: "Asymmetric",
     searchSize: "Search Size",
     statusReady: "Ready.",
-    
+
+    advancedSettings: "Advanced Settings",
+    topologyComplexity: "Topology Complexity",
+    symmetryType: "Symmetry Type",
+    symD: "d",
+    symB: "b",
+    symN: "n",
+    done: "Done",
+    errorNoDbConfig: "Please select at least one symmetry mode and topology complexity.",
+
     // Results Panel
     thumbDisplay: "Thumbnail display",
     thumbCp: "Crease pattern",
@@ -167,6 +176,7 @@ export const Locales = {
     symAsym: "Asimétrico",
     searchSize: "Tamaño de Búsqueda",
     statusReady: "Listo.",
+    errorNoDbConfig: "Please select at least one symmetry mode and topology complexity.",
     
     thumbDisplay: "Visualización",
     thumbCp: "Patrón de pliegues (CP)",
@@ -288,7 +298,8 @@ export const Locales = {
     symAsym: "非対称 (Asymmetric)",
     searchSize: "検索サイズ",
     statusReady: "準備完了。",
-    
+    errorNoDbConfig: "Please select at least one symmetry mode and topology complexity.",
+
     thumbDisplay: "サムネイル表示",
     thumbCp: "展開図",
     thumbTree: "樹形図",
@@ -409,7 +420,8 @@ export const Locales = {
     symAsym: "不对称 (Asymmetric)",
     searchSize: "搜索大小",
     statusReady: "准备就绪。",
-    
+    errorNoDbConfig: "Please select at least one symmetry mode and topology complexity.",
+
     thumbDisplay: "缩略图显示",
     thumbCp: "折痕图 (CP)",
     thumbTree: "树",
@@ -533,6 +545,7 @@ export const Locales = {
     symAsym: "Asymmetriesch",
     searchSize: "Zoekgrootte",
     statusReady: "Klaar.",
+    errorNoDbConfig: "Please select at least one symmetry mode and topology complexity.",
 
     // Results Panel
     thumbDisplay: "Thumbnail display",

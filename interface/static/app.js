@@ -52,16 +52,30 @@ applyLanguage(currentLang);
 // ==========================================
 // 3. Core Logic & Queries
 // ==========================================
+// function selectedDbConfigs() {
+//   const configs = [];
+//   const isDiag = document.getElementById("dbDiagBtn")?.classList.contains("active");
+//   const isBook = document.getElementById("dbBookBtn")?.classList.contains("active");
+//   const isAsym = document.getElementById("dbAsymBtn")?.classList.contains("active");
+
+//   if (isDiag) configs.push({N:2, symmetry: "diag"}, { N: 3, symmetry: "diag" }, { N: 4, symmetry: "diag" }, { N: 5, symmetry: "diag" });
+//   if (isBook) configs.push({N:2, symmetry: "book"}, { N: 3, symmetry: "book" }, { N: 4, symmetry: "book" }, { N: 5, symmetry: "book" }, { N: 6, symmetry: "book" });
+//   if (isAsym) configs.push({N:2, symmetry: "none"}, { N: 3, symmetry: "none" }, { N: 4, symmetry: "none" });
+
+//   return configs;
+// }
 function selectedDbConfigs() {
   const configs = [];
-  const isDiag = document.getElementById("dbDiagBtn")?.classList.contains("active");
-  const isBook = document.getElementById("dbBookBtn")?.classList.contains("active");
-  const isAsym = document.getElementById("dbAsymBtn")?.classList.contains("active");
-
-  if (isDiag) configs.push({N:2, symmetry: "diag"}, { N: 3, symmetry: "diag" }, { N: 4, symmetry: "diag" }, { N: 5, symmetry: "diag" });
-  if (isBook) configs.push({N:2, symmetry: "book"}, { N: 3, symmetry: "book" }, { N: 4, symmetry: "book" }, { N: 5, symmetry: "book" }, { N: 6, symmetry: "book" });
-  if (isAsym) configs.push({N:2, symmetry: "none"}, { N: 3, symmetry: "none" }, { N: 4, symmetry: "none" });
-
+  document.querySelectorAll('.db-cb:checked').forEach(cb => {
+    const n = parseInt(cb.dataset.n, 10);
+    const sym = cb.dataset.sym;
+    configs.push({ N: n, symmetry: sym });
+    
+    // Edge case exception: 5 book includes 6 book
+    if (n === 5 && sym === "book") {
+      configs.push({ N: 6, symmetry: "book" });
+    }
+  });
   return configs;
 }
 
@@ -74,7 +88,11 @@ async function runQuery() {
       Utils.setStatus(dict.errorTreeTooSimple, true);
       return;
     }
-
+    const dbConfigs = selectedDbConfigs();
+    if (dbConfigs.length === 0) {
+      Utils.setStatus(dict.errorNoDbConfig, true);
+      return;
+    }
     Utils.setStatus(dict.statusQuerying);
     state.isQueryLoading = true;
     Results.renderResults();
@@ -265,10 +283,39 @@ displayModeBtns.forEach(btn => {
     if (typeof state !== 'undefined' && state.queryResult && typeof Results !== 'undefined') Results.renderResults();
   });
 });
+// ==========================================
+// Advanced Settings Modal Wiring
+// ==========================================
 
-document.querySelectorAll('.db-toggle-group .thumb-mode-btn').forEach(btn => {
+// 1. Let the built-in helper handle opening and closing via the X button and background click
+setupModal("advancedDbBtn", "advancedDbModal", "closeAdvancedDbModal");
+
+// 2. When "Done" is clicked in the modal, close it and sync the outside column buttons
+bind("doneAdvancedDbBtn", "click", () => {
+  ['diag', 'book', 'none'].forEach(sym => {
+    const anyChecked = document.querySelector(`.db-cb[data-sym="${sym}"]:checked`);
+    const btn = document.querySelector(`.thumb-mode-btn[data-db="${sym}"]`);
+    if (btn) btn.classList.toggle('active', !!anyChecked);
+  });
+  document.getElementById("advancedDbModal")?.classList.add("hidden");
+});
+
+// 3. When outside column buttons are clicked, toggle the entire column of checkboxes
+document.querySelectorAll('.db-toggle-group .thumb-mode-btn:not(#advancedDbBtn)').forEach(btn => {
   btn.addEventListener('click', () => {
-    if (btn.classList.contains('active') && document.querySelectorAll('.db-toggle-group .thumb-mode-btn.active').length === 1) return; 
+    const sym = btn.dataset.db;
+    const isActive = btn.classList.contains('active');
+    
+    // Prevent unchecking the very last active column button
+    const activeCount = document.querySelectorAll('.db-toggle-group .thumb-mode-btn.active:not(#advancedDbBtn)').length;
+    if (isActive && activeCount === 1) return; 
+
     btn.classList.toggle('active');
+    const newState = btn.classList.contains('active');
+    
+    // Set all checkboxes in that column to true/false
+    document.querySelectorAll(`.db-cb[data-sym="${sym}"]`).forEach(cb => {
+      cb.checked = newState;
+    });
   });
 });
