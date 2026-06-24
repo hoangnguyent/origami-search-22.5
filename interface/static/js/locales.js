@@ -336,7 +336,7 @@ export const Locales = {
     shareText: "このパターンを他の人と共有する！",
     copiedToClipboard: "クリップボードにコピーしました！",
     copyLink: "リンクをコピー",
-    panelCpRefs: "展開図と参照",
+    panelCpRefs: "展開図と基準",
     panelPackingTree: "配置と樹形図",
     panelFoldedState: "折り畳み状態",
     panelEmbedding: "埋め込みシグネチャ",

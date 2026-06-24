@@ -86,34 +86,36 @@
 
     <main class="split-view">
       <section class="left-panel">
-        <div class="editor-container">
+        <div class="editor-container" style="position: relative; overflow: hidden; border-radius: 8px;">
           <svg id="editorSvg" viewBox="0 0 800 560" role="img" aria-label="Interactive tree editor"></svg>
 
-          <div class="editor-top-left-controls" data-i18n-aria="randomTree">
-            <button id="randomTreeBtn" class="icon-btn editor-action-btn" type="button" data-i18n-aria="randomTree" data-i18n-title="randomTree">
-              <img src="/assets/shuffle.svg" alt="" aria-hidden="true" />
+          <div class="editor-bottom-left-controls">
+            <button id="resetTree" class="icon-btn editor-action-btn" type="button" data-i18n-aria="resetTree" data-i18n-title="resetTree">
+              <img src="/assets/trash.svg" alt="" aria-hidden="true" />
             </button>
-            <input id="randomNodeCount" type="number" min="4" max="50" value="10" data-i18n-title="randomNodeCount" data-i18n-aria="randomNodeCount" />
-          </div>
-
-          <button id="resetTree" class="icon-btn editor-action-btn editor-reset-btn" type="button" data-i18n-aria="resetTree" data-i18n-title="resetTree">
-            <img src="/assets/trash.svg" alt="" aria-hidden="true" />
-          </button>
-
-          <div id="mobileEditorControls" class="editor-mobile-controls mobile-only" data-i18n-aria="editorActions">
-            <button id="deleteNodeBtn" class="icon-btn editor-action-btn editor-delete-btn" type="button" data-i18n-aria="deleteNode" data-i18n-title="deleteNode">
-              <img src="/assets/delete.svg" alt="" aria-hidden="true" />
+            <button id="undoBtn" class="icon-btn editor-action-btn" type="button" title="Undo">
+              <img src="/assets/undo.svg" alt="Undo" aria-hidden="true" />
             </button>
-            <div class="editor-nudge-pad" role="group" data-i18n-aria="moveNode">
-              <span class="editor-nudge-spacer editor-nudge-up-spacer"></span>
-              <button id="moveNodeUpBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-up" type="button"><img src="/assets/arrow-up.svg" alt="" /></button>
-              <span class="editor-nudge-spacer editor-nudge-right-spacer"></span>
-              <button id="moveNodeLeftBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-left" type="button"><img src="/assets/arrow-left.svg" alt="" /></button>
-              <span class="editor-nudge-spacer editor-nudge-center-spacer"></span>
-              <button id="moveNodeRightBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-right" type="button"><img src="/assets/arrow-right.svg" alt="" /></button>
-              <span class="editor-nudge-spacer editor-nudge-left-spacer"></span>
-              <button id="moveNodeDownBtn" class="icon-btn editor-action-btn editor-nudge-btn editor-nudge-down" type="button"><img src="/assets/arrow-down.svg" alt="" /></button>
-              <span class="editor-nudge-spacer editor-nudge-down-spacer"></span>
+            <button id="redoBtn" class="icon-btn editor-action-btn" type="button" title="Redo">
+              <img src="/assets/redo.svg" alt="Redo" aria-hidden="true" />
+            </button>
+            <button id="downloadTreeBtn" class="icon-btn editor-action-btn" type="button" data-i18n-aria="downloadTree" data-i18n-title="downloadTree">
+              <img src="/assets/download.svg" alt="" aria-hidden="true" />
+            </button>
+            
+            <button id="uploadTreeBtn" class="icon-btn editor-action-btn" type="button" data-i18n-aria="uploadTree" data-i18n-title="uploadTree">
+              <img src="/assets/upload.svg" alt="" aria-hidden="true" />
+            </button>
+            <input type="file" id="treeFileInput" accept=".json" style="display: none;" />
+            <button id="deleteNodeBtn" class="icon-btn editor-action-btn" type="button" data-i18n-aria="deleteNode" data-i18n-title="deleteNode">
+              <img src="/assets/erase.svg" alt="" aria-hidden="true" />
+            </button>
+
+            <div class="editor-control-group" data-i18n-aria="randomTree">
+              <button id="randomTreeBtn" class="icon-btn editor-action-btn" type="button" data-i18n-aria="randomTree" data-i18n-title="randomTree">
+                <img src="/assets/shuffle.svg" alt="" aria-hidden="true" />
+              </button>
+              <input id="randomNodeCount" class="size-input" style="width: 60px; height: 38px; padding: 4px; font-size: 14px;" type="number" min="4" max="50" value="10" data-i18n-title="randomNodeCount" data-i18n-aria="randomNodeCount" />
             </div>
           </div>
         </div>

@@ -37,6 +37,7 @@ def query_tilings(query_tree, db_configs=[(4, 'none'), (4, 'diag'), (3, 'none')]
     Lightning fast federated search using cached Z-Scores.
     Dynamically connects to SQLite and filters for CP uniqueness.
     """
+    #TODO: deduplication across databases
     raw_query_eig = extract_eigenvalues(query_tree, eig_count=EIG_COUNT, resolution=RESOLUTION)
     base_hkt = compute_wks_signature(raw_query_eig).astype('float32')
     base_hkt_2d = np.array([base_hkt])

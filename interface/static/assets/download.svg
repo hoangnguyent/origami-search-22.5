@@ -2,9 +2,9 @@
 <!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
 
 <svg
-   width="466.66666"
-   height="666.66669"
-   viewBox="0 0 14 20.000001"
+   width="480"
+   height="715.90759"
+   viewBox="0 0 14.4 21.477228"
    fill="none"
    version="1.1"
    id="svg1"
@@ -15,7 +15,24 @@
    xmlns="http://www.w3.org/2000/svg"
    xmlns:svg="http://www.w3.org/2000/svg">
   <defs
-     id="defs1" />
+     id="defs1">
+    <clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath3">
+      <path
+         style="fill:#f6f7fb;stroke:#ff0000;stroke-width:0.226772;stroke-linejoin:round;paint-order:fill markers stroke"
+         d="m 21.831683,17.316832 -8.70297,-7.336634 5.851485,-11.7623762 c 0,0 5.049505,1.75247523 5.168317,1.81188117 0.118812,0.05940594 4.544554,6.98019823 4.544554,6.98019823 l -1.277227,6.6237618 z"
+         id="path4" />
+    </clipPath>
+    <clipPath
+       clipPathUnits="userSpaceOnUse"
+       id="clipPath1">
+      <path
+         style="fill:#f6f7fb;stroke:#ff0000;stroke-width:0.226772;stroke-linejoin:round;paint-order:fill markers stroke"
+         d="M -1.3366336,17.554455 14,17.138614 l 0.138614,3.623762 -15.5643566,0.415842 z"
+         id="path2" />
+    </clipPath>
+  </defs>
   <sodipodi:namedview
      id="namedview1"
      pagecolor="#ffffff"
@@ -26,23 +43,32 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="1.01"
-     inkscape:cx="233.66337"
-     inkscape:cy="333.66337"
-     inkscape:window-width="1920"
-     inkscape:window-height="957"
-     inkscape:window-x="0"
+     inkscape:cx="222.77228"
+     inkscape:cy="295.0495"
+     inkscape:window-width="976"
+     inkscape:window-height="949"
+     inkscape:window-x="624"
      inkscape:window-y="30"
-     inkscape:window-maximized="1"
+     inkscape:window-maximized="0"
      inkscape:current-layer="svg1" />
-  <g
-     id="Interface / Download"
-     transform="translate(-5,-2)">
-    <path
-       id="Vector"
-       d="M 6,21 H 18 M 12,3 v 14 m 0,0 5,-5 m -5,5 -5,-5"
-       stroke="#000000"
-       stroke-width="2"
-       stroke-linecap="round"
-       stroke-linejoin="round" />
-  </g>
+  <path
+     id="Vector"
+     d="M 0.99999998,19.000001 H 13 m -6,-18 v 14 m 0,0 5,-5 m -5,5 -5,-5"
+     stroke="#000000"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     clip-path="url(#clipPath1)"
+     style="stroke-width:2.4;stroke-dasharray:none"
+     transform="translate(0.20000018,1.2772271)" />
+  <path
+     id="Vector-9"
+     d="m 15,19.000001 h 12 m -6,-18 v 14 m 0,0 5,-5 m -5,5 -5,-5"
+     stroke="#000000"
+     stroke-width="2"
+     stroke-linecap="round"
+     stroke-linejoin="round"
+     clip-path="url(#clipPath3)"
+     transform="translate(-13.8,0.19999905)"
+     style="stroke-width:2.4;stroke-dasharray:none" />
 </svg>

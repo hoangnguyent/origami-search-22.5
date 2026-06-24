@@ -139,21 +139,17 @@ export function onEditorMouseDown(event) {
   const hit = getClosestNode(worldX, worldY);
   
   if (hit) {
+    History.saveState();
     state.selectedNode = hit.id;
     state.backgroundGesture = null;
     state.isPanning = false;
-    if (shouldUseDirectDrag() && event.pointerType !== "touch") {
-      state.draggingNode = hit.id;
-      activeDragPointerId = event.pointerId;
-    } else {
-      state.draggingNode = null;
-      activeDragPointerId = null;
-    }
+    
+    // Unconditionally allow dragging for both mouse AND touch
+    state.draggingNode = hit.id;
+    activeDragPointerId = event.pointerId;
+    
     renderEditor();
-    if (event.pointerType === "touch") {
-      beginPinchGesture();
-    }
-    return;
+    return; // Don't trigger pinch gestures if we are dragging a node
   }
 
   state.backgroundGesture = {
@@ -186,7 +182,7 @@ export function onEditorMouseMove(event) {
   }
 
   if (state.draggingNode !== null) {
-    if (event.pointerType === "touch" || event.pointerId !== activeDragPointerId) return;
+    if (event.pointerId !== activeDragPointerId) return;     
     const { x, y } = getSvgPoint(event);
     const { x: worldX, y: worldY } = getWorldPointFromSvg(x, y);
     state.nodes[state.draggingNode].x = worldX;
@@ -250,6 +246,7 @@ export function onEditorMouseUp(event) {
   state.draggingNode = null;
 
   if (shouldCreateNode) {
+    History.saveState();
     const newNode = { id: state.nextNodeId, x: state.backgroundGesture.worldX, y: state.backgroundGesture.worldY };
     state.nodes[newNode.id] = newNode;
     state.edges.push({ u: state.selectedNode, v: newNode.id });
@@ -328,6 +325,7 @@ export function resetTree() {
   setStatus("Tree reset.");
 }
 export function generateRandomTree() {
+  console.log("generating random tree")
   const targetLeaves = parseInt(document.getElementById("randomNodeCount").value, 10) || 6;
   if (targetLeaves < 2) return;
   
@@ -448,5 +446,69 @@ export function generateRandomTree() {
     Utils.setStatus(`Stopped at ${finalLeaves} leaf nodes (canvas got too crowded).`);
   } else {
     Utils.setStatus(`${dict.treeGen1}${finalLeaves}${dict.treeGen2}`);
+  }
+}
+
+// --- Undo / Redo Logic ---
+export const History = {
+  undoStack: [],
+  redoStack: [],
+  saveState: () => {
+    History.undoStack.push(JSON.stringify(serializeTree()));
+    if (History.undoStack.length > 50) History.undoStack.shift(); // Keep memory light
+    History.redoStack = []; // Clear redo future on new action
+  },
+  undo: () => {
+    if (History.undoStack.length === 0) return;
+    History.redoStack.push(JSON.stringify(serializeTree()));
+    loadTreeState(History.undoStack.pop(), true);
+  },
+  redo: () => {
+    if (History.redoStack.length === 0) return;
+    History.undoStack.push(JSON.stringify(serializeTree()));
+    loadTreeState(History.redoStack.pop(), true);
+  }
+};
+
+export function downloadTree() {
+  const treeData = serializeTree();
+  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(treeData, null, 2));
+  const downloadAnchorNode = document.createElement('a');
+  downloadAnchorNode.setAttribute("href", dataStr);
+  downloadAnchorNode.setAttribute("download", "explori_tree.json");
+  document.body.appendChild(downloadAnchorNode); // Required for Firefox
+  downloadAnchorNode.click();
+  downloadAnchorNode.remove();
+  setStatus("Tree downloaded successfully.");
+}
+
+export function loadTreeState(jsonString, isHistoryAction = false) {
+  try {
+    if(!isHistoryAction) History.saveState();
+    const parsed = JSON.parse(jsonString);
+    if (!parsed.nodes || !parsed.edges) throw new Error("Invalid tree format.");
+
+    state.nodes = {};
+    let maxId = 0;
+    parsed.nodes.forEach(n => {
+      state.nodes[n.id] = { id: n.id, x: n.x, y: n.y };
+      if (n.id > maxId) maxId = n.id;
+    });
+    
+    state.edges = parsed.edges.map(e => ({ u: e.u, v: e.v, length: e.length || 1 }));
+    state.nextNodeId = maxId + 1;
+    
+    // Reset view state
+    state.selectedNode = null;
+    state.draggingNode = null;
+    state.zoom = 1;
+    state.panOffset = { x: 0, y: 0 };
+    state.isPanning = false;
+    state.backgroundGesture = null;
+
+    renderEditor();
+    setStatus("Tree loaded successfully.");
+  } catch (err) {
+    setStatus("Failed to load tree: " + err.message, true);
   }
 }

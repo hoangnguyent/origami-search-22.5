@@ -2,9 +2,9 @@
 <!-- Uploaded to: SVG Repo, www.svgrepo.com, Generator: SVG Repo Mixer Tools -->
 
 <svg
-   width="466.66666"
-   height="666.66669"
-   viewBox="0 0 14 20.000001"
+   width="480"
+   height="715.90759"
+   viewBox="0 0 14.4 21.477228"
    fill="none"
    version="1.1"
    id="svg1"
@@ -43,13 +43,13 @@
      inkscape:pagecheckerboard="0"
      inkscape:deskcolor="#d1d1d1"
      inkscape:zoom="1.01"
-     inkscape:cx="550.49505"
-     inkscape:cy="333.66337"
-     inkscape:window-width="1920"
-     inkscape:window-height="957"
+     inkscape:cx="161.38614"
+     inkscape:cy="376.23762"
+     inkscape:window-width="1360"
+     inkscape:window-height="949"
      inkscape:window-x="0"
      inkscape:window-y="30"
-     inkscape:window-maximized="1"
+     inkscape:window-maximized="0"
      inkscape:current-layer="svg1" />
   <path
      id="Vector"
@@ -58,7 +58,9 @@
      stroke-width="2"
      stroke-linecap="round"
      stroke-linejoin="round"
-     clip-path="url(#clipPath1)" />
+     clip-path="url(#clipPath1)"
+     style="stroke-width:2.4;stroke-dasharray:none"
+     transform="translate(0.20000007,1.277227)" />
   <path
      id="Vector-9"
      d="m 15,19.000001 h 12 m -6,-18 v 14 m 0,0 5,-5 m -5,5 -5,-5"
@@ -67,5 +69,6 @@
      stroke-linecap="round"
      stroke-linejoin="round"
      clip-path="url(#clipPath3)"
-     transform="matrix(1,0,0,-1,-14,16.039605)" />
+     transform="matrix(1,0,0,-1,-13.8,17.316832)"
+     style="stroke-width:2.4;stroke-dasharray:none" />
 </svg>

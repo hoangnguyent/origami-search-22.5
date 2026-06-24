@@ -6,65 +6,19 @@ import * as Detail from './js/detail.js';
 import * as Utils from './js/utils.js';
 import { Locales } from './js/locales.js';
 
-const themeSelect = document.getElementById("themeSelect");
-const languageSelect = document.getElementById("languageSelect");
-const editorSvgEl = document.getElementById("editorSvg");
-const deleteNodeBtn = document.getElementById("deleteNodeBtn");
-const moveNodeUpBtn = document.getElementById("moveNodeUpBtn");
-const moveNodeDownBtn = document.getElementById("moveNodeDownBtn");
-const moveNodeLeftBtn = document.getElementById("moveNodeLeftBtn");
-const moveNodeRightBtn = document.getElementById("moveNodeRightBtn");
-const NODE_NUDGE_STEP = 20;
-
-const themeToggleBtn = document.getElementById("themeToggleBtn");
-const donateBtn = document.getElementById("donateBtn");
-const discordBtn = document.getElementById("discordBtn");
-const languageBtn = document.getElementById("languageBtn");
-
-const donateModal = document.getElementById("donateModal");
-const discordModal = document.getElementById("discordModal");
-const languageModal = document.getElementById("languageModal");
-
-function setupModal(openBtn, modalEl, closeBtnId) {
-  if (!openBtn || !modalEl) return;
-  const closeBtn = document.getElementById(closeBtnId);
-  
-  openBtn.addEventListener("click", () => modalEl.classList.remove("hidden"));
-  if (closeBtn) closeBtn.addEventListener("click", () => modalEl.classList.add("hidden"));
-  modalEl.addEventListener("click", (e) => {
-    if (e.target === modalEl) modalEl.classList.add("hidden");
-  });
-}
-setupModal(donateBtn, donateModal, "closeDonateModal");
-setupModal(discordBtn, discordModal, "closeDiscordModal");
-setupModal(languageBtn, languageModal, "closeLanguageModal");
-
-if (themeToggleBtn) {
-  themeToggleBtn.addEventListener("click", () => {
-    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
-    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    Utils.applyTheme(nextTheme, true);
-  });
-}
+// ==========================================
+// 1. Theme & Initialization
+// ==========================================
+Utils.applyTheme(Utils.readStoredThemePreference() || 'system', false);
+Utils.syncDetailViewPreferences();
+Editor.renderEditor();
 
 // ==========================================
-// i18n Dictionary Setup
+// 2. i18n Dictionary Setup
 // ==========================================
 let currentLang = localStorage.getItem('explori_lang') || 'en';
 
-const langButtons = document.querySelectorAll('.lang-btn');
-if (langButtons.length > 0) {
-  langButtons.forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      const selectedLang = e.currentTarget.getAttribute('data-lang');
-      applyLanguage(selectedLang);
-      document.getElementById('languageModal').classList.add('hidden');
-    });
-  });
-}
 export function applyLanguage(lang) {
-  console.log("changing language")
-  // Check if the language exists AND actually has translations inside it
   if (!Locales[lang] || Object.keys(Locales[lang]).length === 0) {
     console.warn(`[i18n] Language '${lang}' is empty or missing. Falling back to English.`);
     lang = 'en'; 
@@ -72,77 +26,32 @@ export function applyLanguage(lang) {
   
   currentLang = lang;
   localStorage.setItem('explori_lang', lang);
-
   const dict = Locales[lang];
 
-  // 1. Update standard text content
   document.querySelectorAll('[data-i18n]').forEach(el => {
-    const key = el.getAttribute('data-i18n');
-    if (dict[key]) el.textContent = dict[key];
+    if (dict[el.getAttribute('data-i18n')]) el.textContent = dict[el.getAttribute('data-i18n')];
   });
-
-  // 2. Update tooltip titles
   document.querySelectorAll('[data-i18n-title]').forEach(el => {
-    const key = el.getAttribute('data-i18n-title');
-    if (dict[key]) el.title = dict[key];
+    if (dict[el.getAttribute('data-i18n-title')]) el.title = dict[el.getAttribute('data-i18n-title')];
   });
-
-  // 3. Update screen reader aria-labels
   document.querySelectorAll('[data-i18n-aria]').forEach(el => {
-    const key = el.getAttribute('data-i18n-aria');
-    if (dict[key]) el.setAttribute('aria-label', dict[key]);
+    if (dict[el.getAttribute('data-i18n-aria')]) el.setAttribute('aria-label', dict[el.getAttribute('data-i18n-aria')]);
   });
   
-  // 4. NEW: Visually update the buttons in the Language Modal
   document.querySelectorAll('.lang-btn').forEach(btn => {
-    if (btn.getAttribute('data-lang') === lang) {
-      btn.classList.remove('secondary'); // Highlight the active language
-    } else {
-      btn.classList.add('secondary');    // Dim the inactive languages
-    }
+    btn.classList.toggle('secondary', btn.getAttribute('data-lang') !== lang);
   });
 
-  // 5. NEW: Sync the dropdown in the Settings Modal
   const langSelect = document.getElementById('languageSelect');
-  if (langSelect) {
-    langSelect.value = lang;
-  }
-  
-  // Update HTML lang attribute
+  if (langSelect) langSelect.value = lang;
   document.documentElement.lang = lang;
 }
+
 applyLanguage(currentLang);
+
 // ==========================================
-
-const resultsThumbInput = document.getElementById("resultsThumbMode");
-const displayModeBtns = document.querySelectorAll(".results-head-left .thumb-mode-btn"); 
-if (resultsThumbInput && displayModeBtns.length > 0) {
-  displayModeBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      displayModeBtns.forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      resultsThumbInput.value = btn.dataset.mode;
-      
-      if (typeof state !== 'undefined' && state.queryResult && typeof Results !== 'undefined') {
-        Results.renderResults();
-      }
-    });
-  });
-}
-
-const dbBtns = document.querySelectorAll('.db-toggle-group .thumb-mode-btn'); 
-if (dbBtns.length > 0) {
-  dbBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-      const isActive = btn.classList.contains('active');
-      const activeCount = document.querySelectorAll('.db-toggle-group .thumb-mode-btn.active').length;
-      
-      if (isActive && activeCount === 1) return; 
-      btn.classList.toggle('active');
-    });
-  });
-}
-
+// 3. Core Logic & Queries
+// ==========================================
 function selectedDbConfigs() {
   const configs = [];
   const isDiag = document.getElementById("dbDiagBtn")?.classList.contains("active");
@@ -157,7 +66,6 @@ function selectedDbConfigs() {
 }
 
 async function runQuery() {
-  // Grab the current dictionary for dynamic JS strings
   const dict = Locales[currentLang] || Locales['en'];
 
   try {
@@ -171,10 +79,11 @@ async function runQuery() {
     state.isQueryLoading = true;
     Results.renderResults();
     const t0 = Date.now();
+    
     const payload = {
       tree,
       db_configs: selectedDbConfigs(),
-      n: Number(document.getElementById("resultCount").value || 5),
+      n: Number(document.getElementById("resultCount")?.value || 5),
     };
 
     const response = await fetch("/api/query", {
@@ -202,28 +111,16 @@ async function runQuery() {
 
     const tf = Date.now();
     const totalFrontendMs = tf - t0;
-    const prof = data.profiling || {};
-    const backendTotalMs = prof.backend_total_ms || 0;
-    const networkMs = Math.max(0, totalFrontendMs - backendTotalMs);
-
-    console.log("📊 --- Query Profiling Breakdown ---");
-    console.log(`Total Roundtrip Time : ${totalFrontendMs}ms`);
-    console.log(` ├── Network / Browser : ${networkMs.toFixed(1)}ms`);
-    console.log(` └── Backend Server    : ${backendTotalMs.toFixed(1)}ms`);
-    console.log(`      ├── Setup        : ${prof.backend_setup_ms?.toFixed(1)}ms`);
-    console.log(`      ├── DB Query     : ${prof.db_query_ms?.toFixed(1)}ms`);
-    console.log(`      └── Post-Process : ${prof.post_processing_ms?.toFixed(1)}ms`);
-    console.log("----------------------------------");
     
     state.isQueryLoading = false;
     state.queryResult = data;
     state.queryNodeCount = Math.max(1, tree.nodes.length || 0);
     Results.renderResults();
+    
     const resultSummary = document.getElementById("resultSummary");
     if (resultSummary) resultSummary.textContent = `${data.results.length} ${dict.resultsLoaded}`;
-    const n = Number(document.getElementById("resultCount").value || 5);
     
-    Utils.setStatus(`${dict.querySuccess1} ${n} ${dict.querySuccess2} ${(totalFrontendMs/1000).toFixed(2)}s`);
+    Utils.setStatus(`${dict.querySuccess1} ${payload.n} ${dict.querySuccess2} ${(totalFrontendMs/1000).toFixed(2)}s`);
 
   } catch (error) {
     state.isQueryLoading = false;
@@ -232,8 +129,11 @@ async function runQuery() {
   }
 }
 
+// ==========================================
+// 4. Keyboard & Global Interactions
+// ==========================================
 function onKeyDown(event) {
-  if (event.target.tagName === 'INPUT' || event.target.tagName === 'TEXTAREA' || event.target.tagName === 'SELECT') return;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(event.target.tagName)) return;
 
   const detailModalEl = document.getElementById("detailModal");
   if (event.key === "Escape") {
@@ -247,47 +147,37 @@ function onKeyDown(event) {
     return;
   }
 
-  if (state.selectedNode !== null) {
-    if (event.key === "Backspace" || event.key === "Delete") {
-      event.preventDefault();
-      TreeActions.deleteSelectedNode();
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      TreeActions.moveSelectedNode(0, -NODE_NUDGE_STEP);
-    } else if (event.key === "ArrowDown") {
-      event.preventDefault();
-      TreeActions.moveSelectedNode(0, NODE_NUDGE_STEP);
-    } else if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      TreeActions.moveSelectedNode(-NODE_NUDGE_STEP, 0);
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      TreeActions.moveSelectedNode(NODE_NUDGE_STEP, 0);
-    }
+  if (state.selectedNode !== null && (event.key === "Backspace" || event.key === "Delete")) {
+    event.preventDefault();
+    Editor.History.saveState();
+    TreeActions.deleteSelectedNode();
   }
 }
 
 function onDocumentClick(event) {
+  const editorSvgEl = document.getElementById("editorSvg");
   if (!editorSvgEl) return;
   if (event.target instanceof Node && editorSvgEl.contains(event.target)) return;
-  
-  const controlsEl = document.getElementById("mobileEditorControls");
-  if (controlsEl && event.target instanceof Node && controlsEl.contains(event.target)) return;
-
   if (state.selectedNode === null) return;
   state.selectedNode = null;
   Editor.renderEditor();
 }
 
-document.getElementById("runQuery").addEventListener("click", runQuery);
-document.getElementById("resetTree").addEventListener("click", Editor.resetTree);
-const closeModalBtn = document.getElementById("closeModal"); if (closeModalBtn) closeModalBtn.addEventListener("click", Detail.closeDetailModal);
-const prevBtn = document.getElementById("detailPrevBtn"); if (prevBtn) prevBtn.addEventListener("click", () => Detail.navigateDetail(-1));
-const nextBtn = document.getElementById("detailNextBtn"); if (nextBtn) nextBtn.addEventListener("click", () => Detail.navigateDetail(1));
-const detailModalEl = document.getElementById("detailModal"); if (detailModalEl) detailModalEl.addEventListener("click", (e) => { if (e.target === detailModalEl) Detail.closeDetailModal(); });
+// ==========================================
+// 5. Event Binding Pipeline
+// ==========================================
+const bind = (id, event, handler) => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener(event, handler);
+};
 
+// Global Listeners
 document.addEventListener("keydown", onKeyDown);
 document.addEventListener("click", onDocumentClick);
+window.addEventListener("resize", () => Editor.renderEditor());
+
+// SVG Listeners
+const editorSvgEl = document.getElementById("editorSvg");
 if (editorSvgEl) {
   editorSvgEl.addEventListener("pointerdown", Editor.onEditorMouseDown);
   editorSvgEl.addEventListener("pointermove", Editor.onEditorMouseMove);
@@ -295,14 +185,81 @@ if (editorSvgEl) {
   editorSvgEl.addEventListener("pointercancel", Editor.onEditorMouseUp);
   editorSvgEl.addEventListener("wheel", Editor.onEditorWheel, { passive: false });
 }
-document.getElementById("randomTreeBtn").addEventListener("click", Editor.generateRandomTree);
-if (deleteNodeBtn) deleteNodeBtn.addEventListener("click", TreeActions.deleteSelectedNode);
-if (moveNodeUpBtn) moveNodeUpBtn.addEventListener("click", () => TreeActions.moveSelectedNode(0, -NODE_NUDGE_STEP));
-if (moveNodeDownBtn) moveNodeDownBtn.addEventListener("click", () => TreeActions.moveSelectedNode(0, NODE_NUDGE_STEP));
-if (moveNodeLeftBtn) moveNodeLeftBtn.addEventListener("click", () => TreeActions.moveSelectedNode(-NODE_NUDGE_STEP, 0));
-if (moveNodeRightBtn) moveNodeRightBtn.addEventListener("click", () => TreeActions.moveSelectedNode(NODE_NUDGE_STEP, 0));
-window.addEventListener("resize", () => Editor.renderEditor());
 
-Utils.applyTheme(Utils.readStoredThemePreference() || 'system', false);
-Utils.syncDetailViewPreferences();
-Editor.renderEditor();
+// Modals
+function setupModal(openBtnId, modalId, closeBtnId) {
+  const modal = document.getElementById(modalId);
+  bind(openBtnId, "click", () => modal?.classList.remove("hidden"));
+  bind(closeBtnId, "click", () => modal?.classList.add("hidden"));
+  modal?.addEventListener("click", (e) => { if (e.target === modal) modal.classList.add("hidden"); });
+}
+setupModal("donateBtn", "donateModal", "closeDonateModal");
+setupModal("discordBtn", "discordModal", "closeDiscordModal");
+setupModal("languageBtn", "languageModal", "closeLanguageModal");
+
+// Detail Nav
+bind("closeModal", "click", Detail.closeDetailModal);
+bind("detailPrevBtn", "click", () => Detail.navigateDetail(-1));
+bind("detailNextBtn", "click", () => Detail.navigateDetail(1));
+const detailModal = document.getElementById("detailModal");
+detailModal?.addEventListener("click", (e) => { if (e.target === detailModal) Detail.closeDetailModal(); });
+
+// Controls
+bind("runQuery", "click", runQuery);
+bind("randomTreeBtn", "click", Editor.generateRandomTree);
+// bind("resetTree", "click", Editor.resetTree);
+bind("resetTree", "click", () => {
+  Editor.History.saveState(); 
+  Editor.resetTree();
+});
+bind("deleteNodeBtn", "click", TreeActions.deleteSelectedNode);
+
+// Tree Upload/Download
+bind("downloadTreeBtn", "click", Editor.downloadTree);
+bind("uploadTreeBtn", "click", () => document.getElementById("treeFileInput")?.click());
+bind("undoBtn", "click", Editor.History.undo);
+bind("redoBtn", "click", Editor.History.redo);
+
+const treeFileInput = document.getElementById("treeFileInput");
+if (treeFileInput) {
+  treeFileInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => Editor.loadTreeState(event.target.result);
+    reader.readAsText(file);
+    e.target.value = ""; 
+  });
+}
+
+// Top Bar Tools
+bind("themeToggleBtn", "click", () => {
+  const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+  Utils.applyTheme(currentTheme === 'dark' ? 'light' : 'dark', true);
+});
+
+document.querySelectorAll('.lang-btn').forEach(btn => {
+  btn.addEventListener('click', (e) => {
+    applyLanguage(e.currentTarget.getAttribute('data-lang'));
+    document.getElementById('languageModal')?.classList.add('hidden');
+  });
+});
+
+// UI Toggles
+const resultsThumbInput = document.getElementById("resultsThumbMode");
+const displayModeBtns = document.querySelectorAll(".results-head-left .thumb-mode-btn"); 
+displayModeBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    displayModeBtns.forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    if (resultsThumbInput) resultsThumbInput.value = btn.dataset.mode;
+    if (typeof state !== 'undefined' && state.queryResult && typeof Results !== 'undefined') Results.renderResults();
+  });
+});
+
+document.querySelectorAll('.db-toggle-group .thumb-mode-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    if (btn.classList.contains('active') && document.querySelectorAll('.db-toggle-group .thumb-mode-btn.active').length === 1) return; 
+    btn.classList.toggle('active');
+  });
+});
