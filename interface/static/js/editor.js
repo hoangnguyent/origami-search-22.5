@@ -3,6 +3,7 @@ import { makeSvg, computeRadialTreeLayout } from './renderers.js';
 import { setStatus } from './utils.js';
 import { isMobileLayout } from './layout.js';
 import { Locales } from './locales.js';
+import * as Utils from './utils.js'
 
 const editorSvg = document.getElementById("editorSvg");
 const deleteNodeBtn = document.getElementById("deleteNodeBtn");
