@@ -84,7 +84,7 @@ def run_audit_and_export():
         (2, 'none'), (2, 'diag'), (2, 'book'),
         (3, 'none'), (3, 'diag'), (3, 'book'),
         (4, 'none'), (4, 'diag'), (4, 'book'),
-        (5, 'diag'), (5, 'book'),
+        (5, 'diag'), (5, 'book'), (5, 'none'),
         (6, 'book')
     ]
     

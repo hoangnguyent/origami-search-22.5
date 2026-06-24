@@ -170,11 +170,7 @@
     "4_book": {
         "config": "N=4, Sym=book",
         "topology_db": {
-            "exists": true,
-            "total_prefixes": 5184,
-            "done_prefixes": 5184,
-            "bits_per_prefix": 14,
-            "total_states": 60494
+            "exists": false
         },
         "tiling_db": {
             "exists": true,
@@ -228,6 +224,27 @@
             "status_3_error": 369,
             "raw_data_only_mb": 397.78,
             "total_tilings": 147627
+        }
+    },
+    "5_none": {
+        "config": "N=5, Sym=none",
+        "topology_db": {
+            "exists": true,
+            "total_prefixes": 5763456,
+            "done_prefixes": 10504,
+            "bits_per_prefix": 26,
+            "total_states": 317
+        },
+        "tiling_db": {
+            "exists": true,
+            "total_db_size_mb": 5.71,
+            "synced_topologies": 317,
+            "status_0_unprocessed": 0,
+            "status_1_success": 273,
+            "status_2_timeout": 44,
+            "status_3_error": 0,
+            "raw_data_only_mb": 3.42,
+            "total_tilings": 1495
         }
     },
     "6_book": {
