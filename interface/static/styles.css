@@ -17,7 +17,7 @@
   --muted: #8a8a8a;
   
   /* Pure White Accent */
-  --accent: #ffffff;
+  --accent: #a2ff6f;
   --accent-rgb: 255, 255, 255;
   --btn-bg: rgba(255, 255, 255, 0.08); /* Replaces button gradient */
   --danger: #ff6b8a;
@@ -61,7 +61,7 @@ html[data-theme="light"] {
   --line-faint: rgba(15, 23, 42, 0.05);
   --text: #152033;
   --muted: #51627d;
-  --accent: #136ca0;
+  --accent: #44a013;
   --accent-rgb: 19, 108, 160;
   --btn-bg: linear-gradient(180deg, rgba(19,108,160,0.12), rgba(19,108,160,0.04));
   --danger: #cf465f;
@@ -262,7 +262,10 @@ html[data-theme="light"] { --gear-filter: invert(14%) sepia(13%) saturate(1434%)
   width: 18px;
   height: 18px;
   cursor: pointer;
-  accent-color: var(--cp-v);
+  accent-color: rgba(75, 251, 0, 0.296);
+}
+.db-cb:checked{
+  accent-color: var(--accent);
 }
 
 .size-input {
@@ -295,7 +298,7 @@ html[data-theme="light"] { --gear-filter: invert(14%) sepia(13%) saturate(1434%)
   padding: 13px;
   border-radius: 40px;
   letter-spacing: 0.02em;
-  background: rgba(122,211,255,0.7);
+  background: #59ff00b0;
   border: none;
   cursor: pointer;
   transition: 0.15s ease;
@@ -309,7 +312,7 @@ html[data-theme="light"] { --gear-filter: invert(14%) sepia(13%) saturate(1434%)
 }
 
 .primary-run-btn:hover {
-  background: rgba(122, 211, 255, 0.35);
+  background: #59ff0071;
 }
 
 .left-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; padding: 24px; border-right: 1px solid var(--line); overflow-y: auto; }
@@ -361,9 +364,9 @@ html[data-theme="light"] { --gear-filter: invert(14%) sepia(13%) saturate(1434%)
 .toggle-label select { padding: 6px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--bg-surface); color: var(--text); }
 
 .actions { display: grid; grid-template-columns: 2fr 1fr; gap: 12px; margin-bottom: 12px; }
-button { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; background: rgba(0, 167, 251, 0.296); color: var(--text); font-weight: 600; cursor: pointer; transition: 0.15s; }
+button { border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; background: rgba(75, 251, 0, 0.296); color: var(--text); font-weight: 600; cursor: pointer; transition: 0.15s; }
 button.secondary { background: var(--bg-surface); font-weight: normal; }
-button:hover { border-color: rgba(122,211,255,0.55); }
+button:hover { border-color: rgba(162, 255, 122, 0.55); }
 .status { margin: 0; font-size: 13px; color: var(--muted); }
 
 /* Segmented Control for Thumbnails */
@@ -543,13 +546,14 @@ svg .packing-b { stroke: var(--packing-b); }
   opacity: 0.8;
   object-fit: contain;
   transition: opacity 0.15s ease;
+  filter: var(--gear-filter, none);
 }
 
 /* Hover effects matching your existing aesthetic */
 .action-pill-btn:hover {
   background: rgba(122, 211, 255, 0.15); 
   border-color: rgba(122, 211, 255, 0.3);
-  color: var(--cp-v); /* Gives the text a blueish highlight */
+  color: var(--accent); /* Gives the text a blueish highlight */
 }
 
 .action-pill-btn:hover img {
