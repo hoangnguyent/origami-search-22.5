@@ -78,11 +78,11 @@ def process_animated_svg(input_path, output_path, hue_shift_amount=-0.35, contra
 
 if __name__ == "__main__":
     # --- Configuration ---
-    input_file = "/Users/bwong/Desktop/SEARCH-22.5/interface/static/assets/robot_loading_original.svg"
+    input_file = "/Users/bwong/Desktop/SEARCH-22.5/interface/static/assets/robot_loading.svg"
     output_file = "/Users/bwong/Desktop/SEARCH-22.5/interface/static/assets/robot_loading_new.svg"
     
     # Hue shift: -0.33 shifts blues squarely into the greens.
-    shift_amount = -0.35 
+    shift_amount = 0.05 
     
     # Contrast factor: 
     # 1.0 = no change

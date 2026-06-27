@@ -157,7 +157,7 @@ function renderStepSvg(svg, step, width, height, isFinal = false, targetXY = nul
             x1: tx(p1[0]), y1: ty(p1[1]), x2: tx(p2[0]), y2: ty(p2[1]),
             stroke: stroke, "stroke-width": strokeWidth
         };
-        if (dashed) attrs["stroke-dasharray"] = "4 4";
+        if (dashed) attrs["stroke-dasharray"] = "10 6";
         svg.appendChild(makeSvg("line", attrs));
     };
 
@@ -174,9 +174,9 @@ function renderStepSvg(svg, step, width, height, isFinal = false, targetXY = nul
             }
         }
 
-        // C. New Crease (Thick Blue)
+        // C. New Crease
         if (step.newCrease) {
-            drawLine(step.newCrease[0], step.newCrease[1], "var(--cp-m)", "4");
+            drawLine(step.newCrease[0], step.newCrease[1], "var(--accent)", "4");
         }
 
         // D. Reference Vertices (Hollow circles)
@@ -184,7 +184,7 @@ function renderStepSvg(svg, step, width, height, isFinal = false, targetXY = nul
             if (ref.type === 'vertex' && ref.xy) {
                 svg.appendChild(makeSvg("circle", {
                     cx: tx(ref.xy[0]), cy: ty(ref.xy[1]), r: "8",
-                    fill: "none", stroke: "var(--accent, #4fa3e0)", "stroke-width": "2"
+                    fill: "none", stroke: "var(--accent)", "stroke-width": "3"
                 }));
             }
         }
@@ -192,7 +192,7 @@ function renderStepSvg(svg, step, width, height, isFinal = false, targetXY = nul
         // E. Final Target Dot
         svg.appendChild(makeSvg("circle", {
             cx: tx(targetXY[0]), cy: ty(targetXY[1]), r: "8",
-            fill: "#50e890", stroke: "none"
+            fill: "var(--node-fill)", stroke: "var(--node-stroke)", "stroke-width": "2"
         }));
     }
 }

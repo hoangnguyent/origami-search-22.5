@@ -3,6 +3,8 @@ import { Locales } from './js/locales.js';
 import { makeSvg, renderCpSvg, renderPackingSvg, renderFoldSvg, renderGraphSvg, renderHeatSvg, transformX, transformY, fitScale } from './js/renderers.js';
 import { renderReferenceWorkspace } from './js/refs.js';
 
+const SVGSIZE = 300;
+
 // --- Global UI & Modal Wiring ---
 const themeToggleBtn = document.getElementById("themeToggleBtn");
 const donateBtn = document.getElementById("donateBtn");
@@ -213,7 +215,7 @@ function isPointInPolygon(point, vs) {
     }
     return inside;
 }
-
+// --- tree Highlighting Logic ---
 // --- Interactive Highlighting Logic ---
 function highlightComponent(compId, result) {
     // 1. Clear previous highlights
@@ -223,26 +225,35 @@ function highlightComponent(compId, result) {
         line.style.strokeWidth = '';
     });
 
-    if (compId === null || compId === undefined) return;
-
-    // 2. Highlight Tree Edge
-    const targetLine = document.querySelector(`#target-tree line.edge[data-comp-id="${compId}"]`);
-    if (targetLine) {
-        targetLine.style.stroke = 'var(--danger, #ff6b8a)';
-        targetLine.style.strokeWidth = '12'; // Thick visual highlight
-        targetLine.parentNode.appendChild(targetLine); // Bring visual line to front
-        
-        // Bring hitbox to the front so it doesn't get buried and remains clickable
-        const hitbox = document.querySelector(`#target-tree line.edge-hitbox[data-comp-id="${compId}"]`);
-        if (hitbox) hitbox.parentNode.appendChild(hitbox);
+    if (compId !== null && compId !== undefined) {
+        // 2. Highlight Tree Edge
+        const targetLine = document.querySelector(`#target-tree line.edge[data-comp-id="${compId}"]`);
+        if (targetLine) {
+            targetLine.style.stroke = 'var(--danger, #ff6b8a)';
+            targetLine.style.strokeWidth = '12'; // Thick visual highlight
+            targetLine.parentNode.appendChild(targetLine); // Bring visual line to front
+            
+            // Bring hitbox to the front so it doesn't get buried and remains clickable
+            const hitbox = document.querySelector(`#target-tree line.edge-hitbox[data-comp-id="${compId}"]`);
+            if (hitbox) hitbox.parentNode.appendChild(hitbox);
+        }
     }
 
-    // 3. Highlight Packing Facets
+    // 3. CRITICAL NEW FIX: Bring all tree nodes back to the very front so they sit on top of the edges
+    document.querySelectorAll('#target-tree circle').forEach(node => {
+        if (node.parentNode) {
+            node.parentNode.appendChild(node);
+        }
+    });
+
+    if (compId === null || compId === undefined) return;
+
+    // 4. Highlight Packing Facets
     const packingSvg = document.querySelector('#target-packing svg');
     if (packingSvg && result && result.comp_map) {
         const vb = packingSvg.getAttribute('viewBox').split(' ').map(Number);
-        const w = vb[2] || 1000;
-        const h = vb[3] || 1000;
+        const w = vb[2] || SVGSIZE;
+        const h = vb[3] || SVGSIZE;
 
         const layer = makeSvg('g', { id: 'packing-highlight-layer' });
         const facets = result.comp_map.filter(f => f.comp_id === compId);
@@ -261,7 +272,6 @@ function highlightComponent(compId, result) {
             layer.appendChild(makeSvg('polygon', {
                 points: points,
                 fill: 'rgba(255, 107, 138, 0.4)',
-                // stroke: 'var(--danger, #ff6b8a)',
                 'stroke-width': '0',
                 'pointer-events': 'none' // Crucial: prevents overlay from blocking future clicks
             }));
@@ -296,8 +306,8 @@ function highlightCpReference(svg, targetXY, ancestryArray, cartesianVertices) {
 
     // 3. Set up identical projection math to align with the visual CP
     const vb = svg.getAttribute('viewBox').split(' ').map(Number);
-    const w = vb[2] || 1000;
-    const h = vb[3] || 1000;
+    const w = vb[2] || SVGSIZE;
+    const h = vb[3] || SVGSIZE;
     
     const bounds = getBoundsFromArray(cartesianVertices);
     const scale = fitScale(bounds, w, h);
@@ -317,8 +327,8 @@ function highlightCpReference(svg, targetXY, ancestryArray, cartesianVertices) {
                 layer.appendChild(makeSvg('line', {
                     x1: tx(nc1[0]), y1: ty(nc1[1]),
                     x2: tx(nc2[0]), y2: ty(nc2[1]),
-                    stroke: '#50e890', // Bright Green
-                    'stroke-width': '4',
+                    stroke: 'var(--accent)',
+                    'stroke-width': '2',
                     'stroke-linecap': 'round'
                 }));
             }
@@ -327,7 +337,7 @@ function highlightCpReference(svg, targetXY, ancestryArray, cartesianVertices) {
         // Draw Green Dot for the target vertex
         layer.appendChild(makeSvg('circle', {
             cx: tx(targetXY[0]), cy: ty(targetXY[1]),
-            r: '14', fill: '#50e890', stroke: 'var(--cp-b)', 'stroke-width': '3'
+            r: '5', fill: 'var(--node-fill)', stroke: 'var(--node-stroke)', 'stroke-width': '2'
         }));
     } else {
         // FAILURE: Draw Red Dot
@@ -345,8 +355,7 @@ function populatePanel(containerId, renderFn, data, options = {}) {
     if (!container) return null;
     container.innerHTML = ''; 
     
-    let viewBox = options.viewBox || "0 0 1000 1000";
-    // if (renderFn === renderHeatSvg) viewBox = "0 0 420 240";
+    let viewBox = options.viewBox || `0 0 ${SVGSIZE} ${SVGSIZE}`;
 
     const svg = makeSvg("svg", { 
         viewBox: viewBox, 
@@ -356,9 +365,9 @@ function populatePanel(containerId, renderFn, data, options = {}) {
     if (renderFn === renderHeatSvg) {
         renderFn(svg, data);
     } else if (renderFn === renderGraphSvg) {
-        renderFn(svg, data, { nodeFill: options.nodeFill || "#8cffc1", width: options.w || 1000, height: options.h || 1000 });
+        renderFn(svg, data, {width: options.w || SVGSIZE, height: options.h || SVGSIZE });
     } else {
-        renderFn(svg, data, options.w || 1000, options.h || 1000);
+        renderFn(svg, data, options.w || SVGSIZE, options.h || SVGSIZE);
     }
     
     container.appendChild(svg);
@@ -366,20 +375,19 @@ function populatePanel(containerId, renderFn, data, options = {}) {
 }
 
 function drawAllPanels(result) {
-    const cpSvg = populatePanel("target-cp", renderCpSvg, result.cp, {w: 1000, h: 1000});
+    const cpSvg = populatePanel("target-cp", renderCpSvg, result.cp, {w: SVGSIZE, h: SVGSIZE});
     setupInteractiveSvg(cpSvg, "CP", result);
     
-    const packingSvg = populatePanel("target-packing", renderPackingSvg, result.packing, {w: 1000, h: 1000});
+    const packingSvg = populatePanel("target-packing", renderPackingSvg, result.packing, {w: SVGSIZE, h: SVGSIZE});
     setupInteractiveSvg(packingSvg, "Packing", result);
     
-    const treeSvg = populatePanel("target-tree", renderGraphSvg, result.tree, {w: 1000, h: 1000, nodeFill: "#8cffc1"});
+    const treeSvg = populatePanel("target-tree", renderGraphSvg, result.tree, {w: SVGSIZE, h: SVGSIZE,});
     setupInteractiveSvg(treeSvg, "Tree", result);
     
-    populatePanel("target-topology", renderGraphSvg, result.topology, {w: 1000, h: 1000, nodeFill: "#a7c7ff"});
-    populatePanel("target-tiling", renderGraphSvg, result.solved_tiling, {w: 1000, h: 1000, nodeFill: "#8cffc1"});
-    populatePanel("target-fold", renderFoldSvg, result.fold, {w: 1000, h: 1000});
-    
-    populatePanel("target-heat", renderHeatSvg, result.heat);
+    populatePanel("target-topology", renderGraphSvg, result.topology, {w: SVGSIZE, h: SVGSIZE,});
+    populatePanel("target-tiling", renderGraphSvg, result.solved_tiling, {w: SVGSIZE, h: SVGSIZE,});
+    populatePanel("target-fold", renderFoldSvg, result.fold, {w: SVGSIZE, h: SVGSIZE});
+    populatePanel("target-heat", renderHeatSvg, result.heat, {w: SVGSIZE, h: SVGSIZE});
 }
 
 function setupInteractiveSvg(svg, name, result) { 
@@ -420,8 +428,8 @@ function setupInteractiveSvg(svg, name, result) {
             // Generate scale to map math vertices to pixel hits
             const bounds = getBoundsFromArray(cartesianVertices);
             const vb = svg.getAttribute('viewBox').split(' ').map(Number);
-            const w = vb[2] || 1000;
-            const h = vb[3] || 1000;
+            const w = vb[2] || SVGSIZE;
+            const h = vb[3] || SVGSIZE;
             const scale = fitScale(bounds, w, h);
             
             const tx = (x) => transformX(x, bounds, scale, w);
@@ -440,7 +448,7 @@ function setupInteractiveSvg(svg, name, result) {
                 }
             });
 
-            // Threshold in SVG pixels (e.g., 30 pixels on a 1000x1000 canvas)
+            // Threshold in SVG pixels (e.g., 30 pixels on a SVGSIZExSVGSIZE canvas)
             const CLICK_THRESHOLD_SVG = 30; 
             const lang = localStorage.getItem('explori_lang') || 'en';
             const dict = Locales[lang] || Locales['en'];
@@ -473,8 +481,8 @@ function setupInteractiveSvg(svg, name, result) {
 
         if (name === "Packing" && result && result.comp_map) {
             const vb = svg.getAttribute('viewBox').split(' ').map(Number);
-            const w = vb[2] || 1000;
-            const h = vb[3] || 1000;
+            const w = vb[2] || SVGSIZE;
+            const h = vb[3] || SVGSIZE;
             
             // Bypass corrupt Vertex4 strings using the clean comp_map floats
             const bounds = getSafeBounds(result.packing, result.comp_map);
@@ -535,10 +543,10 @@ async function initView() {
 
     const loadingImg = document.createElement('img');
     loadingImg.id = 'loadingSpinner';
-    loadingImg.src = '/assets/loading.svg';
+    loadingImg.src = '/assets/robot_loading.svg';
     loadingImg.style.display = 'block';
     loadingImg.style.margin = '15vh auto'; // Center heavily in the empty main space
-    loadingImg.style.width = '400px';
+    loadingImg.style.width = '600px';
     
     // Inject directly into the main element
     if (mainEl) mainEl.appendChild(loadingImg);
@@ -550,7 +558,7 @@ async function initView() {
     luckyBtn.style.margin = '2rem auto'; 
     
     luckyBtn.addEventListener('click', () => {
-        const randomId = Math.floor(Math.random() * 1000000) + 1;
+        const randomId = Math.floor(Math.random() * SVGSIZE000) + 1;
         window.location.search = `?id=5d${randomId}`;
     });
 

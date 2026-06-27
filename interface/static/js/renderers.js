@@ -233,8 +233,7 @@ export function computeRadialTreeLayout(graph) {
 // ---------------------------------------------------------
 // Your existing wrapper, updated to trigger the layout 
 // ---------------------------------------------------------
-export function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff", width = 420, height = 240 } = {}) {
-  // NEW: Check if layout needs to be computed (e.g. if any node is missing an [x, y] pos)
+export function renderGraphSvg(svg, graph, {width = 420, height = 240 } = {}) {
   const needsLayout = graph.nodes.some(n => !n.pos);
   if (needsLayout) {
     computeRadialTreeLayout(graph);
@@ -251,7 +250,8 @@ export function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff", width = 420, 
       y1: transformY(start[1], bounds, scale, height),
       x2: transformX(end[0], bounds, scale, width),
       y2: transformY(end[1], bounds, scale, height),
-      class: "edge"
+      class: "edge",
+      
     };
 
     // for tree edge labeling
@@ -268,7 +268,7 @@ export function renderGraphSvg(svg, graph, { nodeFill = "#9ed6ff", width = 420, 
       cx: transformX(node.pos[0], bounds, scale, width),
       cy: transformY(node.pos[1], bounds, scale, height),
       r: 4, 
-      fill: nodeFill, 
+      // fill: nodeFill, 
       class: "node",
     }));
   }
@@ -290,44 +290,43 @@ export function makePolyline(xValues, yValues, xMin, xMax, yMin, yMax, width, he
   }).join(" ");
   return makeSvg("polyline", { points, fill: "none", stroke: color, "stroke-width": 2.3, "stroke-linejoin": "round", "stroke-linecap": "round" });
 }
-export function renderHeatSvg(svg, heat) {
-  // Increased margin to accommodate axis labels and Y-ticks
-  // const width = 420, height = 240, margin = 45; 
-  const width = 1000, height = 1000, margin = 120;
+export function renderHeatSvg(svg, heat, {width = 300, height = 300} = {}) {
+  // Increased margin slightly to safely fit the title text without clipping
+  const margin = 50;
   const xValues = heat.t_scales || [];
   const result = heat.result || [];
   
-  // Require at least xValues and result to proceed
   if (!xValues.length || !result.length) return; 
   
   const xMin = Math.min(...xValues), xMax = Math.max(...xValues);
-  
-  const tickStep = 0.1;
   const yMax = 1;
   const yMin = 0;
 
-  // 2. CSS Variable Styles (Responsive to Light/Dark Mode)
-  const axisStyle = "stroke: var(--packing-b); stroke-width: 10;";
-  const tickStyle = "stroke: var(--packing-b); stroke-width: 5;";
-  const textStyle = "fill: var(--packing-b); font-size: 30px;";
-  const titleStyle = "fill: var(--packing-b); font-size: 50px;";
-  const curveStyle = "fill: none; stroke: var(--danger); stroke-width: 10; stroke-linejoin: round;";
+  // 2. CSS Variable Styles
+  const axisStyle = "stroke: var(--packing-b); stroke-width: 4;";
+  const tickStyle = "stroke: var(--packing-b); stroke-width: 2;";
+  const textStyle = "fill: var(--packing-b); font-size: 10px;";
+  const titleStyle = "fill: var(--packing-b); font-size: 14px; font-weight: 500;";
+  const curveStyle = "fill: none; stroke: var(--accent); stroke-width: 4; stroke-linejoin: round;";
 
   // --- Draw Axes Base ---
   svg.appendChild(makeSvg("line", { x1: margin, y1: height - margin, x2: width - margin, y2: height - margin, style: axisStyle }));
   svg.appendChild(makeSvg("line", { x1: margin, y1: margin, x2: margin, y2: height - margin, style: axisStyle }));
 
+  // --- X-Axis Ticks & Numbers ---
   for (let p = Math.floor(xMin); p <= Math.ceil(xMax); p++) {
     const px = margin + ((p - xMin) / (xMax - xMin)) * (width - margin * 2);
     
+    // Short tick mark
     svg.appendChild(makeSvg("line", { 
         x1: px, y1: height - margin, 
-        x2: px, y2: height - margin + 12, 
+        x2: px, y2: height - margin + 6, 
         style: tickStyle
     }));
     
+    // Number perfectly tucked below the tick
     const tickText = makeSvg("text", { 
-        x: px, y: height - margin + 40, 
+        x: px, y: height - margin + 20, 
         "text-anchor": "middle",
         style: textStyle
     });
@@ -335,24 +334,24 @@ export function renderHeatSvg(svg, heat) {
     svg.appendChild(tickText);
   }
 
-  // --- Y-Axis Ticks (Integers) & Zero Line ---
-  for (let val = yMin; val <= yMax; val += tickStep) {
+  // --- Y-Axis Ticks (Only 0 and 1) ---
+  [0, 1].forEach(val => {
     const py = height - margin - ((val - yMin) / (yMax - yMin)) * (height - margin * 2);
     
-    // Tick Mark
+    // Short tick mark
     svg.appendChild(makeSvg("line", { 
-        x1: margin - 12, y1: py, 
+        x1: margin - 6, y1: py, 
         x2: margin, y2: py, 
         style: tickStyle 
     }));
     
-    // Tick Text
+    // Number tucked to the left of the tick
     const tickText = makeSvg("text", { 
-        x: margin - 20, y: py + 8, 
+        x: margin - 12, y: py + 4, 
         "text-anchor": "end",
         style: textStyle
     });
-    tickText.textContent = val.toFixed(1);
+    tickText.textContent = val;
     svg.appendChild(tickText);
 
     // Dashed horizontal line strictly at y = 0
@@ -360,26 +359,27 @@ export function renderHeatSvg(svg, heat) {
         svg.appendChild(makeSvg("line", {
             x1: margin, y1: py,
             x2: width - margin, y2: py,
-            style: "stroke: var(--packing-b); stroke-width: 5; stroke-dasharray: 8,8; opacity: 1;"
+            style: "stroke: var(--packing-b); stroke-width: 2; stroke-dasharray: 8,8; opacity: 1;"
         }));
     }
-  }
+  });
 
-  // --- Axis Labels ---
   const lang = localStorage.getItem('explori_lang') || 'en';
   const dict = Locales[lang] || Locales['en'];
 
   // --- Axis Labels ---
+  // Positioned strictly below the numbers
   const xLabel = makeSvg("text", {
-      x: width / 2, y: height - 25,
+      x: width / 2, y: height - margin + 40,
       "text-anchor": "middle",
       style: titleStyle
   });
   xLabel.textContent = dict.logEigenvalues;
   svg.appendChild(xLabel);
 
+  // Positioned strictly to the left of the numbers
   const yLabel = makeSvg("text", {
-      x: -(height / 2), y: 35,
+      x: -(height / 2), y: margin - 30, 
       "text-anchor": "middle",
       transform: "rotate(-90)",
       style: titleStyle
