@@ -289,7 +289,7 @@ export function renderEditor() {
 
   for (const node of Object.values(state.nodes)) {
     content.appendChild(makeSvg("circle", {
-      cx: node.x, cy: node.y, r: 12 / state.zoom,
+      cx: node.x, cy: node.y, r: (node.id === state.selectedNode? 15:10) / state.zoom,
       class: node.id === state.selectedNode ? "node selected-node" : "node tree-node",
       "vector-effect": "non-scaling-stroke",
     }));

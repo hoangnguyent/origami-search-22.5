@@ -52,18 +52,7 @@ applyLanguage(currentLang);
 // ==========================================
 // 3. Core Logic & Queries
 // ==========================================
-// function selectedDbConfigs() {
-//   const configs = [];
-//   const isDiag = document.getElementById("dbDiagBtn")?.classList.contains("active");
-//   const isBook = document.getElementById("dbBookBtn")?.classList.contains("active");
-//   const isAsym = document.getElementById("dbAsymBtn")?.classList.contains("active");
 
-//   if (isDiag) configs.push({N:2, symmetry: "diag"}, { N: 3, symmetry: "diag" }, { N: 4, symmetry: "diag" }, { N: 5, symmetry: "diag" });
-//   if (isBook) configs.push({N:2, symmetry: "book"}, { N: 3, symmetry: "book" }, { N: 4, symmetry: "book" }, { N: 5, symmetry: "book" }, { N: 6, symmetry: "book" });
-//   if (isAsym) configs.push({N:2, symmetry: "none"}, { N: 3, symmetry: "none" }, { N: 4, symmetry: "none" });
-
-//   return configs;
-// }
 function selectedDbConfigs() {
   const configs = [];
   document.querySelectorAll('.db-cb:checked').forEach(cb => {
