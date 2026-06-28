@@ -1,5 +1,9 @@
 # SEARCH-22.5
 
+## The application can be accessed at: https://225.designorigami.net/
+
+-----
+
 To setup:
 
 Open a powershell at the root directory and run:
@@ -19,4 +23,4 @@ To start the localhost, run `python -m interface.server`.
 
 -----
 
-For more details, refer to `report/report.pdf`.
+More details about this project will be availale soon. Please contact me or join the ExplOri discord server: https://discord.gg/5YcGh8b9yC
