@@ -366,9 +366,9 @@ if __name__ == "__main__":
     
 
     # --- CONFIGURATION ---
-    N = 5
+    N = 3
     symmetry = "none"
-    prefix_length = 26
+    prefix_length = 4
 
     print(f"Configuration: N={N}, Symmetry={symmetry}")
     # ---------------------
@@ -408,7 +408,7 @@ if __name__ == "__main__":
         task_queue = mp.Queue()
         result_queue = mp.Queue()
         
-        num_cores = max(1, mp.cpu_count() - 1) 
+        num_cores = max(1, mp.cpu_count() - 2) 
         print(f"Spinning up {num_cores} Z3 Worker processes...")
         
         writer_proc = mp.Process(target=db_writer, args=(db_uri, result_queue, total_pending))

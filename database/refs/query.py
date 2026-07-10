@@ -19,6 +19,7 @@ output: for each vertex, an ancestry list of dicts where each dict represents a 
 """
 
 from __future__ import annotations
+import os
 import sqlite3
 from dataclasses import dataclass, field
 from typing import Callable, Optional
@@ -27,7 +28,38 @@ from database.refs.cp_tree import decode_refs, z2_to_v4d
 from src.engine.math225_core import Vertex4D, Fraction, AplusBsqrt2
 from src.engine.cp225 import Cp225, rotate_90, rotate_180, rotate_270, reflect_x_axis
 
-CONN = sqlite3.connect("database/refs/storage/cp_pruned.db", check_same_thread=False)
+DB_PATH = os.path.join("database", "refs", "storage", "cp_pruned.db")
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
+CONN = sqlite3.connect(DB_PATH, check_same_thread=False)
+
+CONN.execute("""
+CREATE TABLE IF NOT EXISTS nodes (
+    id INTEGER PRIMARY KEY,
+    parent_id INTEGER,
+    function_name TEXT,
+    new_crease_v1 BLOB,
+    new_crease_v2 BLOB,
+    refs BLOB,
+    depth INTEGER,
+    canonical_id INTEGER,
+    vertices_blob BLOB,
+    edges_blob BLOB
+)
+""")
+CONN.execute("""
+CREATE TABLE IF NOT EXISTS vertex_index (
+    rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+    px INTEGER,
+    qx INTEGER,
+    dx INTEGER,
+    py INTEGER,
+    qy INTEGER,
+    dy INTEGER,
+    depth INTEGER,
+    node_id INTEGER
+)
+""")
+CONN.commit()
 # ---------------------------------------------------------------------------
 # Re-export helpers needed by callers (avoid importing cp_tree directly)
 # ---------------------------------------------------------------------------

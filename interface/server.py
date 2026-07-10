@@ -32,12 +32,17 @@ from interface.serialization import (
     serialize_topology_graph,
 )
 
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 import time
 
-# 1. Define the scope of access
+try:
+    import gspread
+    from oauth2client.service_account import ServiceAccountCredentials
+except Exception:
+    gspread = None
+    ServiceAccountCredentials = None
+
+# Optional Google Sheets logging
 scope = [
     "https://spreadsheets.google.com/feeds",
     "https://www.googleapis.com/auth/spreadsheets",
@@ -45,13 +50,18 @@ scope = [
     "https://www.googleapis.com/auth/drive"
 ]
 
-# 2. Authenticate using the JSON key
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
-client = gspread.authorize(creds)
-
-# 3. Open the specific Google Sheet
-sheet1 = client.open("22.5 logs").worksheets()[0]
-sheet2 = client.open("22.5 logs").worksheets()[1]
+sheet1 = None
+sheet2 = None
+if gspread is not None and ServiceAccountCredentials is not None:
+    try:
+        creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+        client = gspread.authorize(creds)
+        sheet1 = client.open("22.5 logs").worksheets()[0]
+        sheet2 = client.open("22.5 logs").worksheets()[1]
+    except Exception as exc:
+        print(f"Google Sheets logging disabled: {exc}")
+else:
+    print("Google Sheets logging disabled: optional dependency not installed")
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 TOKEN = os.environ.get("SEARCH22_INTERFACE_TOKEN", "").strip()
@@ -454,7 +464,7 @@ class InterfaceHandler(BaseHTTPRequestHandler):
 
 def main() -> None:
     host = os.environ.get("SEARCH22_INTERFACE_HOST", "127.0.0.1")
-    port = int(os.environ.get("SEARCH22_INTERFACE_PORT", "8000"))
+    port = int(os.environ.get("SEARCH22_INTERFACE_PORT", "8081"))
     server = ThreadingHTTPServer((host, port), InterfaceHandler)
     print(f"SEARCH-22.5 interface listening on http://{host}:{port}")
     if TOKEN:

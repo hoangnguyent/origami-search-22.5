@@ -8,6 +8,7 @@ import numpy as np
 import faiss
 import matplotlib.pyplot as plt
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 from database.tilings.build_tilings import Tiling # Import your actual model
 from src.engine.tree import extract_eigenvalues, EIG_COUNT, RESOLUTION
@@ -57,15 +58,27 @@ def build_wks_index_for_db(N, symmetry):
     and caches assets directly without Z-score stretching.
     """
     print(f"Building FAISS CWKS Index for N={N}, Sym={symmetry}...")
-    db_uri = f'sqlite:///database/tilings/storage/tilings_{N}_{symmetry}.db'
-    
+    db_path = f"database/tilings/storage/tilings_{N}_{symmetry}.db"
+    db_uri = f'sqlite:///{db_path}'
+
+    if not os.path.exists(db_path):
+        print(f"Skipping {db_path}: file not found")
+        return
+
     engine = create_engine(db_uri)
     Session = sessionmaker(bind=engine)
     session = Session()
-    
-    all_tilings = session.query(Tiling.id, Tiling.embedding).all()
+
+    try:
+        all_tilings = session.query(Tiling.id, Tiling.embedding).all()
+    except OperationalError as exc:
+        if "no such table" in str(exc).lower():
+            print(f"Skipping {db_path}: table 'tilings' is missing")
+            session.close()
+            return
+        raise
     session.close()
-    
+
     if not all_tilings:
         print("Database is empty. Skipping.")
         return
